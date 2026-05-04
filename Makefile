@@ -11,7 +11,7 @@ build:
 	go build -ldflags "$(LDFLAGS)" -o $(BINARY) .
 
 clean:
-	rm -f bin
+	rm -rf bin
 
 test:
 	go test ./...
