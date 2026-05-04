@@ -26,7 +26,8 @@ var opsCmd = &cobra.Command{
 	Short: "Audit operational risks and service limits",
 	Run: func(cmd *cobra.Command, args []string) {
 		start := time.Now()
-		ctx, configs := buildAWSConfigs()
+		ctx, configs, cancel := buildAWSConfigs()
+		defer cancel()
 		var services []string
 		if opsServices != "" {
 			services = strings.Split(opsServices, ",")

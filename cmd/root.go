@@ -54,7 +54,7 @@ func init() {
 		StringVarP(&outputFile, "output", "o", "", "Write results to file instead of stdout")
 }
 
-func buildAWSConfig() (context.Context, aws.Config) {
+func buildAWSConfig() (context.Context, aws.Config, context.CancelFunc) {
 	if !verbose {
 		slog.SetDefault(
 			slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelWarn})),
@@ -92,21 +92,21 @@ func buildAWSConfig() (context.Context, aws.Config) {
 
 	// Signal-based context cancellation for graceful Ctrl+C shutdown
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
-	_ = cancel // cancelled on process exit or Ctrl+C
 
 	cfg, err := config.BuildConfig(ctx, profile)
 	if err != nil {
+		cancel()
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
 	}
-	return ctx, cfg
+	return ctx, cfg, cancel
 }
 
-func buildAWSConfigs() (context.Context, []aws.Config) {
-	ctx, baseCfg := buildAWSConfig()
+func buildAWSConfigs() (context.Context, []aws.Config, context.CancelFunc) {
+	ctx, baseCfg, cancel := buildAWSConfig()
 
 	if region == "" {
-		return ctx, []aws.Config{baseCfg}
+		return ctx, []aws.Config{baseCfg}, cancel
 	}
 
 	var regions []string
@@ -128,7 +128,7 @@ func buildAWSConfigs() (context.Context, []aws.Config) {
 		cfg.Region = r
 		configs = append(configs, cfg)
 	}
-	return ctx, configs
+	return ctx, configs, cancel
 }
 
 func listEnabledRegions(ctx context.Context, cfg aws.Config) ([]string, error) {

@@ -24,7 +24,8 @@ var triageCmd = &cobra.Command{
 	Short: "Deep investigation: EC2 posture + IAM + flow logs",
 	Run: func(cmd *cobra.Command, args []string) {
 		start := time.Now()
-		ctx, configs := buildAWSConfigs()
+		ctx, configs, cancel := buildAWSConfigs()
+		defer cancel()
 		var mu sync.Mutex
 		var allResults []audit.Finding
 		var wg sync.WaitGroup
