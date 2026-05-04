@@ -30,6 +30,9 @@ go.work.sum
 # Backup
 backup/
 
+# Build
+bin/
+
 # Editor/IDE
 # .idea/
 # .vscode/
