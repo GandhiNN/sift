@@ -23,7 +23,7 @@ tidy:
 	go mod tidy
 
 install: build
-	cp $(BINARY) $(HOME)/.local/bin/$(BINARY)
+	cp $(BINARY) $(HOME)/.local/bin/$(notdir $(BINARY))
 
 go-install:
 	go install -ldflags "$(LDFLAGS)" .
