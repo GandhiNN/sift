@@ -4,7 +4,7 @@ DATE 	?= $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
 BINARY 	:= sift
 LDFLAGS := -s -w -X main.version=$(VERSION) -X main.commit=$(COMMIT) -X main.date=$(DATE)
 
-.PHONY: build clean test lint tidy all
+.PHONY: build clean test lint tidy all install go-install fmt run
 
 build:
 	go build -ldflags "$(LDFLAGS)" -o $(BINARY) .
@@ -20,5 +20,17 @@ lint:
 
 tidy:
 	go mod tidy
+
+install: build
+	cp $(BINARY) $(HOME)/.local/bin/$(BINARY)
+
+go-install:
+	go install -ldflags "$(LDFLAGS)" .
+
+fmt:
+	gofmt -w .
+
+run:
+	go run -ldflags "$(LDFLAGS)" . $(ARGS)
 
 all: tidy lint test build
