@@ -1,0 +1,120 @@
+package cost
+
+import (
+	"context"
+	"fmt"
+	"sync"
+	"time"
+
+	"sift/audit"
+
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/cloudwatch"
+	cwtypes "github.com/aws/aws-sdk-go-v2/service/cloudwatch/types"
+	"github.com/aws/aws-sdk-go-v2/service/lambda"
+	lambdatypes "github.com/aws/aws-sdk-go-v2/service/lambda/types"
+)
+
+func AuditLambdaCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) {
+	client := lambda.NewFromConfig(cfg)
+	cwClient := cloudwatch.NewFromConfig(cfg)
+	var findings []audit.Finding
+
+	var allFunctions []lambdatypes.FunctionConfiguration
+	paginator := lambda.NewListFunctionsPaginator(client, &lambda.ListFunctionsInput{})
+	for paginator.HasMorePages() {
+		page, err := paginator.NextPage(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("list functions: %w", err)
+		}
+		allFunctions = append(allFunctions, page.Functions...)
+
+	}
+
+	end := time.Now()
+	start := end.AddDate(0, 0, -30)
+
+	var mu sync.Mutex
+	var wg sync.WaitGroup
+	sem := make(chan struct{}, 10)
+
+	for _, fn := range allFunctions {
+		wg.Add(1)
+
+		go func(fn lambdatypes.FunctionConfiguration) {
+			defer wg.Done()
+			sem <- struct{}{}
+			defer func() { <-sem }()
+
+			name := aws.ToString(fn.FunctionName)
+			memoryMB := aws.ToInt32(fn.MemorySize)
+
+			invResp, err := cwClient.GetMetricStatistics(ctx, &cloudwatch.GetMetricStatisticsInput{
+				Namespace:  aws.String("AWS/Lambda"),
+				MetricName: aws.String("Invocations"),
+				Dimensions: []cwtypes.Dimension{{
+					Name:  aws.String("FunctionName"),
+					Value: &name,
+				}},
+				StartTime:  &start,
+				EndTime:    &end,
+				Period:     aws.Int32(2592000),
+				Statistics: []cwtypes.Statistic{cwtypes.StatisticSum},
+			})
+			if err != nil {
+				return
+			}
+
+			totalInvocations := 0.0
+			for _, dp := range invResp.Datapoints {
+				totalInvocations += aws.ToFloat64(dp.Sum)
+			}
+			var fnFindings []audit.Finding
+
+			if totalInvocations == 0 {
+				fnFindings = append(fnFindings, audit.Finding{
+					Service:    "lambda",
+					ResourceID: name,
+					Check:      "unused_function",
+					Status:     "WARN",
+					Detail: fmt.Sprintf(
+						"memory=%dMB, zero invocations in last 30 days",
+						memoryMB,
+					),
+					RiskLevel: "LOW",
+				})
+			}
+			pcResp, err := client.ListProvisionedConcurrencyConfigs(
+				ctx,
+				&lambda.ListProvisionedConcurrencyConfigsInput{
+					FunctionName: &name,
+				},
+			)
+			if err == nil {
+				for _, pc := range pcResp.ProvisionedConcurrencyConfigs {
+					allocated := aws.ToInt32(pc.AllocatedProvisionedConcurrentExecutions)
+					if allocated > 0 && totalInvocations == 0 {
+						fnFindings = append(fnFindings, audit.Finding{
+							Service:    "lambda",
+							ResourceID: name,
+							Check:      "unused_provisioned_concurrency",
+							Status:     "WARN",
+							Detail: fmt.Sprintf(
+								"allocated=%d, zero invocations in last 30 days",
+								allocated,
+							),
+							RiskLevel: "HIGH",
+						})
+					}
+				}
+			}
+			if len(fnFindings) > 0 {
+				mu.Lock()
+				findings = append(findings, fnFindings...)
+				mu.Unlock()
+			}
+		}(fn)
+	}
+	wg.Wait()
+	return findings, nil
+}

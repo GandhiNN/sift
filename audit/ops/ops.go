@@ -1,0 +1,75 @@
+package ops
+
+import (
+	"context"
+	"log/slog"
+	"sync"
+
+	"sift/audit"
+	"sift/audit/progress"
+
+	"github.com/aws/aws-sdk-go-v2/aws"
+)
+
+func Audit(ctx context.Context, cfg aws.Config, services []string) ([]audit.Finding, error) {
+	allChecks := []struct {
+		name string
+		fn   func(context.Context, aws.Config) ([]audit.Finding, error)
+	}{
+		{"glue", AuditGlueOps},
+	}
+
+	var checks []struct {
+		name string
+		fn   func(context.Context, aws.Config) ([]audit.Finding, error)
+	}
+	if len(services) == 0 {
+		checks = allChecks
+	} else {
+		svcSet := make(map[string]bool)
+		for _, s := range services {
+			svcSet[s] = true
+		}
+		for _, c := range allChecks {
+			if svcSet[c.name] {
+				checks = append(checks, c)
+			}
+		}
+	}
+
+	results := make([][]audit.Finding, len(checks))
+
+	if len(checks) == 1 {
+		subCtx := progress.WithSubProgress(ctx, true)
+		findings, err := checks[0].fn(subCtx, cfg)
+		if err != nil {
+			slog.Warn("ops check failed", "service", checks[0].name, "error", err)
+		} else {
+			results[0] = findings
+		}
+	} else {
+		subCtx := progress.WithSubProgress(ctx, false)
+		bar := progress.NewOrchestratorBar(int64(len(checks)), "Running ops audit")
+		var wg sync.WaitGroup
+		for i, c := range checks {
+			wg.Add(1)
+			go func(i int, name string, fn func(context.Context, aws.Config) ([]audit.Finding, error)) {
+				defer wg.Done()
+				findings, err := fn(subCtx, cfg)
+				if err != nil {
+					slog.Warn("ops check failed", "service", name, "error", err)
+				} else {
+					results[i] = findings
+				}
+				bar.Done(name)
+			}(i, c.name, c.fn)
+		}
+		wg.Wait()
+	}
+
+	var all []audit.Finding
+	for _, findings := range results {
+		all = append(all, findings...)
+	}
+	return all, nil
+}
