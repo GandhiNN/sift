@@ -144,7 +144,6 @@ func listEC2Instances(ctx context.Context, cfg aws.Config) ([]ec2Instance, error
 		}
 	}
 	bar.Finish()
-	// fmt.Println()
 
 	// Deduplicate SG IDs and batch-fetch
 	sgSet := make(map[string]bool)
