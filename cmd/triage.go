@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"sift/audit"
+	"sift/audit/progress"
 	"sift/audit/security"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -30,6 +31,9 @@ var triageCmd = &cobra.Command{
 			os.Exit(2)
 		}
 		defer cancel()
+		if quiet {
+			ctx = progress.WithQuiet(ctx, true)
+		}
 		var mu sync.Mutex
 		var allResults []audit.Finding
 		var wg sync.WaitGroup

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"sift/audit"
+	"sift/audit/progress"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 )
@@ -24,6 +25,10 @@ func runAudit(serviceFlag string, validServices map[string]bool, fn auditFunc) {
 		os.Exit(2)
 	}
 	defer cancel()
+
+	if quiet {
+		ctx = progress.WithQuiet(ctx, true)
+	}
 
 	var services []string
 	if serviceFlag != "" {

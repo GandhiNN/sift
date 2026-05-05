@@ -74,7 +74,7 @@ func Audit(ctx context.Context, cfg aws.Config, services []string) ([]audit.Find
 		}
 	} else {
 		subCtx := progress.WithSubProgress(ctx, false)
-		bar := progress.NewOrchestratorBar(int64(len(checks)), "Running security audit")
+		bar := progress.NewOrchestratorBar(ctx, int64(len(checks)), "Running security audit")
 		var wg sync.WaitGroup
 		for i, c := range checks {
 			wg.Add(1)

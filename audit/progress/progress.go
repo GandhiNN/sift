@@ -12,13 +12,27 @@ import (
 )
 
 type ctxKey struct{}
+type quietKey struct{}
 
 // WithSubProgress returns a context that controls whether sub-service progress bars are visible.
 func WithSubProgress(ctx context.Context, show bool) context.Context {
 	return context.WithValue(ctx, ctxKey{}, show)
 }
 
+// WithQuiet returns a context that suppresses all progress bars.
+func WithQuiet(ctx context.Context, q bool) context.Context {
+	return context.WithValue(ctx, quietKey{}, q)
+}
+
+func isQuiet(ctx context.Context) bool {
+	v, _ := ctx.Value(quietKey{}).(bool)
+	return v
+}
+
 func showSub(ctx context.Context) bool {
+	if isQuiet(ctx) {
+		return false
+	}
 	v, ok := ctx.Value(ctxKey{}).(bool)
 	return !ok || v // default true if not set
 }
@@ -31,11 +45,15 @@ type OrchestratorBar struct {
 }
 
 // NewOrchestratorBar creates a fixed-width bar for orchestrators that stays on one line.
-func NewOrchestratorBar(total int64, desc string) *OrchestratorBar {
+func NewOrchestratorBar(ctx context.Context, total int64, desc string) *OrchestratorBar {
+	var writer io.Writer = os.Stderr
+	if isQuiet(ctx) {
+		writer = io.Discard
+	}
 	bar := progressbar.NewOptions64(
 		total,
 		progressbar.OptionSetDescription(desc),
-		progressbar.OptionSetWriter(os.Stderr),
+		progressbar.OptionSetWriter(writer),
 		progressbar.OptionSetWidth(50),
 		progressbar.OptionThrottle(65*time.Millisecond),
 		progressbar.OptionShowCount(),

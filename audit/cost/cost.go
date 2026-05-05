@@ -77,7 +77,7 @@ func Audit(ctx context.Context, cfg aws.Config, services []string) ([]audit.Find
 	} else {
 		// Multiple services - show orchestrator bar, supress sub-service bars
 		subCtx := progress.WithSubProgress(ctx, false)
-		bar := progress.NewOrchestratorBar(int64(len(checks)), "Auditing cost waste")
+		bar := progress.NewOrchestratorBar(ctx, int64(len(checks)), "Auditing cost waste")
 		var wg sync.WaitGroup
 		for i, c := range checks {
 			wg.Add(1)
