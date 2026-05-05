@@ -21,7 +21,7 @@ func runAudit(serviceFlag string, validServices map[string]bool, fn auditFunc) {
 	ctx, configs, cancel, err := buildAWSConfigs()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-		os.Exit(1)
+		os.Exit(2)
 	}
 	defer cancel()
 
@@ -31,7 +31,7 @@ func runAudit(serviceFlag string, validServices map[string]bool, fn auditFunc) {
 		for _, s := range services {
 			if !validServices[s] {
 				fmt.Fprintf(os.Stderr, "Error: unknown service %q\n", s)
-				os.Exit(1)
+				os.Exit(2)
 			}
 		}
 	}
@@ -61,7 +61,7 @@ func runAudit(serviceFlag string, validServices map[string]bool, fn auditFunc) {
 
 	if err := audit.OutputWithFilter(format, allFindings, riskLevel, start, outputFile); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-		os.Exit(1)
+		os.Exit(2)
 	}
 	if audit.HasHighRiskFindings(allFindings) {
 		os.Exit(1)

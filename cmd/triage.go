@@ -27,7 +27,7 @@ var triageCmd = &cobra.Command{
 		ctx, configs, cancel, err := buildAWSConfigs()
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-			os.Exit(1)
+			os.Exit(2)
 		}
 		defer cancel()
 		var mu sync.Mutex
@@ -71,7 +71,7 @@ var triageCmd = &cobra.Command{
 		wg.Wait()
 		if err := audit.OutputWithFilter(format, allResults, riskLevel, start, outputFile); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-			os.Exit(1)
+			os.Exit(2)
 		}
 		if audit.HasHighRiskFindings(allResults) {
 			os.Exit(1)
