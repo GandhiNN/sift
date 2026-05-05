@@ -27,6 +27,10 @@ go.work.sum
 # Text files
 *.txt
 
+# Flat files
+*.csv
+*.parquet
+
 # Backup
 backup/
 
