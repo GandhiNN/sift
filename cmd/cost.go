@@ -27,7 +27,11 @@ var costCmd = &cobra.Command{
 	Short: "Detect cost waste across AWS resources",
 	Run: func(cmd *cobra.Command, args []string) {
 		start := time.Now()
-		ctx, configs, cancel := buildAWSConfigs()
+		ctx, configs, cancel, err := buildAWSConfigs()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
 		defer cancel()
 		var services []string
 		if costServices != "" {

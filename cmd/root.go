@@ -54,7 +54,7 @@ func init() {
 		StringVarP(&outputFile, "output", "o", "", "Write results to file instead of stdout")
 }
 
-func buildAWSConfig() (context.Context, aws.Config, context.CancelFunc) {
+func buildAWSConfig() (context.Context, aws.Config, context.CancelFunc, error) {
 	if !verbose {
 		slog.SetDefault(
 			slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelWarn})),
@@ -69,8 +69,10 @@ func buildAWSConfig() (context.Context, aws.Config, context.CancelFunc) {
 		}
 	}
 	if format != "json" && format != "csv" && format != "table" {
-		fmt.Fprintf(os.Stderr, "Error: unknown format %q (use json, csv or table)\n", format)
-		os.Exit(1)
+		return nil, aws.Config{}, nil, fmt.Errorf(
+			"unknown format %q (use json, csv or table)",
+			format,
+		)
 	}
 	if riskLevel != "" {
 		valid := map[string]bool{
@@ -81,12 +83,10 @@ func buildAWSConfig() (context.Context, aws.Config, context.CancelFunc) {
 			"CRITICAL": true,
 		}
 		if !valid[strings.ToUpper(riskLevel)] {
-			fmt.Fprintf(
-				os.Stderr,
-				"Error: unknown risk level %q (use MINIMAL, LOW, MEDIUM, HIGH, or CRITICAL)\n",
+			return nil, aws.Config{}, nil, fmt.Errorf(
+				"unknown risk level %q (use MINIMAL, LOW, MEDIUM, HIGH, or CRITICAL)",
 				riskLevel,
 			)
-			os.Exit(1)
 		}
 	}
 
@@ -96,26 +96,27 @@ func buildAWSConfig() (context.Context, aws.Config, context.CancelFunc) {
 	cfg, err := config.BuildConfig(ctx, profile)
 	if err != nil {
 		cancel()
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-		os.Exit(1)
+		return nil, aws.Config{}, nil, err
 	}
-	return ctx, cfg, cancel
+	return ctx, cfg, cancel, nil
 }
 
-func buildAWSConfigs() (context.Context, []aws.Config, context.CancelFunc) {
-	ctx, baseCfg, cancel := buildAWSConfig()
+func buildAWSConfigs() (context.Context, []aws.Config, context.CancelFunc, error) {
+	ctx, baseCfg, cancel, err := buildAWSConfig()
+	if err != nil {
+		return nil, nil, nil, err
+	}
 
 	if region == "" {
-		return ctx, []aws.Config{baseCfg}, cancel
+		return ctx, []aws.Config{baseCfg}, cancel, nil
 	}
 
 	var regions []string
 	if region == "all" {
-		var err error
 		regions, err = listEnabledRegions(ctx, baseCfg)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error listing regions: %v\n", err)
-			os.Exit(1)
+			cancel()
+			return nil, nil, nil, fmt.Errorf("listing regions: %w", err)
 		}
 		slog.Info("scanning all enabled regions", "count", len(regions))
 	} else {
@@ -128,7 +129,7 @@ func buildAWSConfigs() (context.Context, []aws.Config, context.CancelFunc) {
 		cfg.Region = r
 		configs = append(configs, cfg)
 	}
-	return ctx, configs, cancel
+	return ctx, configs, cancel, nil
 }
 
 func listEnabledRegions(ctx context.Context, cfg aws.Config) ([]string, error) {

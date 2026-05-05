@@ -28,7 +28,11 @@ var securityCmd = &cobra.Command{
 	Short: "Audit AWS resource security posture",
 	Run: func(cmd *cobra.Command, args []string) {
 		start := time.Now()
-		ctx, configs, cancel := buildAWSConfigs()
+		ctx, configs, cancel, err := buildAWSConfigs()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(1)
+		}
 		defer cancel()
 		var services []string
 		if securityServices != "" {
