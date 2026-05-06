@@ -60,7 +60,14 @@ func auditDynamoDBTable(ctx context.Context, client *dynamodb.Client, name strin
 		&dynamodb.DescribeTableInput{TableName: aws.String(name)},
 	)
 	if err != nil {
-		return audit.Finding{}
+		return audit.Finding{
+			Service:    "dynamodb",
+			ResourceID: name,
+			Check:      "table_posture",
+			Status:     "ERROR",
+			Detail:     fmt.Sprintf("failed to describe table: %v", err),
+			RiskLevel:  "UNKNOWN",
+		}
 	}
 	table := desc.Table
 

@@ -65,7 +65,14 @@ func auditDynamoDBTableCost(
 		&dynamodb.DescribeTableInput{TableName: aws.String(name)},
 	)
 	if err != nil {
-		return nil
+		return []audit.Finding{{
+			Service:    "dynamodb",
+			ResourceID: name,
+			Check:      "cost_audit",
+			Status:     "ERROR",
+			Detail:     fmt.Sprintf("failed to describe table: %v", err),
+			RiskLevel:  "UNKNOWN",
+		}}
 	}
 	table := desc.Table
 	var findings []audit.Finding
