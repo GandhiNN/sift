@@ -1,5 +1,7 @@
 package audit
 
+import "fmt"
+
 type Finding struct {
 	Region     string `json:"region,omitempty"`
 	Service    string `json:"service"`
@@ -8,4 +10,15 @@ type Finding struct {
 	Status     string `json:"status"`
 	Detail     string `json:"detail"`
 	RiskLevel  string `json:"risk_level"`
+}
+
+func ErrorFinding(service, resourceID, check string, err error) Finding {
+	return Finding{
+		Service:    service,
+		ResourceID: resourceID,
+		Check:      check,
+		Status:     "ERROR",
+		Detail:     fmt.Sprintf("audit failed: %v", err),
+		RiskLevel:  "UNKNOWN",
+	}
 }

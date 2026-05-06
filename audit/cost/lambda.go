@@ -62,6 +62,12 @@ func AuditLambdaCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, erro
 				Statistics: []cwtypes.Statistic{cwtypes.StatisticSum},
 			})
 			if err != nil {
+				mu.Lock()
+				findings = append(
+					findings,
+					audit.ErrorFinding("lambda", name, "check_invocations", err),
+				)
+				mu.Unlock()
 				return
 			}
 

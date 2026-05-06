@@ -65,6 +65,9 @@ func AuditRDSCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 
 			avgCPU, err := getAvgCPU(ctx, cwClient, id)
 			if err != nil {
+				mu.Lock()
+				findings = append(findings, audit.ErrorFinding("rds", id, "check_cpu", err))
+				mu.Unlock()
 				return
 			}
 			if avgCPU < 10 {

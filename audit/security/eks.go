@@ -49,6 +49,9 @@ func AuditEKS(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) {
 				Name: &name,
 			})
 			if err != nil {
+				mu.Lock()
+				results = append(results, audit.ErrorFinding("eks", name, "cluster_security", err))
+				mu.Unlock()
 				return
 			}
 			cluster := desc.Cluster

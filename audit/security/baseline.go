@@ -65,6 +65,7 @@ func auditCloudTrail(ctx context.Context, cfg aws.Config) ([]audit.Finding, erro
 			Name: trail.TrailARN,
 		})
 		if err != nil {
+			findings = append(findings, audit.ErrorFinding("cloudtrail", name, "trail_status", err))
 			continue
 		}
 

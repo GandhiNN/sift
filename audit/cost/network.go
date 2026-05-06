@@ -75,6 +75,12 @@ func findIdleNATGateways(ctx context.Context, cfg aws.Config) ([]audit.Finding, 
 				},
 			)
 			if err != nil {
+				mu.Lock()
+				findings = append(
+					findings,
+					audit.ErrorFinding("nat_gateway", id, "check_traffic", err),
+				)
+				mu.Unlock()
 				return
 			}
 

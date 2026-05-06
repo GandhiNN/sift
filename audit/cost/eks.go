@@ -46,6 +46,12 @@ func AuditEKSCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 			for {
 				ngResp, err := client.ListNodegroups(ctx, ngInput)
 				if err != nil {
+					mu.Lock()
+					findings = append(
+						findings,
+						audit.ErrorFinding("eks", name, "list_nodegroups", err),
+					)
+					mu.Unlock()
 					break
 				}
 				allNodegroups = append(allNodegroups, ngResp.Nodegroups...)
@@ -74,12 +80,21 @@ func AuditEKSCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 				ngWg.Add(1)
 				go func(ngName string) {
 					defer ngWg.Done()
-
 					ng, err := client.DescribeNodegroup(ctx, &eks.DescribeNodegroupInput{
 						ClusterName:   &name,
 						NodegroupName: &ngName,
 					})
 					if err != nil {
+						mu.Lock()
+						findings = append(
+							findings,
+							audit.ErrorFinding(
+								"eks_nodegroup",
+								fmt.Sprintf("%s/%s", name, ngName),
+								"describe_nodegroup",
+								err,
+							),
+						)
 						return
 					}
 

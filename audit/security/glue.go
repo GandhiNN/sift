@@ -51,6 +51,7 @@ func AuditGlue(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) {
 	for {
 		jobsResp, err := client.GetJobs(ctx, jobInput)
 		if err != nil {
+			findings = append(findings, audit.ErrorFinding("glue", "jobs", "list_jobs", err))
 			break
 		}
 		allJobs = append(allJobs, jobsResp.Jobs...)

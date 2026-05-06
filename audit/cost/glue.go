@@ -44,6 +44,7 @@ func AuditGlueCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error)
 	for {
 		jobsResp, err := client.GetJobs(ctx, jobInput)
 		if err != nil {
+			findings = append(findings, audit.ErrorFinding("glue", "jobs", "list_jobs", err))
 			break
 		}
 		allJobs = append(allJobs, jobsResp.Jobs...)
@@ -92,6 +93,9 @@ func auditGlueJob(ctx context.Context, client *glue.Client, job gluetypes.Job) [
 		MaxResults: aws.Int32(1),
 	})
 	if err != nil || len(runsResp.JobRuns) == 0 {
+		return []audit.Finding{audit.ErrorFinding("glue_job", name, "get_job_runs", err)}
+	}
+	if len(runsResp.JobRuns) == 0 {
 		return nil
 	}
 	lastRun := runsResp.JobRuns[0]

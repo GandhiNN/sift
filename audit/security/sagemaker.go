@@ -175,6 +175,7 @@ func listNotebooks(ctx context.Context, cfg aws.Config) ([]sageMakerNotebook, er
 				},
 			)
 			if err != nil {
+				results[i] = sageMakerNotebook{} // stays empty, filtered out later
 				return
 			}
 			results[i] = sageMakerNotebook{
