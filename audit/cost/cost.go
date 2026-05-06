@@ -2,6 +2,7 @@ package cost
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"sync"
 
@@ -72,6 +73,13 @@ func Audit(ctx context.Context, cfg aws.Config, services []string) ([]audit.Find
 		findings, err := checks[0].fn(subCtx, cfg)
 		if err != nil {
 			slog.Warn("cost check failed", "service", checks[0].name, "error", err)
+			results[0] = []audit.Finding{{
+				Service:   checks[0].name,
+				Check:     "service_error",
+				Status:    "ERROR",
+				Detail:    fmt.Sprintf("audit failed: %v", err),
+				RiskLevel: "UNKNOWN",
+			}}
 		} else {
 			results[0] = findings
 		}
@@ -87,6 +95,13 @@ func Audit(ctx context.Context, cfg aws.Config, services []string) ([]audit.Find
 				findings, err := fn(subCtx, cfg)
 				if err != nil {
 					slog.Warn("cost check failed", "service", name, "error", err)
+					results[i] = []audit.Finding{{
+						Service:   name,
+						Check:     "service_error",
+						Status:    "ERROR",
+						Detail:    fmt.Sprintf("audit failed: %v", err),
+						RiskLevel: "UNKNOWN",
+					}}
 				} else {
 					results[i] = findings
 				}
