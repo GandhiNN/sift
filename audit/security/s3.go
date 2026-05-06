@@ -93,20 +93,7 @@ func auditBucket(ctx context.Context, client *s3.Client, name string) audit.Find
 		logging = log.LoggingEnabled != nil
 	}
 
-	// Risk assessment
-	var risk string
-	switch {
-	case !publicBlocked && !encrypted:
-		risk = "CRITICAL"
-	case !publicBlocked:
-		risk = "HIGH"
-	case !encrypted:
-		risk = "MEDIUM"
-	case !versioning || !logging:
-		risk = "LOW"
-	default:
-		risk = "MINIMAL"
-	}
+	risk := s3Risk(publicBlocked, encrypted, versioning, logging)
 
 	return audit.Finding{
 		Service:    "s3",
@@ -121,5 +108,20 @@ func auditBucket(ctx context.Context, client *s3.Client, name string) audit.Find
 			logging,
 		),
 		RiskLevel: risk,
+	}
+}
+
+func s3Risk(publicBlocked, encrypted, versioning, logging bool) string {
+	switch {
+	case !publicBlocked && !encrypted:
+		return "CRITICAL"
+	case !publicBlocked:
+		return "HIGH"
+	case !encrypted:
+		return "MEDIUM"
+	case !versioning || !logging:
+		return "LOW"
+	default:
+		return "MINIMAL"
 	}
 }

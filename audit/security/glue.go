@@ -29,12 +29,7 @@ func AuditGlue(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) {
 		connEncrypted := enc.ConnectionPasswordEncryption != nil &&
 			enc.ConnectionPasswordEncryption.ReturnConnectionPasswordEncrypted
 
-		risk := "MINIMAL"
-		if !catalogEncrypted && !connEncrypted {
-			risk = "HIGH"
-		} else if !catalogEncrypted || !connEncrypted {
-			risk = "MEDIUM"
-		}
+		risk := glueCatalogRisk(catalogEncrypted, connEncrypted)
 
 		findings = append(findings, audit.Finding{
 			Service:    "glue",
@@ -122,4 +117,14 @@ func AuditGlue(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) {
 		}
 	}
 	return findings, nil
+}
+
+func glueCatalogRisk(catalogEncrypted, connEncrypted bool) string {
+	if !catalogEncrypted && !connEncrypted {
+		return "HIGH"
+	}
+	if !catalogEncrypted || !connEncrypted {
+		return "MEDIUM"
+	}
+	return "MINIMAL"
 }

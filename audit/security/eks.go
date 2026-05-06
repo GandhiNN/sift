@@ -83,20 +83,7 @@ func AuditEKS(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) {
 				}
 			}
 
-			// Risk assessment
-			var risk string
-			switch {
-			case publicEP && !privateEP && !secretsEnc:
-				risk = "CRITICAL"
-			case publicEP && !privateEP:
-				risk = "HIGH"
-			case publicEP:
-				risk = "MEDIUM"
-			case !secretsEnc || len(logDisabled) > 0:
-				risk = "LOW"
-			default:
-				risk = "MINIMAL"
-			}
+			risk := eksRisk(publicEP, privateEP, secretsEnc, len(logDisabled) > 0)
 
 			detail := fmt.Sprintf(
 				"version=%s, public_ep=%t, private_ep=%t, secrets_encrypted=%t",
@@ -122,4 +109,19 @@ func AuditEKS(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) {
 	}
 	wg.Wait()
 	return results, nil
+}
+
+func eksRisk(publicEP, privateEP, secretsEnc, hasDisabledLogs bool) string {
+	switch {
+	case publicEP && !privateEP && !secretsEnc:
+		return "CRITICAL"
+	case publicEP && !privateEP:
+		return "HIGH"
+	case publicEP:
+		return "MEDIUM"
+	case !secretsEnc || hasDisabledLogs:
+		return "LOW"
+	default:
+		return "MINIMAL"
+	}
 }

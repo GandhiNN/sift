@@ -1,6 +1,8 @@
 package security
 
-import "testing"
+import (
+	"testing"
+)
 
 func TestEc2Risk(t *testing.T) {
 	tests := []struct {
@@ -19,6 +21,153 @@ func TestEc2Risk(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			if got := ec2Risk(tt.inst); got != tt.want {
 				t.Errorf("ec2Risk() = %s, want %s", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestS3Risk(t *testing.T) {
+	tests := []struct {
+		name          string
+		publicBlocked bool
+		encrypted     bool
+		versioning    bool
+		logging       bool
+		want          string
+	}{
+		{"no public block no encryption", false, false, true, true, "CRITICAL"},
+		{"no public block with encryption", false, true, true, true, "HIGH"},
+		{"public blocked no encryption", true, false, true, true, "MEDIUM"},
+		{"no versioning", true, true, false, true, "LOW"},
+		{"no logging", true, true, true, false, "LOW"},
+		{"fully configured", true, true, true, true, "MINIMAL"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := s3Risk(tt.publicBlocked, tt.encrypted, tt.versioning, tt.logging); got != tt.want {
+				t.Errorf("s3Risk() = %s, want %s", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestRdsRisk(t *testing.T) {
+	tests := []struct {
+		name        string
+		public      bool
+		encrypted   bool
+		backup      int32
+		delProtect  bool
+		multiAZ     bool
+		autoUpgrade bool
+		want        string
+	}{
+		{"public no encryption", true, false, 7, true, true, true, "CRITICAL"},
+		{"public encrypted", true, true, 7, true, true, true, "HIGH"},
+		{"not encrypted", false, false, 7, true, true, true, "HIGH"},
+		{"low backup", false, true, 3, true, true, true, "MEDIUM"},
+		{"no delete protection", false, true, 7, false, true, true, "MEDIUM"},
+		{"no multi-az", false, true, 7, true, false, true, "LOW"},
+		{"no auto upgrade", false, true, 7, true, true, false, "LOW"},
+		{"fully configured", false, true, 7, true, true, true, "MINIMAL"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := rdsRisk(tt.public, tt.encrypted, tt.backup, tt.delProtect, tt.multiAZ, tt.autoUpgrade); got != tt.want {
+				t.Errorf("rdsRisk() = %s, want %s", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestEksRisk(t *testing.T) {
+	tests := []struct {
+		name            string
+		publicEP        bool
+		privateEP       bool
+		secretsEnc      bool
+		hasDisabledLogs bool
+		want            string
+	}{
+		{"public no private no secrets", true, false, false, false, "CRITICAL"},
+		{"public no private with secrets", true, false, true, false, "HIGH"},
+		{"public with private", true, true, true, false, "MEDIUM"},
+		{"private no secrets", false, true, false, false, "LOW"},
+		{"private disabled logs", false, true, true, true, "LOW"},
+		{"fully configured", false, true, true, false, "MINIMAL"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := eksRisk(tt.publicEP, tt.privateEP, tt.secretsEnc, tt.hasDisabledLogs); got != tt.want {
+				t.Errorf("eksRisk() = %s, want %s", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestSecretsRisk(t *testing.T) {
+	tests := []struct {
+		name             string
+		rotationEnabled  bool
+		rotationOverdue  bool
+		daysSinceRotated int
+		want             string
+	}{
+		{"no rotation never rotated", false, false, -1, "HIGH"},
+		{"no rotation was rotated", false, false, 30, "MEDIUM"},
+		{"rotation overdue", true, true, 120, "MEDIUM"},
+		{"rotation enabled and current", true, false, 30, "MINIMAL"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := secretsRisk(tt.rotationEnabled, tt.rotationOverdue, tt.daysSinceRotated); got != tt.want {
+				t.Errorf("secretsRisk() = %s, want %s", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestGlueCatalogRisk(t *testing.T) {
+	tests := []struct {
+		name             string
+		catalogEncrypted bool
+		connEncrypted    bool
+		want             string
+	}{
+		{"no encryption", false, false, "HIGH"},
+		{"partial catalog only", true, false, "MEDIUM"},
+		{"partial conn only", false, true, "MEDIUM"},
+		{"fully encrypted", true, true, "MINIMAL"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := glueCatalogRisk(tt.catalogEncrypted, tt.connEncrypted); got != tt.want {
+				t.Errorf("glueCatalogRisk() = %s, want %s", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestDynamoDBRisk(t *testing.T) {
+	tests := []struct {
+		name               string
+		encrypted          bool
+		pitr               bool
+		deletionProtection bool
+		want               string
+	}{
+		{"no encryption", false, true, true, "HIGH"},
+		{"no encryption no pitr no delete", false, false, false, "HIGH"},
+		{"no pitr no delete protection", true, false, false, "MEDIUM"},
+		{"no pitr with delete protection", true, false, true, "LOW"},
+		{"pitr no delete protection", true, true, false, "LOW"},
+		{"fully configured", true, true, true, "MINIMAL"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			risk, _ := dynamoDBRisk(tt.encrypted, tt.pitr, tt.deletionProtection)
+			if risk != tt.want {
+				t.Errorf("dynamoDBRisk() = %s, want %s", risk, tt.want)
 			}
 		})
 	}

@@ -47,21 +47,7 @@ func AuditRDS(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) {
 			delProtect := aws.ToBool(db.DeletionProtection)
 			autoUpgrade := aws.ToBool(db.AutoMinorVersionUpgrade)
 
-			var risk string
-			switch {
-			case public && !encrypted:
-				risk = "CRITICAL"
-			case public:
-				risk = "HIGH"
-			case !encrypted:
-				risk = "HIGH"
-			case backup < 7 || !delProtect:
-				risk = "MEDIUM"
-			case !multiAZ || !autoUpgrade:
-				risk = "LOW"
-			default:
-				risk = "MINIMAL"
-			}
+			risk := rdsRisk(public, encrypted, backup, delProtect, multiAZ, autoUpgrade)
 
 			results[i] = audit.Finding{
 				Service:    "rds",
@@ -86,4 +72,21 @@ func AuditRDS(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) {
 
 	wg.Wait()
 	return results, nil
+}
+
+func rdsRisk(public, encrypted bool, backup int32, delProtect, multiAZ, autoUpgrade bool) string {
+	switch {
+	case public && !encrypted:
+		return "CRITICAL"
+	case public:
+		return "HIGH"
+	case !encrypted:
+		return "HIGH"
+	case backup < 7 || !delProtect:
+		return "MEDIUM"
+	case !multiAZ || !autoUpgrade:
+		return "LOW"
+	default:
+		return "MINIMAL"
+	}
 }

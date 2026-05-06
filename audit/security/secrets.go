@@ -43,17 +43,7 @@ func AuditSecrets(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 			}
 		}
 
-		var risk string
-		switch {
-		case !rotationEnabled && daysSinceRotated == -1:
-			risk = "HIGH"
-		case !rotationEnabled:
-			risk = "MEDIUM"
-		case rotationOverdue:
-			risk = "MEDIUM"
-		default:
-			risk = "MINIMAL"
-		}
+		risk := secretsRisk(rotationEnabled, rotationOverdue, daysSinceRotated)
 
 		detail := fmt.Sprintf("rotation_enabled=%t", rotationEnabled)
 		if daysSinceRotated >= 0 {
@@ -73,4 +63,17 @@ func AuditSecrets(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 		bar.Add(1)
 	}
 	return findings, nil
+}
+
+func secretsRisk(rotationEnabled, rotationOverdue bool, daysSinceRotated int) string {
+	switch {
+	case !rotationEnabled && daysSinceRotated == -1:
+		return "HIGH"
+	case !rotationEnabled:
+		return "MEDIUM"
+	case rotationOverdue:
+		return "MEDIUM"
+	default:
+		return "MINIMAL"
+	}
 }
