@@ -45,7 +45,7 @@ sift security --profile icloud-dev --service eks
 sift security --profile icloud-dev --risk-level HIGH
 ```
 
-Available services: `ec2`, `sagemaker`, `s3`, `rds`, `eks`, `iam`, `baseline`, `secrets`, `glue`, `lambda`
+Available services: `ec2`, `sagemaker`, `s3`, `rds`, `eks`, `iam`, `baseline`, `secrets`, `glue`, `lambda`, `dynamodb`
 
 #### Cost
 
@@ -60,7 +60,7 @@ sift cost --profile icloud-dev --service ec2,s3
 sift cost --profile icloud-dev --service ebs,cloudwatch
 ```
 
-Available services: `ec2`, `ebs`, `rds`, `s3`, `eks`, `network`, `cloudwatch`, `ecr`, `secrets`, `glue`, `lambda`
+Available services: `ec2`, `ebs`, `rds`, `s3`, `eks`, `network`, `cloudwatch`, `ecr`, `secrets`, `glue`, `lambda`, `dynamodb`
 
 #### Ops
 
@@ -191,11 +191,17 @@ sift triage --profile icloud-dev --log-group /vpc/flowlogs --instance i-0abc123
 | Rotation overdue (>90d) | MEDIUM |
 | Rotation enabled and current | MINIMAL |
 
-### Glue
+### DynamoDB
 
-| Condition | Risk |
-|-----------|------|
-| Active dev endpoint (deprecated) | HIGH |
+| Encrypted | PITR | Deletion Protection | Risk |
+|-----------|------|---------------------|------|
+| ✗ | any | any | HIGH |
+| ✓ | ✗ | ✗ | MEDIUM |
+| ✓ | ✗ | ✓ | LOW |
+| ✓ | ✓ | ✗ | LOW |
+| ✓ | ✓ | ✓ | MINIMAL |
+
+### Glue
 | No catalog or connection encryption | HIGH |
 | Partial encryption | MEDIUM |
 | Job without security configuration | LOW |
@@ -303,6 +309,13 @@ The crawler version limit (default 1,000,000) is fetched automatically from AWS 
 |-------|------|-----------|
 | Unused function | LOW | No invocations = no cost |
 | Unused provisioned concurrency | HIGH | Paying for reserved capacity with zero usage |
+
+#### DynamoDB
+
+| Issue | Risk | Rationale |
+|-------|------|-----------|
+| Provisioned mode | LOW | Consider on-demand if traffic is unpredictable |
+| Unused GSI (zero items) | MEDIUM | Wasting provisioned capacity |
 
 ## Project structure
 
