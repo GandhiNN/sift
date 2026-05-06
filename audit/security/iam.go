@@ -216,7 +216,7 @@ func AuditIAMHygiene(ctx context.Context, cfg aws.Config) ([]audit.Finding, erro
 				continue
 			}
 			daysSince := int(time.Since(*role.RoleLastUsed.LastUsedDate).Hours() / 24)
-			if daysSince > 90 {
+			if daysSince > audit.GetThresholds(ctx).UnusedDays {
 				findings = append(findings, audit.Finding{
 					Service:    "iam",
 					ResourceID: name,
@@ -242,7 +242,7 @@ func AuditIAMHygiene(ctx context.Context, cfg aws.Config) ([]audit.Finding, erro
 
 	var mu sync.Mutex
 	var wg sync.WaitGroup
-	sem := make(chan struct{}, 10)
+	sem := make(chan struct{}, audit.GetThresholds(ctx).Concurrency)
 
 	for _, user := range allUsers {
 		wg.Add(1)
@@ -284,7 +284,7 @@ func AuditIAMHygiene(ctx context.Context, cfg aws.Config) ([]audit.Finding, erro
 					}
 				} else {
 					daysSince := int(time.Since(*lastUsed.AccessKeyLastUsed.LastUsedDate).Hours() / 24)
-					if daysSince > 90 {
+					if daysSince > audit.GetThresholds(ctx).UnusedDays {
 						finding = &audit.Finding{
 							Service:    "iam",
 							ResourceID: keyName,

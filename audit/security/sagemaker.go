@@ -159,7 +159,7 @@ func listNotebooks(ctx context.Context, cfg aws.Config) ([]sageMakerNotebook, er
 	// Describe all notebooks concurrently
 	results := make([]sageMakerNotebook, len(refs))
 	var wg sync.WaitGroup
-	sem := make(chan struct{}, 10)
+	sem := make(chan struct{}, audit.GetThresholds(ctx).Concurrency)
 
 	for i, ref := range refs {
 		wg.Add(1)

@@ -8,6 +8,7 @@ import (
 	"os/signal"
 	"strings"
 
+	"sift/audit"
 	"sift/config"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -17,13 +18,18 @@ import (
 )
 
 var (
-	profile    string
-	format     string
-	riskLevel  string
-	region     string
-	verbose    bool
-	quiet      bool
-	outputFile string
+	profile         string
+	format          string
+	riskLevel       string
+	region          string
+	verbose         bool
+	quiet           bool
+	outputFile      string
+	unusedDays      int
+	minBackupDays   int
+	cpuIdlePercent  float64
+	snapshotAgeDays int
+	concurrency     int
 )
 
 var rootCmd = &cobra.Command{
@@ -54,6 +60,20 @@ func init() {
 	rootCmd.PersistentFlags().BoolVar(&quiet, "quiet", false, "Supress progress bars")
 	rootCmd.PersistentFlags().
 		StringVarP(&outputFile, "output", "o", "", "Write results to file instead of stdout")
+	rootCmd.PersistentFlags().
+		IntVar(&unusedDays, "unused-days", 90, "Days before a resource is considered unused")
+	rootCmd.PersistentFlags().
+		IntVar(&minBackupDays, "min-backup-days", 7, "Minimum backup retention days")
+	rootCmd.PersistentFlags().
+		Float64Var(&cpuIdlePercent, "cpu-idle-percent", 10, "CPU% below which an instance is considered oversized")
+	rootCmd.PersistentFlags().IntVar(
+		&snapshotAgeDays,
+		"snapshot-age-days",
+		90,
+		"Days before a snapshot is considered old",
+	)
+	rootCmd.PersistentFlags().
+		IntVar(&concurrency, "concurrency", 10, "Max parallel AWS API calls per service")
 }
 
 func buildAWSConfig() (context.Context, aws.Config, context.CancelFunc, error) {
@@ -94,6 +114,15 @@ func buildAWSConfig() (context.Context, aws.Config, context.CancelFunc, error) {
 
 	// Signal-based context cancellation for graceful Ctrl+C shutdown
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
+
+	ctx = audit.WithThresholds(ctx, audit.Thresholds{
+		UnusedDays:      unusedDays,
+		MinBackupDays:   minBackupDays,
+		CPUIdlePercent:  cpuIdlePercent,
+		SnapshotAgeDays: snapshotAgeDays,
+		RotationMaxDays: unusedDays,
+		Concurrency:     concurrency,
+	})
 
 	cfg, err := config.BuildConfig(ctx, profile)
 	if err != nil {

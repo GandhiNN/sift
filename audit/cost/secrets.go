@@ -31,7 +31,7 @@ func AuditSecretsCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, err
 
 		if secret.LastAccessedDate != nil {
 			days := int(time.Since(*secret.LastAccessedDate).Hours() / 24)
-			if days > 90 {
+			if days > audit.GetThresholds(ctx).UnusedDays {
 				findings = append(findings, audit.Finding{
 					Service:    "secrets_manager",
 					ResourceID: name,

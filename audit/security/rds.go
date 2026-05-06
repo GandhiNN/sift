@@ -30,7 +30,7 @@ func AuditRDS(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) {
 	bar := progress.NewBar(ctx, int64(len(instances)), "Auditing RDS instances")
 
 	var wg sync.WaitGroup
-	sem := make(chan struct{}, 10)
+	sem := make(chan struct{}, audit.GetThresholds(ctx).Concurrency)
 
 	for i, db := range instances {
 		wg.Add(1)
@@ -47,7 +47,16 @@ func AuditRDS(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) {
 			delProtect := aws.ToBool(db.DeletionProtection)
 			autoUpgrade := aws.ToBool(db.AutoMinorVersionUpgrade)
 
-			risk := rdsRisk(public, encrypted, backup, delProtect, multiAZ, autoUpgrade)
+			t := audit.GetThresholds(ctx)
+			risk := rdsRisk(
+				public,
+				encrypted,
+				backup,
+				delProtect,
+				multiAZ,
+				autoUpgrade,
+				t.MinBackupDays,
+			)
 
 			results[i] = audit.Finding{
 				Service:    "rds",
@@ -74,7 +83,12 @@ func AuditRDS(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) {
 	return results, nil
 }
 
-func rdsRisk(public, encrypted bool, backup int32, delProtect, multiAZ, autoUpgrade bool) string {
+func rdsRisk(
+	public, encrypted bool,
+	backup int32,
+	delProtect, multiAZ, autoUpgrade bool,
+	minBackupDays int,
+) string {
 	switch {
 	case public && !encrypted:
 		return "CRITICAL"
@@ -82,7 +96,7 @@ func rdsRisk(public, encrypted bool, backup int32, delProtect, multiAZ, autoUpgr
 		return "HIGH"
 	case !encrypted:
 		return "HIGH"
-	case backup < 7 || !delProtect:
+	case backup < int32(minBackupDays) || !delProtect:
 		return "MEDIUM"
 	case !multiAZ || !autoUpgrade:
 		return "LOW"

@@ -31,7 +31,7 @@ func AuditRDSCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 	}
 	var mu sync.Mutex
 	var wg sync.WaitGroup
-	sem := make(chan struct{}, 10)
+	sem := make(chan struct{}, audit.GetThresholds(ctx).Concurrency)
 
 	for _, db := range allDBs {
 		id := aws.ToString(db.DBInstanceIdentifier)
@@ -70,7 +70,7 @@ func AuditRDSCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 				mu.Unlock()
 				return
 			}
-			if avgCPU < 10 {
+			if avgCPU < audit.GetThresholds(ctx).CPUIdlePercent {
 				mu.Lock()
 				findings = append(findings, audit.Finding{
 					Service:    "rds",

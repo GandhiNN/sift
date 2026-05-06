@@ -22,7 +22,7 @@ func AuditS3Cost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) {
 	var mu sync.Mutex
 	var findings []audit.Finding
 	var wg sync.WaitGroup
-	sem := make(chan struct{}, 10)
+	sem := make(chan struct{}, audit.GetThresholds(ctx).Concurrency)
 
 	for _, b := range resp.Buckets {
 		if b.Name == nil {

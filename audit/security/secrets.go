@@ -38,7 +38,7 @@ func AuditSecrets(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 
 		if secret.LastRotatedDate != nil {
 			daysSinceRotated = int(time.Since(*secret.LastRotatedDate).Hours() / 24)
-			if daysSinceRotated > 90 {
+			if daysSinceRotated > audit.GetThresholds(ctx).RotationMaxDays {
 				rotationOverdue = true
 			}
 		}

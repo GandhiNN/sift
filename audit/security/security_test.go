@@ -73,7 +73,7 @@ func TestRdsRisk(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := rdsRisk(tt.public, tt.encrypted, tt.backup, tt.delProtect, tt.multiAZ, tt.autoUpgrade); got != tt.want {
+			if got := rdsRisk(tt.public, tt.encrypted, tt.backup, tt.delProtect, tt.multiAZ, tt.autoUpgrade, 7); got != tt.want {
 				t.Errorf("rdsRisk() = %s, want %s", got, tt.want)
 			}
 		})

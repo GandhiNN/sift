@@ -10,7 +10,7 @@ Every audit function that processes a list of resources concurrently follows the
 var mu sync.Mutex
 var findings []audit.Finding
 var wg sync.WaitGroup
-sem := make(chan struct{}, 10) // buffered channel = semaphore
+sem := make(chan struct{}, audit.GetThresholds(ctx).Concurrency) // buffered channel = semaphore
 
 for _, item := range items {
     wg.Add(1)

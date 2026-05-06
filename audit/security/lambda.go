@@ -48,7 +48,7 @@ func AuditLambda(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) {
 
 	var mu sync.Mutex
 	var wg sync.WaitGroup
-	sem := make(chan struct{}, 10)
+	sem := make(chan struct{}, audit.GetThresholds(ctx).Concurrency)
 
 	for _, fn := range allFunctions {
 		wg.Add(1)

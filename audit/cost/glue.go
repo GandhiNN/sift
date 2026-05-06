@@ -63,7 +63,7 @@ func AuditGlueCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error)
 	bar := progress.NewBar(ctx, int64(len(allJobs)), "Auditing Glue jobs")
 	var mu sync.Mutex
 	var wg sync.WaitGroup
-	sem := make(chan struct{}, 10)
+	sem := make(chan struct{}, audit.GetThresholds(ctx).Concurrency)
 
 	for _, job := range allJobs {
 		wg.Add(1)
@@ -112,7 +112,7 @@ func auditGlueJob(ctx context.Context, client *glue.Client, job gluetypes.Job) [
 	}
 	if lastRun.CompletedOn != nil {
 		days := int(time.Since(*lastRun.CompletedOn).Hours() / 24)
-		if days > 90 {
+		if days > audit.GetThresholds(ctx).UnusedDays {
 			findings = append(findings, audit.Finding{
 				Service:    "glue_job",
 				ResourceID: name,

@@ -33,7 +33,7 @@ func Triage(
 	results := make([]triageResult, len(targets))
 	bar := progress.NewBar(ctx, int64(len(targets)), "Triaging instances")
 	var wg sync.WaitGroup
-	sem := make(chan struct{}, 5) // limit to 5 concurrent
+	sem := make(chan struct{}, audit.GetThresholds(ctx).Concurrency)
 
 	for i, t := range targets {
 		wg.Add(1)
