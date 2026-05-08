@@ -60,7 +60,7 @@ sift cost --profile icloud-dev --service ec2,s3
 sift cost --profile icloud-dev --service ebs,cloudwatch
 ```
 
-Available services: `ec2`, `ebs`, `rds`, `s3`, `eks`, `network`, `cloudwatch`, `ecr`, `secrets`, `glue`, `lambda`, `dynamodb`
+Available services: `ec2`, `ebs`, `rds`, `s3`, `eks`, `network`, `cloudwatch`, `ecr`, `secrets`, `glue`, `lambda`, `dynamodb`, `dms`
 
 #### Ops
 
@@ -316,6 +316,16 @@ The crawler version limit (default 1,000,000) is fetched automatically from AWS 
 |-------|------|-----------|
 | Provisioned mode | LOW | Consider on-demand if traffic is unpredictable |
 | Unused GSI (zero items) | MEDIUM | Wasting provisioned capacity |
+
+#### DMS
+
+| Issue | Risk | Rationale |
+|-------|------|-----------|
+| Idle instance (no tasks) | HIGH | Paying for compute with zero workload |
+| All tasks stopped | MEDIUM | Instance cost continues while tasks idle |
+| Oversized instance (low CPU) | MEDIUM | Continuous overspend on capacity |
+| Previous-gen instance | LOW | Newer gen is cheaper per unit |
+| Multi-AZ enabled | LOW | 2x cost if HA isn't needed |
 
 ## Project structure
 
