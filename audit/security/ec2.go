@@ -19,6 +19,7 @@ type ec2Instance struct {
 	imdsV1      bool
 	openToWorld bool
 	roleARN     *string
+	tags        map[string]string
 }
 
 func AuditEC2(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) {
@@ -41,6 +42,7 @@ func AuditEC2(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) {
 		findings = append(findings, audit.Finding{
 			Service:    "ec2",
 			ResourceID: inst.instanceID,
+			Tags:       inst.tags,
 			Check:      "instance_exposure",
 			Status:     statusFromRisk(risk),
 			Detail:     detail,
@@ -187,6 +189,10 @@ func parseInstance(inst *ec2types.Instance) ec2Instance {
 	}
 	if inst.IamInstanceProfile != nil && inst.IamInstanceProfile.Arn != nil {
 		result.roleARN = inst.IamInstanceProfile.Arn
+	}
+	result.tags = make(map[string]string, len(inst.Tags))
+	for _, t := range inst.Tags {
+		result.tags[aws.ToString(t.Key)] = aws.ToString(t.Value)
 	}
 	return result
 }
