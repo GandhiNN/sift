@@ -241,6 +241,13 @@ func csvRow(v reflect.Value) []string {
 				parts[j] = fmt.Sprintf("%v", fv.Index(j))
 			}
 			row = append(row, strings.Join(parts, ";"))
+		} else if fv.Kind() == reflect.Map {
+			parts := make([]string, 0, fv.Len())
+			for _, k := range fv.MapKeys() {
+				parts = append(parts, fmt.Sprintf("%s=%s", k, fv.MapIndex(k)))
+			}
+			sort.Strings(parts)
+			row = append(row, strings.Join(parts, ";"))
 		} else {
 			row = append(row, fmt.Sprintf("%v", fv))
 		}
