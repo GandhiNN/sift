@@ -13,6 +13,36 @@ import (
 	rdstypes "github.com/aws/aws-sdk-go-v2/service/rds/types"
 )
 
+type rdsInstance struct {
+	id          string
+	engine      string
+	public      bool
+	encrypted   bool
+	multiAZ     bool
+	backup      int32
+	delProtect  bool
+	autoUpgrade bool
+	tags        map[string]string
+}
+
+func parseRDSInstance(db rdstypes.DBInstance) rdsInstance {
+	tags := make(map[string]string, len(db.TagList))
+	for _, t := range db.TagList {
+		tags[aws.ToString(t.Key)] = aws.ToString(t.Value)
+	}
+	return rdsInstance{
+		id:          aws.ToString(db.DBInstanceIdentifier),
+		engine:      aws.ToString(db.Engine),
+		public:      aws.ToBool(db.PubliclyAccessible),
+		encrypted:   aws.ToBool(db.StorageEncrypted),
+		multiAZ:     aws.ToBool(db.MultiAZ),
+		backup:      aws.ToInt32(db.BackupRetentionPeriod),
+		delProtect:  aws.ToBool(db.DeletionProtection),
+		autoUpgrade: aws.ToBool(db.AutoMinorVersionUpgrade),
+		tags:        tags,
+	}
+}
+
 func AuditRDS(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) {
 	client := rds.NewFromConfig(cfg)
 
@@ -39,39 +69,34 @@ func AuditRDS(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) {
 			sem <- struct{}{}
 			defer func() { <-sem }()
 
-			id := aws.ToString(db.DBInstanceIdentifier)
-			public := aws.ToBool(db.PubliclyAccessible)
-			encrypted := aws.ToBool(db.StorageEncrypted)
-			multiAZ := aws.ToBool(db.MultiAZ)
-			backup := aws.ToInt32(db.BackupRetentionPeriod)
-			delProtect := aws.ToBool(db.DeletionProtection)
-			autoUpgrade := aws.ToBool(db.AutoMinorVersionUpgrade)
+			inst := parseRDSInstance(db)
 
 			t := audit.GetThresholds(ctx)
 			risk := rdsRisk(
-				public,
-				encrypted,
-				backup,
-				delProtect,
-				multiAZ,
-				autoUpgrade,
+				inst.public,
+				inst.encrypted,
+				inst.backup,
+				inst.delProtect,
+				inst.multiAZ,
+				inst.autoUpgrade,
 				t.MinBackupDays,
 			)
 
 			results[i] = audit.Finding{
 				Service:    "rds",
-				ResourceID: id,
+				ResourceID: inst.id,
+				Tags:       inst.tags,
 				Check:      "instance_security",
 				Status:     statusFromRisk(risk),
 				Detail: fmt.Sprintf(
 					"engine=%s, public=%t, encrypted=%t, multi_az=%t, backup_days=%d, delete_protection=%t, auto_upgrade=%t",
-					aws.ToString(db.Engine),
-					public,
-					encrypted,
-					multiAZ,
-					backup,
-					delProtect,
-					autoUpgrade,
+					inst.engine,
+					inst.public,
+					inst.encrypted,
+					inst.multiAZ,
+					inst.backup,
+					inst.delProtect,
+					inst.autoUpgrade,
 				),
 				RiskLevel: risk,
 			}
