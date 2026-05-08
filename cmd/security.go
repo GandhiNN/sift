@@ -11,6 +11,7 @@ var securityServices string
 var validSecurityServices = map[string]bool{
 	"ec2": true, "sagemaker": true, "s3": true, "rds": true, "eks": true,
 	"iam": true, "secrets": true, "glue": true, "baseline": true, "lambda": true,
+	"dynamodb": true,
 }
 
 var securityCmd = &cobra.Command{
@@ -23,6 +24,6 @@ var securityCmd = &cobra.Command{
 
 func init() {
 	securityCmd.Flags().
-		StringVar(&securityServices, "service", "", "Comma-separated services to audit (ec2,sagemaker,s3,rds,eks,iam,baseline,secrets). Default: all")
+		StringVar(&securityServices, "service", "", "Comma-separated services to audit (ec2,sagemaker,s3,rds,eks,iam,baseline,secrets,glue,lambda,dynamodb). Default: all")
 	rootCmd.AddCommand(securityCmd)
 }
