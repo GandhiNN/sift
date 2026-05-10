@@ -13,6 +13,61 @@ import (
 	dbtypes "github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
 )
 
+type dynamoDBTable struct {
+	name               string
+	encrypted          bool
+	pitr               bool
+	deletionProtection bool
+	tags               map[string]string
+}
+
+func parseDynamoDBTable(
+	ctx context.Context,
+	client *dynamodb.Client,
+	name string,
+) (*dynamoDBTable, error) {
+	desc, err := client.DescribeTable(
+		ctx,
+		&dynamodb.DescribeTableInput{TableName: aws.String(name)},
+	)
+	if err != nil {
+		return nil, err
+	}
+	table := desc.Table
+
+	t := &dynamoDBTable{
+		name:               name,
+		encrypted:          true,
+		deletionProtection: aws.ToBool(table.DeletionProtectionEnabled),
+	}
+
+	if table.SSEDescription != nil && table.SSEDescription.Status == dbtypes.SSEStatusDisabled {
+		t.encrypted = false
+	}
+
+	cb, err := client.DescribeContinuousBackups(
+		ctx,
+		&dynamodb.DescribeContinuousBackupsInput{TableName: aws.String(name)},
+	)
+	if err == nil && cb.ContinuousBackupsDescription != nil &&
+		cb.ContinuousBackupsDescription.PointInTimeRecoveryDescription != nil {
+		t.pitr = cb.ContinuousBackupsDescription.PointInTimeRecoveryDescription.PointInTimeRecoveryStatus == dbtypes.PointInTimeRecoveryStatusEnabled
+	}
+
+	tagResp, err := client.ListTagsOfResource(
+		ctx,
+		&dynamodb.ListTagsOfResourceInput{ResourceArn: table.TableArn},
+	)
+	if err == nil {
+		t.tags = make(map[string]string, len(tagResp.Tags))
+		for _, tag := range tagResp.Tags {
+			t.tags[aws.ToString(tag.Key)] = aws.ToString(tag.Value)
+		}
+	}
+
+	return t, nil
+}
+
 func AuditDynamoDB(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) {
 	client := dynamodb.NewFromConfig(cfg)
 
@@ -39,7 +94,23 @@ func AuditDynamoDB(ctx context.Context, cfg aws.Config) ([]audit.Finding, error)
 			sem <- struct{}{}
 			defer func() { <-sem }()
 
-			results[i] = auditDynamoDBTable(ctx, client, name)
+			t, err := parseDynamoDBTable(ctx, client, name)
+			if err != nil {
+				results[i] = audit.ErrorFinding("dynamodb", name, "table_posture", err)
+				bar.Add(1)
+				return
+			}
+
+			risk, detail := dynamoDBRisk(t.encrypted, t.pitr, t.deletionProtection)
+			results[i] = audit.Finding{
+				Service:    "dynamodb",
+				ResourceID: t.name,
+				Tags:       t.tags,
+				Check:      "table_posture",
+				Status:     statusFromRisk(risk),
+				Detail:     detail,
+				RiskLevel:  risk,
+			}
 			bar.Add(1)
 		}(i, name)
 	}
@@ -52,51 +123,6 @@ func AuditDynamoDB(ctx context.Context, cfg aws.Config) ([]audit.Finding, error)
 		}
 	}
 	return findings, nil
-}
-
-func auditDynamoDBTable(ctx context.Context, client *dynamodb.Client, name string) audit.Finding {
-	desc, err := client.DescribeTable(
-		ctx,
-		&dynamodb.DescribeTableInput{TableName: aws.String(name)},
-	)
-	if err != nil {
-		return audit.Finding{
-			Service:    "dynamodb",
-			ResourceID: name,
-			Check:      "table_posture",
-			Status:     "ERROR",
-			Detail:     fmt.Sprintf("failed to describe table: %v", err),
-			RiskLevel:  "UNKNOWN",
-		}
-	}
-	table := desc.Table
-
-	encrypted := true
-	if table.SSEDescription != nil && table.SSEDescription.Status == dbtypes.SSEStatusDisabled {
-		encrypted = false
-	}
-
-	pitr := false
-	cb, err := client.DescribeContinuousBackups(
-		ctx,
-		&dynamodb.DescribeContinuousBackupsInput{TableName: aws.String(name)},
-	)
-	if err == nil && cb.ContinuousBackupsDescription != nil &&
-		cb.ContinuousBackupsDescription.PointInTimeRecoveryDescription != nil {
-		pitr = cb.ContinuousBackupsDescription.PointInTimeRecoveryDescription.PointInTimeRecoveryStatus == dbtypes.PointInTimeRecoveryStatusEnabled
-	}
-
-	deletionProtection := aws.ToBool(table.DeletionProtectionEnabled)
-
-	risk, detail := dynamoDBRisk(encrypted, pitr, deletionProtection)
-	return audit.Finding{
-		Service:    "dynamodb",
-		ResourceID: name,
-		Check:      "table_posture",
-		Status:     statusFromRisk(risk),
-		Detail:     detail,
-		RiskLevel:  risk,
-	}
 }
 
 func dynamoDBRisk(encrypted, pitr, deletionProtection bool) (string, string) {

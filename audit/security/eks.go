@@ -11,7 +11,51 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/eks"
+	ekstypes "github.com/aws/aws-sdk-go-v2/service/eks/types"
 )
+
+type eksCluster struct {
+	name        string
+	version     string
+	publicEP    bool
+	privateEP   bool
+	secretsEnc  bool
+	logDisabled []string
+	tags        map[string]string
+}
+
+func parseEKSCluster(cluster *ekstypes.Cluster) eksCluster {
+	c := eksCluster{
+		name:    aws.ToString(cluster.Name),
+		version: aws.ToString(cluster.Version),
+		tags:    cluster.Tags,
+	}
+
+	if cluster.ResourcesVpcConfig != nil {
+		c.publicEP = cluster.ResourcesVpcConfig.EndpointPublicAccess
+		c.privateEP = cluster.ResourcesVpcConfig.EndpointPrivateAccess
+	}
+
+	for _, enc := range cluster.EncryptionConfig {
+		for _, res := range enc.Resources {
+			if res == "secrets" {
+				c.secretsEnc = true
+			}
+		}
+	}
+
+	if cluster.Logging != nil {
+		for _, ls := range cluster.Logging.ClusterLogging {
+			for _, lt := range ls.Types {
+				if !aws.ToBool(ls.Enabled) {
+					c.logDisabled = append(c.logDisabled, string(lt))
+				}
+			}
+		}
+	}
+
+	return c
+}
 
 func AuditEKS(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) {
 	client := eks.NewFromConfig(cfg)
@@ -54,54 +98,22 @@ func AuditEKS(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) {
 				mu.Unlock()
 				return
 			}
-			cluster := desc.Cluster
 
-			publicEP := false
-			privateEP := false
-
-			if cluster.ResourcesVpcConfig != nil {
-				publicEP = cluster.ResourcesVpcConfig.EndpointPublicAccess
-				privateEP = cluster.ResourcesVpcConfig.EndpointPrivateAccess
-			}
-
-			secretsEnc := false
-			for _, enc := range cluster.EncryptionConfig {
-				for _, res := range enc.Resources {
-					if res == "secrets" {
-						secretsEnc = true
-					}
-				}
-			}
-
-			var logEnabled, logDisabled []string
-			if cluster.Logging != nil {
-				for _, ls := range cluster.Logging.ClusterLogging {
-					for _, lt := range ls.Types {
-						if aws.ToBool(ls.Enabled) {
-							logEnabled = append(logEnabled, string(lt))
-						} else {
-							logDisabled = append(logDisabled, string(lt))
-						}
-					}
-				}
-			}
-
-			risk := eksRisk(publicEP, privateEP, secretsEnc, len(logDisabled) > 0)
+			c := parseEKSCluster(desc.Cluster)
+			risk := eksRisk(c.publicEP, c.privateEP, c.secretsEnc, len(c.logDisabled) > 0)
 
 			detail := fmt.Sprintf(
 				"version=%s, public_ep=%t, private_ep=%t, secrets_encrypted=%t",
-				aws.ToString(cluster.Version),
-				publicEP,
-				privateEP,
-				secretsEnc,
+				c.version, c.publicEP, c.privateEP, c.secretsEnc,
 			)
-			if len(logDisabled) > 0 {
-				detail += fmt.Sprintf(", logging_disabled=%s", strings.Join(logDisabled, ";"))
+			if len(c.logDisabled) > 0 {
+				detail += fmt.Sprintf(", logging_disabled=%s", strings.Join(c.logDisabled, ";"))
 			}
 			mu.Lock()
 			results = append(results, audit.Finding{
 				Service:    "eks",
-				ResourceID: name,
+				ResourceID: c.name,
+				Tags:       c.tags,
 				Check:      "cluster_security",
 				Status:     statusFromRisk(risk),
 				Detail:     detail,

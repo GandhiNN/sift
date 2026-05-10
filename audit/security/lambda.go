@@ -30,6 +30,28 @@ var deprecatedRuntimes = map[string]bool{
 	"provided":      true,
 }
 
+type lambdaFunction struct {
+	name    string
+	runtime string
+	tags    map[string]string
+}
+
+func parseLambdaFunction(
+	ctx context.Context,
+	client *lambda.Client,
+	fn lambdatypes.FunctionConfiguration,
+) lambdaFunction {
+	f := lambdaFunction{
+		name:    aws.ToString(fn.FunctionName),
+		runtime: string(fn.Runtime),
+	}
+	tagResp, err := client.ListTags(ctx, &lambda.ListTagsInput{Resource: fn.FunctionArn})
+	if err == nil {
+		f.tags = tagResp.Tags
+	}
+	return f
+}
+
 func AuditLambda(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) {
 	client := lambda.NewFromConfig(cfg)
 	var findings []audit.Finding
@@ -57,12 +79,11 @@ func AuditLambda(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) {
 			sem <- struct{}{}
 			defer func() { <-sem }()
 
-			name := aws.ToString(fn.FunctionName)
-			runtime := string(fn.Runtime)
+			f := parseLambdaFunction(ctx, client, fn)
 
 			// Public function URL
 			urlResp, err := client.GetFunctionUrlConfig(ctx, &lambda.GetFunctionUrlConfigInput{
-				FunctionName: &name,
+				FunctionName: &f.name,
 			})
 			if err == nil && urlResp.FunctionUrl != nil {
 				authType := string(urlResp.AuthType)
@@ -73,7 +94,8 @@ func AuditLambda(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) {
 				mu.Lock()
 				findings = append(findings, audit.Finding{
 					Service:    "lambda",
-					ResourceID: name,
+					ResourceID: f.name,
+					Tags:       f.tags,
 					Check:      "public_function_url",
 					Status:     "FAIL",
 					Detail: fmt.Sprintf(
@@ -87,16 +109,17 @@ func AuditLambda(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) {
 			}
 
 			// Deprecated runtime
-			if deprecatedRuntimes[runtime] {
+			if deprecatedRuntimes[f.runtime] {
 				mu.Lock()
 				findings = append(findings, audit.Finding{
 					Service:    "lambda",
-					ResourceID: name,
+					ResourceID: f.name,
+					Tags:       f.tags,
 					Check:      "deprecated_runtime",
 					Status:     "FAIL",
 					Detail: fmt.Sprintf(
 						"runtime=%s, no longer receives security patches",
-						runtime,
+						f.runtime,
 					),
 					RiskLevel: "HIGH",
 				})
