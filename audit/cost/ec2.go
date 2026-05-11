@@ -12,6 +12,24 @@ import (
 	ec2types "github.com/aws/aws-sdk-go-v2/service/ec2/types"
 )
 
+type ec2CostInstance struct {
+	id           string
+	instanceType string
+	tags         map[string]string
+}
+
+func parseEC2CostInstance(inst ec2types.Instance) ec2CostInstance {
+	tags := make(map[string]string, len(inst.Tags))
+	for _, t := range inst.Tags {
+		tags[aws.ToString(t.Key)] = aws.ToString(t.Value)
+	}
+	return ec2CostInstance{
+		id:           aws.ToString(inst.InstanceId),
+		instanceType: string(inst.InstanceType),
+		tags:         tags,
+	}
+}
+
 func AuditEC2Cost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) {
 	client := ec2.NewFromConfig(cfg)
 	var findings []audit.Finding
@@ -30,14 +48,16 @@ func AuditEC2Cost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 		}
 		for _, res := range page.Reservations {
 			for _, inst := range res.Instances {
+				i := parseEC2CostInstance(inst)
 				findings = append(findings, audit.Finding{
 					Service:    "ec2",
-					ResourceID: aws.ToString(inst.InstanceId),
+					ResourceID: i.id,
+					Tags:       i.tags,
 					Check:      "stopped_instance",
 					Status:     "WARN",
 					Detail: fmt.Sprintf(
 						"type=%s, EBS volumes still incurring cost",
-						string(inst.InstanceType),
+						i.instanceType,
 					),
 					RiskLevel: "MEDIUM",
 				})
@@ -59,15 +79,16 @@ func AuditEC2Cost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 		}
 		for _, res := range page.Reservations {
 			for _, inst := range res.Instances {
-				iType := string(inst.InstanceType)
+				i := parseEC2CostInstance(inst)
 				for _, prefix := range PrevGenPrefixes {
-					if strings.HasPrefix(iType, prefix) {
+					if strings.HasPrefix(i.instanceType, prefix) {
 						findings = append(findings, audit.Finding{
 							Service:    "ec2",
-							ResourceID: aws.ToString(inst.InstanceId),
+							ResourceID: i.id,
+							Tags:       i.tags,
 							Check:      "previous_gen_instance",
 							Status:     "WARN",
-							Detail:     fmt.Sprintf("type=%s, consider upgrading", iType),
+							Detail:     fmt.Sprintf("type=%s, consider upgrading", i.instanceType),
 							RiskLevel:  "LOW",
 						})
 						break
@@ -82,9 +103,14 @@ func AuditEC2Cost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 	if err == nil {
 		for _, addr := range addrs.Addresses {
 			if addr.AssociationId == nil {
+				tags := make(map[string]string, len(addr.Tags))
+				for _, t := range addr.Tags {
+					tags[aws.ToString(t.Key)] = aws.ToString(t.Value)
+				}
 				findings = append(findings, audit.Finding{
 					Service:    "eip",
 					ResourceID: aws.ToString(addr.AllocationId),
+					Tags:       tags,
 					Check:      "unused_elastic_ip",
 					Status:     "WARN",
 					Detail:     fmt.Sprintf("ip=%s", aws.ToString(addr.PublicIp)),
