@@ -12,6 +12,28 @@ import (
 	gluetypes "github.com/aws/aws-sdk-go-v2/service/glue/types"
 )
 
+type glueJob struct {
+	name      string
+	role      string
+	encrypted bool
+	tags      map[string]string
+}
+
+func parseGlueJob(ctx context.Context, client *glue.Client, job gluetypes.Job) glueJob {
+	g := glueJob{
+		name: aws.ToString(job.Name),
+		role: aws.ToString(job.Role),
+	}
+	if job.SecurityConfiguration != nil && *job.SecurityConfiguration != "" {
+		g.encrypted = true
+	}
+	tagResp, err := client.GetTags(ctx, &glue.GetTagsInput{ResourceArn: job.Name})
+	if err == nil {
+		g.tags = tagResp.Tags
+	}
+	return g
+}
+
 func AuditGlue(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) {
 	client := glue.NewFromConfig(cfg)
 	var findings []audit.Finding
@@ -72,25 +94,22 @@ func AuditGlue(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) {
 			sem <- struct{}{}
 			defer func() { <-sem }()
 
-			name := aws.ToString(job.Name)
-			encrypted := false
-			if job.SecurityConfiguration != nil && *job.SecurityConfiguration != "" {
-				encrypted = true
-			}
+			g := parseGlueJob(ctx, client, job)
 			risk := "MINIMAL"
-			if !encrypted {
+			if !g.encrypted {
 				risk = "LOW"
 			}
 			mu.Lock()
 			findings = append(findings, audit.Finding{
 				Service:    "glue",
-				ResourceID: name,
+				ResourceID: g.name,
+				Tags:       g.tags,
 				Check:      "job_security",
 				Status:     statusFromRisk(risk),
 				Detail: fmt.Sprintf(
 					"security_config=%t, role=%s",
-					encrypted,
-					aws.ToString(job.Role),
+					g.encrypted,
+					g.role,
 				),
 				RiskLevel: risk,
 			})

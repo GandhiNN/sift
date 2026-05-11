@@ -13,6 +13,29 @@ import (
 	smtypes "github.com/aws/aws-sdk-go-v2/service/secretsmanager/types"
 )
 
+type secretEntry struct {
+	name             string
+	rotationEnabled  bool
+	daysSinceRotated int
+	tags             map[string]string
+}
+
+func parseSecretEntry(secret smtypes.SecretListEntry) secretEntry {
+	s := secretEntry{
+		name:             aws.ToString(secret.Name),
+		rotationEnabled:  aws.ToBool(secret.RotationEnabled),
+		daysSinceRotated: -1,
+	}
+	if secret.LastRotatedDate != nil {
+		s.daysSinceRotated = int(time.Since(*secret.LastRotatedDate).Hours() / 24)
+	}
+	s.tags = make(map[string]string, len(secret.Tags))
+	for _, t := range secret.Tags {
+		s.tags[aws.ToString(t.Key)] = aws.ToString(t.Value)
+	}
+	return s
+}
+
 func AuditSecrets(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) {
 	client := secretsmanager.NewFromConfig(cfg)
 	var findings []audit.Finding
@@ -28,33 +51,25 @@ func AuditSecrets(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 	}
 
 	bar := progress.NewBar(ctx, int64(len(allSecrets)), "Auditing secrets")
+	t := audit.GetThresholds(ctx)
 
 	for _, secret := range allSecrets {
-		name := aws.ToString(secret.Name)
+		s := parseSecretEntry(secret)
 
-		rotationEnabled := aws.ToBool(secret.RotationEnabled)
-		rotationOverdue := false
-		daysSinceRotated := -1
+		rotationOverdue := s.daysSinceRotated > t.RotationMaxDays
+		risk := secretsRisk(s.rotationEnabled, rotationOverdue, s.daysSinceRotated)
 
-		if secret.LastRotatedDate != nil {
-			daysSinceRotated = int(time.Since(*secret.LastRotatedDate).Hours() / 24)
-			if daysSinceRotated > audit.GetThresholds(ctx).RotationMaxDays {
-				rotationOverdue = true
-			}
-		}
-
-		risk := secretsRisk(rotationEnabled, rotationOverdue, daysSinceRotated)
-
-		detail := fmt.Sprintf("rotation_enabled=%t", rotationEnabled)
-		if daysSinceRotated >= 0 {
-			detail += fmt.Sprintf(", days_since_rotated=%d", daysSinceRotated)
+		detail := fmt.Sprintf("rotation_enabled=%t", s.rotationEnabled)
+		if s.daysSinceRotated >= 0 {
+			detail += fmt.Sprintf(", days_since_rotated=%d", s.daysSinceRotated)
 		} else {
 			detail += ", never_rotated=true"
 		}
 
 		findings = append(findings, audit.Finding{
 			Service:    "secrets_manager",
-			ResourceID: name,
+			ResourceID: s.name,
+			Tags:       s.tags,
 			Check:      "secret_rotation",
 			Status:     statusFromRisk(risk),
 			Detail:     detail,
