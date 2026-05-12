@@ -14,11 +14,25 @@ import (
 	gluetypes "github.com/aws/aws-sdk-go-v2/service/glue/types"
 )
 
+type glueCostJob struct {
+	name string
+	tags map[string]string
+}
+
+func parseGlueCostJob(ctx context.Context, client *glue.Client, job gluetypes.Job) glueCostJob {
+	g := glueCostJob{name: aws.ToString(job.Name)}
+	tagResp, err := client.GetTags(ctx, &glue.GetTagsInput{ResourceArn: job.Name})
+	if err == nil {
+		g.tags = tagResp.Tags
+	}
+	return g
+}
+
 func AuditGlueCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) {
 	client := glue.NewFromConfig(cfg)
 	var findings []audit.Finding
 
-	// Idle dev endpoints (with timeout because API can be slow)
+	// Idle dev endpoints
 	devCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 	devResp, err := client.GetDevEndpoints(devCtx, &glue.GetDevEndpointsInput{})
@@ -37,7 +51,7 @@ func AuditGlueCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error)
 		}
 	}
 
-	// Collect all jobs first
+	// Collect all jobs
 	spinner := progress.NewSpinner(ctx, "Collecting Glue jobs")
 	var allJobs []gluetypes.Job
 	jobInput := &glue.GetJobsInput{}
@@ -56,10 +70,10 @@ func AuditGlueCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error)
 	}
 	spinner.Finish()
 
-	// Process jobs concurrently
 	if len(allJobs) == 0 {
 		return findings, nil
 	}
+
 	bar := progress.NewBar(ctx, int64(len(allJobs)), "Auditing Glue jobs")
 	var mu sync.Mutex
 	var wg sync.WaitGroup
@@ -72,7 +86,8 @@ func AuditGlueCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error)
 			sem <- struct{}{}
 			defer func() { <-sem }()
 
-			jobFindings := auditGlueJob(ctx, client, job)
+			g := parseGlueCostJob(ctx, client, job)
+			jobFindings := auditGlueJob(ctx, client, job, g.tags)
 			if len(jobFindings) > 0 {
 				mu.Lock()
 				findings = append(findings, jobFindings...)
@@ -86,36 +101,46 @@ func AuditGlueCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error)
 	return findings, nil
 }
 
-func auditGlueJob(ctx context.Context, client *glue.Client, job gluetypes.Job) []audit.Finding {
+func auditGlueJob(
+	ctx context.Context,
+	client *glue.Client,
+	job gluetypes.Job,
+	tags map[string]string,
+) []audit.Finding {
 	name := aws.ToString(job.Name)
 	runsResp, err := client.GetJobRuns(ctx, &glue.GetJobRunsInput{
 		JobName:    &name,
 		MaxResults: aws.Int32(1),
 	})
-	if err != nil || len(runsResp.JobRuns) == 0 {
+	if err != nil {
 		return []audit.Finding{audit.ErrorFinding("glue_job", name, "get_job_runs", err)}
 	}
 	if len(runsResp.JobRuns) == 0 {
 		return nil
 	}
+
 	lastRun := runsResp.JobRuns[0]
 	var findings []audit.Finding
+
 	if string(lastRun.JobRunState) == "FAILED" {
 		findings = append(findings, audit.Finding{
 			Service:    "glue_job",
 			ResourceID: name,
+			Tags:       tags,
 			Check:      "failed_job",
 			Status:     "WARN",
 			Detail:     fmt.Sprintf("last run failed: %s", aws.ToString(lastRun.ErrorMessage)),
 			RiskLevel:  "MEDIUM",
 		})
 	}
+
 	if lastRun.CompletedOn != nil {
 		days := int(time.Since(*lastRun.CompletedOn).Hours() / 24)
 		if days > audit.GetThresholds(ctx).UnusedDays {
 			findings = append(findings, audit.Finding{
 				Service:    "glue_job",
 				ResourceID: name,
+				Tags:       tags,
 				Check:      "unused_job",
 				Status:     "WARN",
 				Detail:     fmt.Sprintf("last run %d days ago", days),
@@ -130,6 +155,7 @@ func auditGlueJob(ctx context.Context, client *glue.Client, job gluetypes.Job) [
 		findings = append(findings, audit.Finding{
 			Service:    "glue_job",
 			ResourceID: name,
+			Tags:       tags,
 			Check:      "consider_python_shell",
 			Status:     "WARN",
 			Detail: fmt.Sprintf(
@@ -145,9 +171,10 @@ func auditGlueJob(ctx context.Context, client *glue.Client, job gluetypes.Job) [
 		findings = append(findings, audit.Finding{
 			Service:    "glue_job",
 			ResourceID: name,
+			Tags:       tags,
 			Check:      "expensive_worker_type",
 			Status:     "WARN",
-			Detail:     "using G.2X workers (8vCPU/32GB at $0.88/DPU/hr), consider G.1X (4vCPU/16GB at $0.44/DPU/hr) if memory allows",
+			Detail:     "using G.2X workers (8vCPU/32GB at $0.88/DPU/hr), consider G.1X if memory allows",
 			RiskLevel:  "MEDIUM",
 		})
 	}
@@ -166,6 +193,7 @@ func auditGlueJob(ctx context.Context, client *glue.Client, job gluetypes.Job) [
 					findings = append(findings, audit.Finding{
 						Service:    "glue_job",
 						ResourceID: name,
+						Tags:       tags,
 						Check:      "overprovisioned_job",
 						Status:     "WARN",
 						Detail: fmt.Sprintf(
@@ -179,5 +207,6 @@ func auditGlueJob(ctx context.Context, client *glue.Client, job gluetypes.Job) [
 			}
 		}
 	}
+
 	return findings
 }

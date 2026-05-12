@@ -15,6 +15,30 @@ import (
 	lambdatypes "github.com/aws/aws-sdk-go-v2/service/lambda/types"
 )
 
+type lambdaCostFunction struct {
+	name     string
+	arn      string
+	memoryMB int32
+	tags     map[string]string
+}
+
+func parseLambdaCostFunction(
+	ctx context.Context,
+	client *lambda.Client,
+	fn lambdatypes.FunctionConfiguration,
+) lambdaCostFunction {
+	f := lambdaCostFunction{
+		name:     aws.ToString(fn.FunctionName),
+		arn:      aws.ToString(fn.FunctionArn),
+		memoryMB: aws.ToInt32(fn.MemorySize),
+	}
+	tagResp, err := client.ListTags(ctx, &lambda.ListTagsInput{Resource: fn.FunctionArn})
+	if err == nil {
+		f.tags = tagResp.Tags
+	}
+	return f
+}
+
 func AuditLambdaCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) {
 	client := lambda.NewFromConfig(cfg)
 	cwClient := cloudwatch.NewFromConfig(cfg)
@@ -28,7 +52,6 @@ func AuditLambdaCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, erro
 			return nil, fmt.Errorf("list functions: %w", err)
 		}
 		allFunctions = append(allFunctions, page.Functions...)
-
 	}
 
 	end := time.Now()
@@ -40,21 +63,19 @@ func AuditLambdaCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, erro
 
 	for _, fn := range allFunctions {
 		wg.Add(1)
-
 		go func(fn lambdatypes.FunctionConfiguration) {
 			defer wg.Done()
 			sem <- struct{}{}
 			defer func() { <-sem }()
 
-			name := aws.ToString(fn.FunctionName)
-			memoryMB := aws.ToInt32(fn.MemorySize)
+			f := parseLambdaCostFunction(ctx, client, fn)
 
 			invResp, err := cwClient.GetMetricStatistics(ctx, &cloudwatch.GetMetricStatisticsInput{
 				Namespace:  aws.String("AWS/Lambda"),
 				MetricName: aws.String("Invocations"),
 				Dimensions: []cwtypes.Dimension{{
 					Name:  aws.String("FunctionName"),
-					Value: &name,
+					Value: &f.name,
 				}},
 				StartTime:  &start,
 				EndTime:    &end,
@@ -65,7 +86,7 @@ func AuditLambdaCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, erro
 				mu.Lock()
 				findings = append(
 					findings,
-					audit.ErrorFinding("lambda", name, "check_invocations", err),
+					audit.ErrorFinding("lambda", f.name, "check_invocations", err),
 				)
 				mu.Unlock()
 				return
@@ -75,26 +96,27 @@ func AuditLambdaCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, erro
 			for _, dp := range invResp.Datapoints {
 				totalInvocations += aws.ToFloat64(dp.Sum)
 			}
+
 			var fnFindings []audit.Finding
 
 			if totalInvocations == 0 {
 				fnFindings = append(fnFindings, audit.Finding{
 					Service:    "lambda",
-					ResourceID: name,
+					ResourceID: f.name,
+					Tags:       f.tags,
 					Check:      "unused_function",
 					Status:     "WARN",
 					Detail: fmt.Sprintf(
 						"memory=%dMB, zero invocations in last 30 days",
-						memoryMB,
+						f.memoryMB,
 					),
 					RiskLevel: "LOW",
 				})
 			}
+
 			pcResp, err := client.ListProvisionedConcurrencyConfigs(
 				ctx,
-				&lambda.ListProvisionedConcurrencyConfigsInput{
-					FunctionName: &name,
-				},
+				&lambda.ListProvisionedConcurrencyConfigsInput{FunctionName: &f.name},
 			)
 			if err == nil {
 				for _, pc := range pcResp.ProvisionedConcurrencyConfigs {
@@ -102,7 +124,8 @@ func AuditLambdaCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, erro
 					if allocated > 0 && totalInvocations == 0 {
 						fnFindings = append(fnFindings, audit.Finding{
 							Service:    "lambda",
-							ResourceID: name,
+							ResourceID: f.name,
+							Tags:       f.tags,
 							Check:      "unused_provisioned_concurrency",
 							Status:     "WARN",
 							Detail: fmt.Sprintf(
@@ -114,6 +137,7 @@ func AuditLambdaCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, erro
 					}
 				}
 			}
+
 			if len(fnFindings) > 0 {
 				mu.Lock()
 				findings = append(findings, fnFindings...)
