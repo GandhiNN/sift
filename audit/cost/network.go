@@ -15,6 +15,22 @@ import (
 	ec2types "github.com/aws/aws-sdk-go-v2/service/ec2/types"
 )
 
+type natGatewayEntry struct {
+	id   string
+	tags map[string]string
+}
+
+func parseNATGateway(nat ec2types.NatGateway) natGatewayEntry {
+	tags := make(map[string]string, len(nat.Tags))
+	for _, t := range nat.Tags {
+		tags[aws.ToString(t.Key)] = aws.ToString(t.Value)
+	}
+	return natGatewayEntry{
+		id:   aws.ToString(nat.NatGatewayId),
+		tags: tags,
+	}
+}
+
 func AuditNetworkCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) {
 	var findings []audit.Finding
 
@@ -52,9 +68,9 @@ func findIdleNATGateways(ctx context.Context, cfg aws.Config) ([]audit.Finding, 
 		if string(nat.State) != "available" {
 			continue
 		}
-		id := aws.ToString(nat.NatGatewayId)
+		n := parseNATGateway(nat)
 		wg.Add(1)
-		go func(id string) {
+		go func(n natGatewayEntry) {
 			defer wg.Done()
 			sem <- struct{}{}
 			defer func() { <-sem }()
@@ -66,7 +82,7 @@ func findIdleNATGateways(ctx context.Context, cfg aws.Config) ([]audit.Finding, 
 					MetricName: aws.String("BytesOutToDestination"),
 					Dimensions: []cwtypes.Dimension{{
 						Name:  aws.String("NatGatewayId"),
-						Value: &id,
+						Value: &n.id,
 					}},
 					StartTime:  &start,
 					EndTime:    &end,
@@ -78,7 +94,7 @@ func findIdleNATGateways(ctx context.Context, cfg aws.Config) ([]audit.Finding, 
 				mu.Lock()
 				findings = append(
 					findings,
-					audit.ErrorFinding("nat_gateway", id, "check_traffic", err),
+					audit.ErrorFinding("nat_gateway", n.id, "check_traffic", err),
 				)
 				mu.Unlock()
 				return
@@ -93,7 +109,8 @@ func findIdleNATGateways(ctx context.Context, cfg aws.Config) ([]audit.Finding, 
 				mu.Lock()
 				findings = append(findings, audit.Finding{
 					Service:    "nat_gateway",
-					ResourceID: id,
+					ResourceID: n.id,
+					Tags:       n.tags,
 					Check:      "idle_nat_gateway",
 					Status:     "WARN",
 					Detail:     "zero bytes processed in last 7 days (~$32/mo waste)",
@@ -101,7 +118,7 @@ func findIdleNATGateways(ctx context.Context, cfg aws.Config) ([]audit.Finding, 
 				})
 				mu.Unlock()
 			}
-		}(id)
+		}(n)
 	}
 
 	wg.Wait()

@@ -13,6 +13,57 @@ import (
 	dbtypes "github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
 )
 
+type dynamoDBCostTable struct {
+	name        string
+	readCap     int64
+	writeCap    int64
+	provisioned bool
+	gsis        []dbtypes.GlobalSecondaryIndexDescription
+	tags        map[string]string
+}
+
+func parseDynamodDBCostTable(
+	ctx context.Context,
+	client *dynamodb.Client,
+	name string,
+) (*dynamoDBCostTable, error) {
+	desc, err := client.DescribeTable(
+		ctx,
+		&dynamodb.DescribeTableInput{TableName: aws.String(name)},
+	)
+	if err != nil {
+		return nil, err
+	}
+	table := desc.Table
+
+	t := &dynamoDBCostTable{
+		name: name,
+		gsis: table.GlobalSecondaryIndexes,
+	}
+
+	if table.BillingModeSummary == nil ||
+		table.BillingModeSummary.BillingMode == dbtypes.BillingModeProvisioned {
+		t.provisioned = true
+		if table.ProvisionedThroughput != nil {
+			t.readCap = aws.ToInt64(table.ProvisionedThroughput.ReadCapacityUnits)
+			t.writeCap = aws.ToInt64(table.ProvisionedThroughput.WriteCapacityUnits)
+		}
+	}
+
+	tagResp, err := client.ListTagsOfResource(
+		ctx,
+		&dynamodb.ListTagsOfResourceInput{ResourceArn: table.TableArn},
+	)
+	if err == nil {
+		t.tags = make(map[string]string, len(tagResp.Tags))
+		for _, tag := range tagResp.Tags {
+			t.tags[aws.ToString(tag.Key)] = aws.ToString(tag.Value)
+		}
+	}
+
+	return t, nil
+}
+
 func AuditDynamoDBCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) {
 	client := dynamodb.NewFromConfig(cfg)
 
@@ -42,7 +93,49 @@ func AuditDynamoDBCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, er
 			sem <- struct{}{}
 			defer func() { <-sem }()
 
-			results[i] = result{findings: auditDynamoDBTableCost(ctx, client, name)}
+			t, err := parseDynamodDBCostTable(ctx, client, name)
+			if err != nil {
+				results[i] = result{
+					findings: []audit.Finding{
+						audit.ErrorFinding("dynamodb", name, "cost_audit", err),
+					},
+				}
+				bar.Add(1)
+				return
+			}
+
+			var findings []audit.Finding
+			if t.provisioned && (t.readCap > 0 || t.writeCap > 0) {
+				findings = append(findings, audit.Finding{
+					Service:    "dynamodb",
+					ResourceID: t.name,
+					Tags:       t.tags,
+					Check:      "provisioned_mode",
+					Status:     "WARN",
+					Detail: fmt.Sprintf(
+						"provisioned mode (RCU=%d, WCU=%d) - consider on-demand if traffic is unpredictable",
+						t.readCap,
+						t.writeCap,
+					),
+					RiskLevel: "LOW",
+				})
+			}
+
+			for _, gsi := range t.gsis {
+				if gsi.ItemCount != nil && aws.ToInt64(gsi.ItemCount) == 0 {
+					findings = append(findings, audit.Finding{
+						Service:    "dynamodb",
+						ResourceID: fmt.Sprintf("%s/%s", t.name, aws.ToString(gsi.IndexName)),
+						Tags:       t.tags,
+						Check:      "unused_gsi",
+						Status:     "WARN",
+						Detail:     "GSI has zero items - wasting provisioned capacity",
+						RiskLevel:  "MEDIUM",
+					})
+				}
+			}
+
+			results[i] = result{findings: findings}
 			bar.Add(1)
 		}(i, name)
 	}
@@ -53,65 +146,4 @@ func AuditDynamoDBCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, er
 		findings = append(findings, r.findings...)
 	}
 	return findings, nil
-}
-
-func auditDynamoDBTableCost(
-	ctx context.Context,
-	client *dynamodb.Client,
-	name string,
-) []audit.Finding {
-	desc, err := client.DescribeTable(
-		ctx,
-		&dynamodb.DescribeTableInput{TableName: aws.String(name)},
-	)
-	if err != nil {
-		return []audit.Finding{{
-			Service:    "dynamodb",
-			ResourceID: name,
-			Check:      "cost_audit",
-			Status:     "ERROR",
-			Detail:     fmt.Sprintf("failed to describe table: %v", err),
-			RiskLevel:  "UNKNOWN",
-		}}
-	}
-	table := desc.Table
-	var findings []audit.Finding
-
-	if table.BillingModeSummary == nil ||
-		table.BillingModeSummary.BillingMode == dbtypes.BillingModeProvisioned {
-		readCap := int64(0)
-		writeCap := int64(0)
-		if table.ProvisionedThroughput != nil {
-			readCap = aws.ToInt64(table.ProvisionedThroughput.ReadCapacityUnits)
-			writeCap = aws.ToInt64(table.ProvisionedThroughput.WriteCapacityUnits)
-		}
-		if readCap > 0 || writeCap > 0 {
-			findings = append(findings, audit.Finding{
-				Service:    "dynamodb",
-				ResourceID: name,
-				Check:      "provisioned_mode",
-				Status:     "WARN",
-				Detail: fmt.Sprintf(
-					"provisioned mode (RCU=%d, WCU=%d) - consider on-demand if traffic is unpredictable",
-					readCap,
-					writeCap,
-				),
-				RiskLevel: "LOW",
-			})
-		}
-	}
-
-	for _, gsi := range table.GlobalSecondaryIndexes {
-		if gsi.ItemCount != nil && aws.ToInt64(gsi.ItemCount) == 0 {
-			findings = append(findings, audit.Finding{
-				Service:    "dynamodb",
-				ResourceID: fmt.Sprintf("%s/%s", name, aws.ToString(gsi.IndexName)),
-				Check:      "unused_gsi",
-				Status:     "WARN",
-				Detail:     "GSI has zero items - wasting provisioned capacity",
-				RiskLevel:  "MEDIUM",
-			})
-		}
-	}
-	return findings
 }

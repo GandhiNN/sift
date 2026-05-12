@@ -10,7 +10,29 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/eks"
+	ekstypes "github.com/aws/aws-sdk-go-v2/service/eks/types"
 )
+
+type eksCostNodegroup struct {
+	cluster       string
+	name          string
+	instanceTypes []string
+	desiredSize   int32
+	tags          map[string]string
+}
+
+func parseEKSCostNodegroup(cluster string, ng *ekstypes.Nodegroup) eksCostNodegroup {
+	n := eksCostNodegroup{
+		cluster:       cluster,
+		name:          aws.ToString(ng.NodegroupName),
+		instanceTypes: ng.InstanceTypes,
+		tags:          ng.Tags,
+	}
+	if ng.ScalingConfig != nil {
+		n.desiredSize = aws.ToInt32(ng.ScalingConfig.DesiredSize)
+	}
+	return n
+}
 
 func AuditEKSCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) {
 	client := eks.NewFromConfig(cfg)
@@ -41,6 +63,13 @@ func AuditEKSCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 			sem <- struct{}{}
 			defer func() { <-sem }()
 
+			// Get cluster tags
+			desc, err := client.DescribeCluster(ctx, &eks.DescribeClusterInput{Name: &name})
+			var clusterTags map[string]string
+			if err == nil {
+				clusterTags = desc.Cluster.Tags
+			}
+
 			var allNodegroups []string
 			ngInput := &eks.ListNodegroupsInput{ClusterName: &name}
 			for {
@@ -58,6 +87,10 @@ func AuditEKSCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 				if ngResp.NextToken == nil {
 					break
 				}
+				allNodegroups = append(allNodegroups, ngResp.Nodegroups...)
+				if ngResp.NextToken == nil {
+					break
+				}
 				ngInput.NextToken = ngResp.NextToken
 			}
 
@@ -66,6 +99,7 @@ func AuditEKSCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 				findings = append(findings, audit.Finding{
 					Service:    "eks",
 					ResourceID: name,
+					Tags:       clusterTags,
 					Check:      "cluster_no_nodegroups",
 					Status:     "WARN",
 					Detail:     "paying for control plane ($0.10/hr) with no node groups",
@@ -80,7 +114,7 @@ func AuditEKSCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 				ngWg.Add(1)
 				go func(ngName string) {
 					defer ngWg.Done()
-					ng, err := client.DescribeNodegroup(ctx, &eks.DescribeNodegroupInput{
+					ngResp, err := client.DescribeNodegroup(ctx, &eks.DescribeNodegroupInput{
 						ClusterName:   &name,
 						NodegroupName: &ngName,
 					})
@@ -95,16 +129,20 @@ func AuditEKSCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 								err,
 							),
 						)
+						mu.Unlock()
 						return
 					}
 
+					n := parseEKSCostNodegroup(name, ngResp.Nodegroup)
 					var ngFindings []audit.Finding
-					for _, iType := range ng.Nodegroup.InstanceTypes {
+
+					for _, iType := range n.instanceTypes {
 						for _, prefix := range PrevGenPrefixes {
 							if strings.HasPrefix(iType, prefix) {
 								ngFindings = append(ngFindings, audit.Finding{
 									Service:    "eks_nodegroup",
-									ResourceID: fmt.Sprintf("%s/%s", name, ngName),
+									ResourceID: fmt.Sprintf("%s/%s", n.cluster, n.name),
+									Tags:       n.tags,
 									Check:      "previous_gen_node",
 									Status:     "WARN",
 									Detail:     fmt.Sprintf("type=%s, consider upgrading", iType),
@@ -115,17 +153,18 @@ func AuditEKSCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 						}
 					}
 
-					if ng.Nodegroup.ScalingConfig != nil &&
-						aws.ToInt32(ng.Nodegroup.ScalingConfig.DesiredSize) == 0 {
+					if n.desiredSize == 0 {
 						ngFindings = append(ngFindings, audit.Finding{
 							Service:    "eks_nodegroup",
-							ResourceID: fmt.Sprintf("%s/%s", name, ngName),
+							ResourceID: fmt.Sprintf("%s/%s", n.cluster, n.name),
+							Tags:       n.tags,
 							Check:      "empty_nodegroup",
 							Status:     "WARN",
 							Detail:     "desired size is 0, consider removing if unused",
 							RiskLevel:  "MEDIUM",
 						})
 					}
+
 					if len(ngFindings) > 0 {
 						mu.Lock()
 						findings = append(findings, ngFindings...)

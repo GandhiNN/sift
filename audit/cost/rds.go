@@ -15,6 +15,28 @@ import (
 	rdstypes "github.com/aws/aws-sdk-go-v2/service/rds/types"
 )
 
+type rdsCostInstance struct {
+	id     string
+	engine string
+	class  string
+	status string
+	tags   map[string]string
+}
+
+func parseRDSCostInstance(db rdstypes.DBInstance) rdsCostInstance {
+	tags := make(map[string]string, len(db.TagList))
+	for _, t := range db.TagList {
+		tags[aws.ToString(t.Key)] = aws.ToString(t.Value)
+	}
+	return rdsCostInstance{
+		id:     aws.ToString(db.DBInstanceIdentifier),
+		engine: aws.ToString(db.Engine),
+		class:  aws.ToString(db.DBInstanceClass),
+		status: aws.ToString(db.DBInstanceStatus),
+		tags:   tags,
+	}
+}
+
 func AuditRDSCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) {
 	rdsClient := rds.NewFromConfig(cfg)
 	cwClient := cloudwatch.NewFromConfig(cfg)
@@ -29,44 +51,44 @@ func AuditRDSCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 		}
 		allDBs = append(allDBs, page.DBInstances...)
 	}
+
 	var mu sync.Mutex
 	var wg sync.WaitGroup
 	sem := make(chan struct{}, audit.GetThresholds(ctx).Concurrency)
 
 	for _, db := range allDBs {
-		id := aws.ToString(db.DBInstanceIdentifier)
-		status := aws.ToString(db.DBInstanceStatus)
+		r := parseRDSCostInstance(db)
 
-		if status == "stopped" {
+		if r.status == "stopped" {
 			findings = append(findings, audit.Finding{
 				Service:    "rds",
-				ResourceID: id,
+				ResourceID: r.id,
+				Tags:       r.tags,
 				Check:      "stopped_instance",
 				Status:     "WARN",
 				Detail: fmt.Sprintf(
 					"engine=%s, storage still incurring cost",
-					aws.ToString(db.Engine),
+					r.engine,
 				),
 				RiskLevel: "MEDIUM",
 			})
 			continue
 		}
 
-		if status != "available" {
+		if r.status != "available" {
 			continue
 		}
 
-		instanceClass := aws.ToString(db.DBInstanceClass)
 		wg.Add(1)
-		go func(id, instanceClass string) {
+		go func(r rdsCostInstance) {
 			defer wg.Done()
 			sem <- struct{}{}
 			defer func() { <-sem }()
 
-			avgCPU, err := getAvgCPU(ctx, cwClient, id)
+			avgCPU, err := getAvgCPU(ctx, cwClient, r.id)
 			if err != nil {
 				mu.Lock()
-				findings = append(findings, audit.ErrorFinding("rds", id, "check_cpu", err))
+				findings = append(findings, audit.ErrorFinding("rds", r.id, "check_cpu", err))
 				mu.Unlock()
 				return
 			}
@@ -74,19 +96,19 @@ func AuditRDSCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 				mu.Lock()
 				findings = append(findings, audit.Finding{
 					Service:    "rds",
-					ResourceID: id,
-					Check:      "oversized_instance",
-					Status:     "WARN",
+					ResourceID: r.id,
+					Tags:       r.tags, Check: "oversized_instance",
+					Status: "WARN",
 					Detail: fmt.Sprintf(
 						"class=%s, avg CPU=%.1f%% over 7 days, consider downsizing",
-						instanceClass,
+						r.class,
 						avgCPU,
 					),
 					RiskLevel: "HIGH",
 				})
 				mu.Unlock()
 			}
-		}(id, instanceClass)
+		}(r)
 	}
 	wg.Wait()
 	return findings, nil

@@ -8,7 +8,32 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs"
+	cwltypes "github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs/types"
 )
+
+type logGroupEntry struct {
+	name   string
+	sizeGB float64
+	tags   map[string]string
+}
+
+func parseLogGroup(
+	ctx context.Context,
+	client *cloudwatchlogs.Client,
+	lg cwltypes.LogGroup,
+) logGroupEntry {
+	e := logGroupEntry{
+		name:   aws.ToString(lg.LogGroupName),
+		sizeGB: float64(aws.ToInt64(lg.StoredBytes)) / (1024 * 1024 * 1024),
+	}
+	tagResp, err := client.ListTagsForResource(ctx, &cloudwatchlogs.ListTagsForResourceInput{
+		ResourceArn: lg.LogGroupArn,
+	})
+	if err == nil {
+		e.tags = tagResp.Tags
+	}
+	return e
+}
 
 func AuditCloudwatchCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) {
 	client := cloudwatchlogs.NewFromConfig(cfg)
@@ -25,16 +50,16 @@ func AuditCloudwatchCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, 
 		}
 		for _, lg := range page.LogGroups {
 			if lg.RetentionInDays == nil {
-				name := aws.ToString(lg.LogGroupName)
-				sizeGB := float64(aws.ToInt64(lg.StoredBytes)) / (1024 * 1024 * 1024)
+				e := parseLogGroup(ctx, client, lg)
 				findings = append(findings, audit.Finding{
 					Service:    "cloudwatch_logs",
-					ResourceID: name,
+					ResourceID: e.name,
+					Tags:       e.tags,
 					Check:      "no_retention_policy",
 					Status:     "WARN",
 					Detail: fmt.Sprintf(
 						"stored=%.2fGB, logs never expire ($0.03/GB/mo)",
-						sizeGB,
+						e.sizeGB,
 					),
 					RiskLevel: "MEDIUM",
 				})
