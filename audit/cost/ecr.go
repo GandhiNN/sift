@@ -12,6 +12,30 @@ import (
 	ecrtypes "github.com/aws/aws-sdk-go-v2/service/ecr/types"
 )
 
+type ecrRepo struct {
+	name string
+	arn  string
+	tags map[string]string
+}
+
+func parseECRRepo(ctx context.Context, client *ecr.Client, repo ecrtypes.Repository) ecrRepo {
+	r := ecrRepo{
+		name: aws.ToString(repo.RepositoryName),
+		arn:  aws.ToString(repo.RepositoryArn),
+	}
+	tagResp, err := client.ListTagsForResource(
+		ctx,
+		&ecr.ListTagsForResourceInput{ResourceArn: &r.arn},
+	)
+	if err == nil {
+		r.tags = make(map[string]string, len(tagResp.Tags))
+		for _, t := range tagResp.Tags {
+			r.tags[aws.ToString(t.Key)] = aws.ToString(t.Value)
+		}
+	}
+	return r
+}
+
 func AuditECRCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) {
 	client := ecr.NewFromConfig(cfg)
 
@@ -31,32 +55,33 @@ func AuditECRCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 	sem := make(chan struct{}, audit.GetThresholds(ctx).Concurrency)
 
 	for _, repo := range allRepos {
-		name := aws.ToString(repo.RepositoryName)
 
 		wg.Add(1)
-		go func(name string) {
+		go func(repo ecrtypes.Repository) {
 			defer wg.Done()
 			sem <- struct{}{}
 			defer func() { <-sem }()
 
-			// Check for missing lifecycle policy
-			_, err := client.GetLifecyclePolicy(ctx, &ecr.GetLifecyclePolicyInput{
-				RepositoryName: &name,
-			})
+			r := parseECRRepo(ctx, client, repo)
+
+			_, err := client.GetLifecyclePolicy(
+				ctx,
+				&ecr.GetLifecyclePolicyInput{RepositoryName: &r.name},
+			)
 			if err != nil {
-				// Count images to show impact
-				imgResp, _ := client.DescribeImages(ctx, &ecr.DescribeImagesInput{
-					RepositoryName: &name,
-				})
+				imgResp, _ := client.DescribeImages(
+					ctx,
+					&ecr.DescribeImagesInput{RepositoryName: &r.name},
+				)
 				imgCount := 0
 				if imgResp != nil {
 					imgCount = len(imgResp.ImageDetails)
 				}
 				mu.Lock()
-
 				findings = append(findings, audit.Finding{
 					Service:    "ecr",
-					ResourceID: name,
+					ResourceID: r.name,
+					Tags:       r.tags,
 					Check:      "no_lifecycle_policy",
 					Status:     "WARN",
 					Detail: fmt.Sprintf(
@@ -67,7 +92,7 @@ func AuditECRCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 				})
 				mu.Unlock()
 			}
-		}(name)
+		}(repo)
 	}
 	wg.Wait()
 	return findings, nil

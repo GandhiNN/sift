@@ -12,6 +12,27 @@ import (
 	smtypes "github.com/aws/aws-sdk-go-v2/service/secretsmanager/types"
 )
 
+type secretCostEntry struct {
+	name             string
+	lastAccessedDays int
+	tags             map[string]string
+}
+
+func parseSecretCostEntry(secret smtypes.SecretListEntry) secretCostEntry {
+	s := secretCostEntry{
+		name:             aws.ToString(secret.Name),
+		lastAccessedDays: -1,
+	}
+	if secret.LastAccessedDate != nil {
+		s.lastAccessedDays = int(time.Since(*secret.LastAccessedDate).Hours() / 24)
+	}
+	s.tags = make(map[string]string, len(secret.Tags))
+	for _, t := range secret.Tags {
+		s.tags[aws.ToString(t.Key)] = aws.ToString(t.Value)
+	}
+	return s
+}
+
 func AuditSecretsCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) {
 	client := secretsmanager.NewFromConfig(cfg)
 	var findings []audit.Finding
@@ -26,21 +47,20 @@ func AuditSecretsCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, err
 		allSecrets = append(allSecrets, page.SecretList...)
 	}
 
-	for _, secret := range allSecrets {
-		name := aws.ToString(secret.Name)
+	t := audit.GetThresholds(ctx)
 
-		if secret.LastAccessedDate != nil {
-			days := int(time.Since(*secret.LastAccessedDate).Hours() / 24)
-			if days > audit.GetThresholds(ctx).UnusedDays {
-				findings = append(findings, audit.Finding{
-					Service:    "secrets_manager",
-					ResourceID: name,
-					Check:      "unused_secret",
-					Status:     "WARN",
-					Detail:     fmt.Sprintf("last accessed %d days ago ($0.40/mo)", days),
-					RiskLevel:  "LOW",
-				})
-			}
+	for _, secret := range allSecrets {
+		s := parseSecretCostEntry(secret)
+		if s.lastAccessedDays > t.UnusedDays {
+			findings = append(findings, audit.Finding{
+				Service:    "secrets_manager",
+				ResourceID: s.name,
+				Tags:       s.tags,
+				Check:      "unused_secret",
+				Status:     "WARN",
+				Detail:     fmt.Sprintf("last accessed %d days ago ($0.40/mo)", s.lastAccessedDays),
+				RiskLevel:  "LOW",
+			})
 		}
 	}
 	return findings, nil
