@@ -61,6 +61,16 @@ func AuditSecretsCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, err
 				Detail:     fmt.Sprintf("last accessed %d days ago ($0.40/mo)", s.lastAccessedDays),
 				RiskLevel:  "LOW",
 			})
+		} else {
+			findings = append(findings, audit.Finding{
+				Service:    "secrets_manager",
+				ResourceID: s.name,
+				Tags:       s.tags,
+				Check:      "unused_secret",
+				Status:     "PASS",
+				Detail:     fmt.Sprintf("last accessed %d days ago", s.lastAccessedDays),
+				RiskLevel:  "MINIMAL",
+			})
 		}
 	}
 	return findings, nil

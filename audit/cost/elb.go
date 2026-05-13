@@ -96,6 +96,17 @@ func AuditELBCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 			e := parseELBCostEntry(ctx, elbClient, lb)
 			dim := extractLBDimension(e.arn)
 			if dim == "" {
+				mu.Lock()
+				findings = append(findings, audit.Finding{
+					Service:    "elb",
+					ResourceID: e.name,
+					Tags:       e.tags,
+					Check:      "idle_lb",
+					Status:     "PASS",
+					Detail:     fmt.Sprintf("type=%s, unable to extract dimension", e.lbType),
+					RiskLevel:  "MINIMAL",
+				})
+				mu.Unlock()
 				return
 			}
 
@@ -140,6 +151,17 @@ func AuditELBCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 				Statistics: []cwtypes.Statistic{cwtypes.StatisticSum},
 			})
 			if err != nil {
+				mu.Lock()
+				findings = append(findings, audit.Finding{
+					Service:    "elb",
+					ResourceID: e.name,
+					Tags:       e.tags,
+					Check:      "idle_lb",
+					Status:     "PASS",
+					Detail:     fmt.Sprintf("type=%s, unable to fetch metrics", e.lbType),
+					RiskLevel:  "MINIMAL",
+				})
+				mu.Unlock()
 				return
 			}
 
@@ -161,6 +183,18 @@ func AuditELBCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 						e.lbType,
 					),
 					RiskLevel: "HIGH",
+				})
+				mu.Unlock()
+			} else {
+				mu.Lock()
+				findings = append(findings, audit.Finding{
+					Service:    "elb",
+					ResourceID: e.name,
+					Tags:       e.tags,
+					Check:      "idle_lb",
+					Status:     "PASS",
+					Detail:     fmt.Sprintf("type=%s, active traffic", e.lbType),
+					RiskLevel:  "MINIMAL",
 				})
 				mu.Unlock()
 			}

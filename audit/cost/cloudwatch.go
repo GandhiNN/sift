@@ -49,8 +49,8 @@ func AuditCloudwatchCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, 
 			return nil, fmt.Errorf("describe log groups: %w", err)
 		}
 		for _, lg := range page.LogGroups {
+			e := parseLogGroup(ctx, client, lg)
 			if lg.RetentionInDays == nil {
-				e := parseLogGroup(ctx, client, lg)
 				findings = append(findings, audit.Finding{
 					Service:    "cloudwatch_logs",
 					ResourceID: e.name,
@@ -62,6 +62,16 @@ func AuditCloudwatchCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, 
 						e.sizeGB,
 					),
 					RiskLevel: "MEDIUM",
+				})
+			} else {
+				findings = append(findings, audit.Finding{
+					Service:    "cloudwatch_logs",
+					ResourceID: e.name,
+					Tags:       e.tags,
+					Check:      "no_retention_policy",
+					Status:     "PASS",
+					Detail:     fmt.Sprintf("retention=%d days", aws.ToInt32(lg.RetentionInDays)),
+					RiskLevel:  "MINIMAL",
 				})
 			}
 		}

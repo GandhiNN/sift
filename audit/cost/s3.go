@@ -69,6 +69,18 @@ func AuditS3Cost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) {
 					RiskLevel:  "MEDIUM",
 				})
 				mu.Unlock()
+			} else {
+				mu.Lock()
+				findings = append(findings, audit.Finding{
+					Service:    "s3",
+					ResourceID: bucket.name,
+					Tags:       bucket.tags,
+					Check:      "no_lifecycle_policy",
+					Status:     "PASS",
+					Detail:     "lifecycle policy configured",
+					RiskLevel:  "MINIMAL",
+				})
+				mu.Unlock()
 			}
 		}(*b.Name)
 	}

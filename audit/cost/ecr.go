@@ -91,6 +91,18 @@ func AuditECRCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 					RiskLevel: "LOW",
 				})
 				mu.Unlock()
+			} else {
+				mu.Lock()
+				findings = append(findings, audit.Finding{
+					Service:    "ecr",
+					ResourceID: r.name,
+					Tags:       r.tags,
+					Check:      "no_lifecycle_policy",
+					Status:     "PASS",
+					Detail:     "lifecyce policy configured",
+					RiskLevel:  "MINIMAL",
+				})
+				mu.Unlock()
 			}
 		}(repo)
 	}
