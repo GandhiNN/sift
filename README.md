@@ -45,7 +45,7 @@ sift security --profile icloud-dev --service eks
 sift security --profile icloud-dev --risk-level HIGH
 ```
 
-Available services: `ec2`, `sagemaker`, `s3`, `rds`, `eks`, `iam`, `baseline`, `secrets`, `glue`, `lambda`, `dynamodb`
+Available services: `ec2`, `sagemaker`, `s3`, `rds`, `eks`, `iam`, `baseline`, `secrets`, `glue`, `lambda`, `dynamodb`, `elb`
 
 #### Cost
 
@@ -200,6 +200,18 @@ sift triage --profile icloud-dev --log-group /vpc/flowlogs --instance i-0abc123
 | ✓ | ✗ | ✓ | LOW |
 | ✓ | ✓ | ✗ | LOW |
 | ✓ | ✓ | ✓ | MINIMAL |
+
+### ELB
+
+| Internet-facing | DB/Cache Port Exposed | SG Open to World | Risk |
+|-----------------|----------------------|-------------------|------|
+| ✓ | ✓ | ✓ | CRITICAL |
+| ✓ | ✗ | ✓ | HIGH |
+| ✓ | ✓ | ✗ | MEDIUM |
+| ✓ | ✗ | ✗ | LOW |
+| ✗ (internal) | any | any | MINIMAL |
+
+Sensitive ports flagged: MongoDB (27017-27018), MySQL (3306), PostgreSQL (5432), Redis (6379), Elasticsearch (9200-9300), Memcached (11211), MSSQL (1433), Oracle (1521), Redshift (5439).
 
 ### Glue
 | No catalog or connection encryption | HIGH |
