@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"sift/audit"
+	"sift/audit/pricing"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/ec2"
@@ -59,7 +60,8 @@ func AuditEC2Cost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 						"type=%s, EBS volumes still incurring cost",
 						i.instanceType,
 					),
-					RiskLevel: "MEDIUM",
+					RiskLevel:            "MEDIUM",
+					EstimatedMonthlyCost: pricing.EC2Monthly(i.instanceType),
 				})
 			}
 		}
@@ -90,8 +92,12 @@ func AuditEC2Cost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 							Tags:       i.tags,
 							Check:      "previous_gen_instance",
 							Status:     "WARN",
-							Detail:     fmt.Sprintf("type=%s, consider upgrading", i.instanceType),
-							RiskLevel:  "LOW",
+							Detail: fmt.Sprintf(
+								"type=%s, consider upgrading",
+								i.instanceType,
+							),
+							RiskLevel:            "LOW",
+							EstimatedMonthlyCost: pricing.EC2Monthly(i.instanceType),
 						})
 						break
 					}
@@ -103,8 +109,12 @@ func AuditEC2Cost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 						Tags:       i.tags,
 						Check:      "previous_gen_instance",
 						Status:     "PASS",
-						Detail:     fmt.Sprintf("type=%s, current generation", i.instanceType),
-						RiskLevel:  "MINIMAL",
+						Detail: fmt.Sprintf(
+							"type=%s, current generation",
+							i.instanceType,
+						),
+						RiskLevel:            "MINIMAL",
+						EstimatedMonthlyCost: pricing.EC2Monthly(i.instanceType),
 					})
 				}
 			}
@@ -121,13 +131,14 @@ func AuditEC2Cost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 					tags[aws.ToString(t.Key)] = aws.ToString(t.Value)
 				}
 				findings = append(findings, audit.Finding{
-					Service:    "eip",
-					ResourceID: aws.ToString(addr.AllocationId),
-					Tags:       tags,
-					Check:      "unused_elastic_ip",
-					Status:     "WARN",
-					Detail:     fmt.Sprintf("ip=%s", aws.ToString(addr.PublicIp)),
-					RiskLevel:  "LOW",
+					Service:              "eip",
+					ResourceID:           aws.ToString(addr.AllocationId),
+					Tags:                 tags,
+					Check:                "unused_elastic_ip",
+					Status:               "WARN",
+					Detail:               fmt.Sprintf("ip=%s", aws.ToString(addr.PublicIp)),
+					RiskLevel:            "LOW",
+					EstimatedMonthlyCost: pricing.ElasticIPMonthly(),
 				})
 			}
 		}

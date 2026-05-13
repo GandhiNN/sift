@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"sift/audit"
+	"sift/audit/pricing"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/cloudwatch"
@@ -108,25 +109,27 @@ func findIdleNATGateways(ctx context.Context, cfg aws.Config) ([]audit.Finding, 
 			if totalBytes == 0 {
 				mu.Lock()
 				findings = append(findings, audit.Finding{
-					Service:    "nat_gateway",
-					ResourceID: n.id,
-					Tags:       n.tags,
-					Check:      "idle_nat_gateway",
-					Status:     "WARN",
-					Detail:     "zero bytes processed in last 7 days (~$32/mo waste)",
-					RiskLevel:  "HIGH",
+					Service:              "nat_gateway",
+					ResourceID:           n.id,
+					Tags:                 n.tags,
+					Check:                "idle_nat_gateway",
+					Status:               "WARN",
+					Detail:               "zero bytes processed in last 7 days (~$32/mo waste)",
+					RiskLevel:            "HIGH",
+					EstimatedMonthlyCost: pricing.NATGatewayMonthly(),
 				})
 				mu.Unlock()
 			} else {
 				mu.Lock()
 				findings = append(findings, audit.Finding{
-					Service:    "nat_gateway",
-					ResourceID: n.id,
-					Tags:       n.tags,
-					Check:      "idle_nat_gateway",
-					Status:     "PASS",
-					Detail:     fmt.Sprintf("%.2f GB processed in last 7 days", totalBytes/(1024*1024*1024)),
-					RiskLevel:  "MINIMAL",
+					Service:              "nat_gateway",
+					ResourceID:           n.id,
+					Tags:                 n.tags,
+					Check:                "idle_nat_gateway",
+					Status:               "PASS",
+					Detail:               fmt.Sprintf("%.2f GB processed in last 7 days", totalBytes/(1024*1024*1024)),
+					RiskLevel:            "MINIMAL",
+					EstimatedMonthlyCost: pricing.NATGatewayMonthly(),
 				})
 				mu.Unlock()
 			}

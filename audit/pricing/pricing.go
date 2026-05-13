@@ -62,6 +62,13 @@ func load() *PriceTable {
 	return &t
 }
 
+func EC2Monthly(instanceType string) float64 {
+	if h, ok := table.EC2Hourly[instanceType]; ok {
+		return h * table.HoursPerMonth
+	}
+	return 0
+}
+
 func EBSMonthly(volumeType string, sizeGB int32) float64 {
 	if rate, ok := table.EBSPerGB[volumeType]; ok {
 		return rate * float64(sizeGB)
@@ -133,4 +140,8 @@ func GlueJobHourlyCost(workerType string, workers int32) float64 {
 		rate = table.GlueDPUHourly["Standard"]
 	}
 	return rate * float64(workers)
+}
+
+func ElasticIPMonthly() float64 {
+	return table.FixedMonthly["elastic_ip"]
 }

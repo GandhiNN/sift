@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"sift/audit"
+	"sift/audit/pricing"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/secretsmanager"
@@ -58,18 +59,23 @@ func AuditSecretsCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, err
 				Tags:       s.tags,
 				Check:      "unused_secret",
 				Status:     "WARN",
-				Detail:     fmt.Sprintf("last accessed %d days ago ($0.40/mo)", s.lastAccessedDays),
-				RiskLevel:  "LOW",
+				Detail: fmt.Sprintf(
+					"last accessed %d days ago ($0.40/mo)",
+					s.lastAccessedDays,
+				),
+				RiskLevel:            "LOW",
+				EstimatedMonthlyCost: pricing.SecretMonthly(),
 			})
 		} else {
 			findings = append(findings, audit.Finding{
-				Service:    "secrets_manager",
-				ResourceID: s.name,
-				Tags:       s.tags,
-				Check:      "unused_secret",
-				Status:     "PASS",
-				Detail:     fmt.Sprintf("last accessed %d days ago", s.lastAccessedDays),
-				RiskLevel:  "MINIMAL",
+				Service:              "secrets_manager",
+				ResourceID:           s.name,
+				Tags:                 s.tags,
+				Check:                "unused_secret",
+				Status:               "PASS",
+				Detail:               fmt.Sprintf("last accessed %d days ago", s.lastAccessedDays),
+				RiskLevel:            "MINIMAL",
+				EstimatedMonthlyCost: pricing.SecretMonthly(),
 			})
 		}
 	}

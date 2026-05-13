@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"sift/audit"
+	"sift/audit/pricing"
 	"sift/audit/progress"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -103,8 +104,12 @@ func AuditELBCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 					Tags:       e.tags,
 					Check:      "idle_lb",
 					Status:     "PASS",
-					Detail:     fmt.Sprintf("type=%s, unable to extract dimension", e.lbType),
-					RiskLevel:  "MINIMAL",
+					Detail: fmt.Sprintf(
+						"type=%s, unable to extract dimension",
+						e.lbType,
+					),
+					RiskLevel:            "MINIMAL",
+					EstimatedMonthlyCost: pricing.ELBMonthly(e.lbType),
 				})
 				mu.Unlock()
 				return
@@ -122,8 +127,12 @@ func AuditELBCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 					Tags:       e.tags,
 					Check:      "no_targets",
 					Status:     "WARN",
-					Detail:     fmt.Sprintf("type=%s, no target groups attached", e.lbType),
-					RiskLevel:  "MEDIUM",
+					Detail: fmt.Sprintf(
+						"type=%s, no target groups attached",
+						e.lbType,
+					),
+					RiskLevel:            "MEDIUM",
+					EstimatedMonthlyCost: pricing.ELBMonthly(e.lbType),
 				})
 				mu.Unlock()
 				return
@@ -153,13 +162,14 @@ func AuditELBCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 			if err != nil {
 				mu.Lock()
 				findings = append(findings, audit.Finding{
-					Service:    "elb",
-					ResourceID: e.name,
-					Tags:       e.tags,
-					Check:      "idle_lb",
-					Status:     "PASS",
-					Detail:     fmt.Sprintf("type=%s, unable to fetch metrics", e.lbType),
-					RiskLevel:  "MINIMAL",
+					Service:              "elb",
+					ResourceID:           e.name,
+					Tags:                 e.tags,
+					Check:                "idle_lb",
+					Status:               "PASS",
+					Detail:               fmt.Sprintf("type=%s, unable to fetch metrics", e.lbType),
+					RiskLevel:            "MINIMAL",
+					EstimatedMonthlyCost: pricing.ELBMonthly(e.lbType),
 				})
 				mu.Unlock()
 				return
@@ -182,19 +192,21 @@ func AuditELBCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 						"type=%s, zero traffic in last 30 days (~$16-22/mo waste)",
 						e.lbType,
 					),
-					RiskLevel: "HIGH",
+					RiskLevel:            "HIGH",
+					EstimatedMonthlyCost: pricing.ELBMonthly(e.lbType),
 				})
 				mu.Unlock()
 			} else {
 				mu.Lock()
 				findings = append(findings, audit.Finding{
-					Service:    "elb",
-					ResourceID: e.name,
-					Tags:       e.tags,
-					Check:      "idle_lb",
-					Status:     "PASS",
-					Detail:     fmt.Sprintf("type=%s, active traffic", e.lbType),
-					RiskLevel:  "MINIMAL",
+					Service:              "elb",
+					ResourceID:           e.name,
+					Tags:                 e.tags,
+					Check:                "idle_lb",
+					Status:               "PASS",
+					Detail:               fmt.Sprintf("type=%s, active traffic", e.lbType),
+					RiskLevel:            "MINIMAL",
+					EstimatedMonthlyCost: pricing.ELBMonthly(e.lbType),
 				})
 				mu.Unlock()
 			}
