@@ -44,6 +44,7 @@ func Audit(ctx context.Context, cfg aws.Config, services []string) ([]audit.Find
 		{"baseline", AuditBaseline},
 		{"lambda", AuditLambda},
 		{"dynamodb", AuditDynamoDB},
+		{"elb", AuditELB},
 	}
 
 	var checks []struct {
