@@ -16,6 +16,7 @@ type ebsVolume struct {
 	id         string
 	size       int32
 	volumeType string
+	status     string
 	tags       map[string]string
 }
 
@@ -39,6 +40,7 @@ func parseEBSVolume(vol ec2types.Volume) ebsVolume {
 		id:         aws.ToString(vol.VolumeId),
 		size:       aws.ToInt32(vol.Size),
 		volumeType: string(vol.VolumeType),
+		status:     string(vol.State),
 		tags:       ec2TagsToMap(vol.Tags),
 	}
 }
@@ -56,13 +58,8 @@ func AuditEBSCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 	client := ec2.NewFromConfig(cfg)
 	var findings []audit.Finding
 
-	// Unattached volumes
-	volPaginator := ec2.NewDescribeVolumesPaginator(client, &ec2.DescribeVolumesInput{
-		Filters: []ec2types.Filter{{
-			Name:   aws.String("status"),
-			Values: []string{"available"},
-		}},
-	})
+	// All volumes
+	volPaginator := ec2.NewDescribeVolumesPaginator(client, &ec2.DescribeVolumesInput{})
 	for volPaginator.HasMorePages() {
 		page, err := volPaginator.NextPage(ctx)
 		if err != nil {
@@ -70,23 +67,52 @@ func AuditEBSCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 		}
 		for _, vol := range page.Volumes {
 			v := parseEBSVolume(vol)
-			findings = append(findings, audit.Finding{
-				Service:    "ebs",
-				ResourceID: v.id,
-				Tags:       v.tags,
-				Check:      "unattached_volume",
-				Status:     "WARN",
-				Detail: fmt.Sprintf(
-					"size=%dGB, type=%s",
-					v.size,
-					v.volumeType,
-				),
-				RiskLevel: "MEDIUM",
-			})
+			var volFindings []audit.Finding
+
+			if v.status == "available" {
+				volFindings = append(volFindings, audit.Finding{
+					Service:    "ebs",
+					ResourceID: v.id,
+					Tags:       v.tags,
+					Check:      "unattached_volume",
+					Status:     "WARN",
+					Detail:     fmt.Sprintf("size=%dGB, type=%s", v.size, v.volumeType),
+					RiskLevel:  "MEDIUM",
+				})
+			}
+
+			if v.volumeType == "gp2" {
+				volFindings = append(volFindings, audit.Finding{
+					Service:    "ebs",
+					ResourceID: v.id,
+					Tags:       v.tags,
+					Check:      "gp2_volume",
+					Status:     "WARN",
+					Detail: fmt.Sprintf(
+						"size=%dGB, GP3 is ~20%% cheaper with better baseline IOPS",
+						v.size,
+					),
+					RiskLevel: "LOW",
+				})
+			}
+
+			if len(volFindings) > 0 {
+				findings = append(findings, volFindings...)
+			} else {
+				findings = append(findings, audit.Finding{
+					Service:    "ebs",
+					ResourceID: v.id,
+					Tags:       v.tags,
+					Check:      "ebs_cost",
+					Status:     "PASS",
+					Detail:     fmt.Sprintf("size=%dGB, type=%s, attached", v.size, v.volumeType),
+					RiskLevel:  "MINIMAL",
+				})
+			}
 		}
 	}
 
-	// Old snapshots
+	// Snapshots
 	cutoff := time.Now().AddDate(0, 0, -audit.GetThresholds(ctx).SnapshotAgeDays)
 	snapPaginator := ec2.NewDescribeSnapshotsPaginator(client, &ec2.DescribeSnapshotsInput{
 		OwnerIds: []string{"self"},
@@ -112,36 +138,17 @@ func AuditEBSCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 					),
 					RiskLevel: "LOW",
 				})
+			} else {
+				findings = append(findings, audit.Finding{
+					Service:    "ebs_snapshot",
+					ResourceID: s.id,
+					Tags:       s.tags,
+					Check:      "old_snapshot",
+					Status:     "PASS",
+					Detail:     fmt.Sprintf("size=%dGB, within retention period", s.size),
+					RiskLevel:  "MINIMAL",
+				})
 			}
-		}
-	}
-
-	// GP2 volumes that should be GP3
-	gp2Paginator := ec2.NewDescribeVolumesPaginator(client, &ec2.DescribeVolumesInput{
-		Filters: []ec2types.Filter{{
-			Name:   aws.String("volume-type"),
-			Values: []string{"gp2"},
-		}},
-	})
-	for gp2Paginator.HasMorePages() {
-		page, err := gp2Paginator.NextPage(ctx)
-		if err != nil {
-			return nil, fmt.Errorf("describe gp2 volumes: %w", err)
-		}
-		for _, vol := range page.Volumes {
-			v := parseEBSVolume(vol)
-			findings = append(findings, audit.Finding{
-				Service:    "ebs",
-				ResourceID: v.id,
-				Tags:       v.tags,
-				Check:      "gp2_volume",
-				Status:     "WARN",
-				Detail: fmt.Sprintf(
-					"size=%dGB, GP3 is ~20%% cheaper with better baseline IOPS",
-					v.size,
-				),
-				RiskLevel: "LOW",
-			})
 		}
 	}
 
