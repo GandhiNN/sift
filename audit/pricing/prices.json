@@ -114,7 +114,8 @@
     "nlb": 18.40,
     "nat_gateway": 35.04,
     "eks_cluster": 73.00,
-    "secret": 0.40
+    "secret": 0.40,
+    "elastic_ip": 3.65
   },
   "storage_per_gb": {
     "s3_standard": 0.024,
