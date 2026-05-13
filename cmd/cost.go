@@ -11,7 +11,7 @@ var costServices string
 var validCostServices = map[string]bool{
 	"ec2": true, "ebs": true, "rds": true, "s3": true, "eks": true,
 	"network": true, "cloudwatch": true, "ecr": true, "secrets": true, "glue": true, "lambda": true,
-	"dynamodb": true, "dms": true,
+	"dynamodb": true, "dms": true, "elb": true,
 }
 
 var costCmd = &cobra.Command{
