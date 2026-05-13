@@ -83,7 +83,7 @@ func AuditELBCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 	sem := make(chan struct{}, audit.GetThresholds(ctx).Concurrency)
 
 	end := time.Now()
-	start := end.AddDate(0, 0, -7)
+	start := end.AddDate(0, 0, -30)
 
 	for _, lb := range allLBs {
 		wg.Add(1)
@@ -157,7 +157,7 @@ func AuditELBCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 					Check:      "idle_lb",
 					Status:     "WARN",
 					Detail: fmt.Sprintf(
-						"type=%s, zero traffic in last 7 days (~$16-22/mo waste)",
+						"type=%s, zero traffic in last 30 days (~$16-22/mo waste)",
 						e.lbType,
 					),
 					RiskLevel: "HIGH",
