@@ -117,6 +117,18 @@ func findIdleNATGateways(ctx context.Context, cfg aws.Config) ([]audit.Finding, 
 					RiskLevel:  "HIGH",
 				})
 				mu.Unlock()
+			} else {
+				mu.Lock()
+				findings = append(findings, audit.Finding{
+					Service:    "nat_gateway",
+					ResourceID: n.id,
+					Tags:       n.tags,
+					Check:      "idle_nat_gateway",
+					Status:     "PASS",
+					Detail:     fmt.Sprintf("%.2f GB processed in last 7 days", totalBytes/(1024*1024*1024)),
+					RiskLevel:  "MINIMAL",
+				})
+				mu.Unlock()
 			}
 		}(n)
 	}

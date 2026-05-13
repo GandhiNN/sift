@@ -80,8 +80,10 @@ func AuditEC2Cost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 		for _, res := range page.Reservations {
 			for _, inst := range res.Instances {
 				i := parseEC2CostInstance(inst)
+				isPrevGen := false
 				for _, prefix := range PrevGenPrefixes {
 					if strings.HasPrefix(i.instanceType, prefix) {
+						isPrevGen = true
 						findings = append(findings, audit.Finding{
 							Service:    "ec2",
 							ResourceID: i.id,
@@ -93,6 +95,17 @@ func AuditEC2Cost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 						})
 						break
 					}
+				}
+				if !isPrevGen {
+					findings = append(findings, audit.Finding{
+						Service:    "ec2",
+						ResourceID: i.id,
+						Tags:       i.tags,
+						Check:      "previous_gen_instance",
+						Status:     "PASS",
+						Detail:     fmt.Sprintf("type=%s, current generation", i.instanceType),
+						RiskLevel:  "MINIMAL",
+					})
 				}
 			}
 		}

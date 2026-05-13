@@ -80,12 +80,14 @@ func AuditLambda(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) {
 			defer func() { <-sem }()
 
 			f := parseLambdaFunction(ctx, client, fn)
+			hasIssue := false
 
 			// Public function URL
 			urlResp, err := client.GetFunctionUrlConfig(ctx, &lambda.GetFunctionUrlConfigInput{
 				FunctionName: &f.name,
 			})
 			if err == nil && urlResp.FunctionUrl != nil {
+				hasIssue = true
 				authType := string(urlResp.AuthType)
 				risk := "MEDIUM"
 				if strings.ToUpper(authType) == "NONE" {
@@ -110,6 +112,7 @@ func AuditLambda(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) {
 
 			// Deprecated runtime
 			if deprecatedRuntimes[f.runtime] {
+				hasIssue = true
 				mu.Lock()
 				findings = append(findings, audit.Finding{
 					Service:    "lambda",
@@ -125,6 +128,24 @@ func AuditLambda(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) {
 				})
 				mu.Unlock()
 			}
+
+			if !hasIssue {
+				mu.Lock()
+				findings = append(findings, audit.Finding{
+					Service:    "lambda",
+					ResourceID: f.name,
+					Tags:       f.tags,
+					Check:      "lambda_security",
+					Status:     "PASS",
+					Detail: fmt.Sprintf(
+						"runtime=%s, no public URL, supported runtime",
+						f.runtime,
+					),
+					RiskLevel: "MINIMAL",
+				})
+				mu.Unlock()
+			}
+
 			bar.Add(1)
 		}(fn)
 	}

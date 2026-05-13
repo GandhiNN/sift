@@ -107,6 +107,22 @@ func AuditRDSCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 					RiskLevel: "HIGH",
 				})
 				mu.Unlock()
+			} else {
+				mu.Lock()
+				findings = append(findings, audit.Finding{
+					Service:    "rds",
+					ResourceID: r.id,
+					Tags:       r.tags,
+					Check:      "oversized_instance",
+					Status:     "PASS",
+					Detail: fmt.Sprintf(
+						"class=%s, avg CPU=%.1f%% over 7 days",
+						r.class,
+						avgCPU,
+					),
+					RiskLevel: "MINIMAL",
+				})
+				mu.Unlock()
 			}
 		}(r)
 	}

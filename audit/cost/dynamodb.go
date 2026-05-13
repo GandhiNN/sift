@@ -135,6 +135,18 @@ func AuditDynamoDBCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, er
 				}
 			}
 
+			if len(findings) == 0 {
+				findings = append(findings, audit.Finding{
+					Service:    "dynamodb",
+					ResourceID: t.name,
+					Tags:       t.tags,
+					Check:      "dynamodb_cost",
+					Status:     "PASS",
+					Detail:     "no cost issues detected",
+					RiskLevel:  "MINIMAL",
+				})
+			}
+
 			results[i] = result{findings: findings}
 			bar.Add(1)
 		}(i, name)

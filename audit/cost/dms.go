@@ -23,6 +23,22 @@ var dmsPrevGenPrefixes = []string{
 	"dms.t2.",
 }
 
+type dmsCostInstance struct {
+	id      string
+	arn     string
+	class   string
+	multiAZ bool
+}
+
+func parseDMSCostInstance(inst dmstypes.ReplicationInstance) dmsCostInstance {
+	return dmsCostInstance{
+		id:      aws.ToString(inst.ReplicationInstanceIdentifier),
+		arn:     aws.ToString(inst.ReplicationInstanceArn),
+		class:   aws.ToString(inst.ReplicationInstanceClass),
+		multiAZ: inst.MultiAZ,
+	}
+}
+
 func AuditDMSCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) {
 	client := databasemigrationservice.NewFromConfig(cfg)
 	cwClient := cloudwatch.NewFromConfig(cfg)
@@ -81,42 +97,40 @@ func AuditDMSCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 			defer func() { <-sem }()
 			defer bar.Add(1)
 
-			id := aws.ToString(inst.ReplicationInstanceIdentifier)
-			arn := aws.ToString(inst.ReplicationInstanceArn)
-			class := aws.ToString(inst.ReplicationInstanceClass)
+			d := parseDMSCostInstance(inst)
 
 			var local []audit.Finding
 
-			if taskCount[arn] == 0 {
+			if taskCount[d.arn] == 0 {
 				local = append(local, audit.Finding{
 					Service:    "dms",
-					ResourceID: id,
+					ResourceID: d.id,
 					Check:      "idle_instance",
 					Status:     "WARN",
-					Detail:     fmt.Sprintf("class=%s, no replication tasks assigned", class),
+					Detail:     fmt.Sprintf("class=%s, no replication tasks assigned", d.class),
 					RiskLevel:  "HIGH",
 				})
-			} else if stoppedTasks[arn] == taskCount[arn] {
+			} else if stoppedTasks[d.arn] == taskCount[d.arn] {
 				local = append(local, audit.Finding{
 					Service:    "dms",
-					ResourceID: id,
+					ResourceID: d.id,
 					Check:      "all_tasks_stopped",
 					Status:     "WARN",
-					Detail:     fmt.Sprintf("class=%s, all %d tasks stopped but instance running", class, stoppedTasks[arn]),
+					Detail:     fmt.Sprintf("class=%s, all %d tasks stopped but instance running", d.class, stoppedTasks[d.arn]),
 					RiskLevel:  "MEDIUM",
 				})
 			}
 
 			for _, prefix := range dmsPrevGenPrefixes {
-				if strings.HasPrefix(class, prefix) {
+				if strings.HasPrefix(d.class, prefix) {
 					local = append(local, audit.Finding{
 						Service:    "dms",
-						ResourceID: id,
+						ResourceID: d.id,
 						Check:      "previous_gen_instance",
 						Status:     "WARN",
 						Detail: fmt.Sprintf(
 							"class=%s, consider upgrading to current gen",
-							class,
+							d.class,
 						),
 						RiskLevel: "LOW",
 					})
@@ -124,27 +138,30 @@ func AuditDMSCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 				}
 			}
 
-			if inst.MultiAZ {
+			if d.multiAZ {
 				local = append(local, audit.Finding{
 					Service:    "dms",
-					ResourceID: id,
+					ResourceID: d.id,
 					Check:      "multi_az",
 					Status:     "INFO",
-					Detail:     fmt.Sprintf("class=%s, Multi-AZ enabled (2x instance cost)", class),
-					RiskLevel:  "LOW",
+					Detail: fmt.Sprintf(
+						"class=%s, Multi-AZ enabled (2x instance cost)",
+						d.class,
+					),
+					RiskLevel: "LOW",
 				})
 			}
 
-			avgCPU, err := getDMSAvgCPU(ctx, cwClient, id)
+			avgCPU, err := getDMSAvgCPU(ctx, cwClient, d.id)
 			if err == nil && avgCPU < t.CPUIdlePercent {
 				local = append(local, audit.Finding{
 					Service:    "dms",
-					ResourceID: id,
+					ResourceID: d.id,
 					Check:      "oversized_instance",
 					Status:     "WARN",
 					Detail: fmt.Sprintf(
 						"class=%s, avg CPU=%.1f%% over 7 days, consider downsizing",
-						class,
+						d.class,
 						avgCPU,
 					),
 					RiskLevel: "MEDIUM",
@@ -154,6 +171,17 @@ func AuditDMSCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 			if len(local) > 0 {
 				mu.Lock()
 				findings = append(findings, local...)
+				mu.Unlock()
+			} else {
+				mu.Lock()
+				findings = append(findings, audit.Finding{
+					Service:    "dms",
+					ResourceID: d.id,
+					Check:      "idle_instance",
+					Status:     "PASS",
+					Detail:     fmt.Sprintf("class=%s, active and right-sized", d.class),
+					RiskLevel:  "MINIMAL",
+				})
 				mu.Unlock()
 			}
 		}(inst)

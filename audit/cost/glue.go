@@ -92,6 +92,18 @@ func AuditGlueCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error)
 				mu.Lock()
 				findings = append(findings, jobFindings...)
 				mu.Unlock()
+			} else {
+				mu.Lock()
+				findings = append(findings, audit.Finding{
+					Service:    "glue_job",
+					ResourceID: g.name,
+					Tags:       g.tags,
+					Check:      "glue_job_cost",
+					Status:     "PASS",
+					Detail:     "no cost issues detected",
+					RiskLevel:  "MINIMAL",
+				})
+				mu.Unlock()
 			}
 			bar.Add(1)
 		}(job)

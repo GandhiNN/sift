@@ -142,6 +142,18 @@ func AuditLambdaCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, erro
 				mu.Lock()
 				findings = append(findings, fnFindings...)
 				mu.Unlock()
+			} else {
+				mu.Lock()
+				findings = append(findings, audit.Finding{
+					Service:    "lambda",
+					ResourceID: f.name,
+					Tags:       f.tags,
+					Check:      "unused_function",
+					Status:     "PASS",
+					Detail:     fmt.Sprintf("memory=%dMB, active in last 30 days", f.memoryMB),
+					RiskLevel:  "MINIMAL",
+				})
+				mu.Unlock()
 			}
 		}(fn)
 	}

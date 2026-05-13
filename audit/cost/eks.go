@@ -169,6 +169,18 @@ func AuditEKSCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 						mu.Lock()
 						findings = append(findings, ngFindings...)
 						mu.Unlock()
+					} else {
+						mu.Lock()
+						findings = append(findings, audit.Finding{
+							Service:    "eks_nodegroup",
+							ResourceID: fmt.Sprintf("%s/%s", n.cluster, n.name),
+							Tags:       n.tags,
+							Check:      "nodegroup_cost",
+							Status:     "PASS",
+							Detail:     fmt.Sprintf("desired=%d, current-gen instances", n.desiredSize),
+							RiskLevel:  "MINIMAL",
+						})
+						mu.Unlock()
 					}
 				}(ngName)
 			}
