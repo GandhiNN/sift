@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"sift/audit"
+	"sift/audit/pricing"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/cloudwatch"
@@ -70,7 +71,8 @@ func AuditRDSCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 					"engine=%s, storage still incurring cost",
 					r.engine,
 				),
-				RiskLevel: "MEDIUM",
+				RiskLevel:            "MEDIUM",
+				EstimatedMonthlyCost: pricing.RDSMonthly(r.class),
 			})
 			continue
 		}
@@ -104,7 +106,8 @@ func AuditRDSCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 						r.class,
 						avgCPU,
 					),
-					RiskLevel: "HIGH",
+					RiskLevel:            "HIGH",
+					EstimatedMonthlyCost: pricing.RDSMonthly(r.class),
 				})
 				mu.Unlock()
 			} else {
@@ -120,7 +123,8 @@ func AuditRDSCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 						r.class,
 						avgCPU,
 					),
-					RiskLevel: "MINIMAL",
+					RiskLevel:            "MINIMAL",
+					EstimatedMonthlyCost: pricing.RDSMonthly(r.class),
 				})
 				mu.Unlock()
 			}

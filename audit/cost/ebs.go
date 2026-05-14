@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"sift/audit"
+	"sift/audit/pricing"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/ec2"
@@ -71,13 +72,14 @@ func AuditEBSCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 
 			if v.status == "available" {
 				volFindings = append(volFindings, audit.Finding{
-					Service:    "ebs",
-					ResourceID: v.id,
-					Tags:       v.tags,
-					Check:      "unattached_volume",
-					Status:     "WARN",
-					Detail:     fmt.Sprintf("size=%dGB, type=%s", v.size, v.volumeType),
-					RiskLevel:  "MEDIUM",
+					Service:              "ebs",
+					ResourceID:           v.id,
+					Tags:                 v.tags,
+					Check:                "unattached_volume",
+					Status:               "WARN",
+					Detail:               fmt.Sprintf("size=%dGB, type=%s", v.size, v.volumeType),
+					RiskLevel:            "MEDIUM",
+					EstimatedMonthlyCost: pricing.EBSMonthly(v.volumeType, v.size),
 				})
 			}
 
@@ -92,7 +94,8 @@ func AuditEBSCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 						"size=%dGB, GP3 is ~20%% cheaper with better baseline IOPS",
 						v.size,
 					),
-					RiskLevel: "LOW",
+					RiskLevel:            "LOW",
+					EstimatedMonthlyCost: pricing.EBSMonthly(v.volumeType, v.size),
 				})
 			}
 
@@ -100,13 +103,14 @@ func AuditEBSCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 				findings = append(findings, volFindings...)
 			} else {
 				findings = append(findings, audit.Finding{
-					Service:    "ebs",
-					ResourceID: v.id,
-					Tags:       v.tags,
-					Check:      "ebs_cost",
-					Status:     "PASS",
-					Detail:     fmt.Sprintf("size=%dGB, type=%s, attached", v.size, v.volumeType),
-					RiskLevel:  "MINIMAL",
+					Service:              "ebs",
+					ResourceID:           v.id,
+					Tags:                 v.tags,
+					Check:                "ebs_cost",
+					Status:               "PASS",
+					Detail:               fmt.Sprintf("size=%dGB, type=%s, attached", v.size, v.volumeType),
+					RiskLevel:            "MINIMAL",
+					EstimatedMonthlyCost: pricing.EBSMonthly(v.volumeType, v.size),
 				})
 			}
 		}
@@ -136,17 +140,19 @@ func AuditEBSCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 						int(time.Since(*s.startTime).Hours()/24),
 						s.size,
 					),
-					RiskLevel: "LOW",
+					RiskLevel:            "LOW",
+					EstimatedMonthlyCost: pricing.SnapshotMonthly(s.size),
 				})
 			} else {
 				findings = append(findings, audit.Finding{
-					Service:    "ebs_snapshot",
-					ResourceID: s.id,
-					Tags:       s.tags,
-					Check:      "old_snapshot",
-					Status:     "PASS",
-					Detail:     fmt.Sprintf("size=%dGB, within retention period", s.size),
-					RiskLevel:  "MINIMAL",
+					Service:              "ebs_snapshot",
+					ResourceID:           s.id,
+					Tags:                 s.tags,
+					Check:                "old_snapshot",
+					Status:               "PASS",
+					Detail:               fmt.Sprintf("size=%dGB, within retention period", s.size),
+					RiskLevel:            "MINIMAL",
+					EstimatedMonthlyCost: pricing.SnapshotMonthly(s.size),
 				})
 			}
 		}

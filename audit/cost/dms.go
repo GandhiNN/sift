@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"sift/audit"
+	"sift/audit/pricing"
 	"sift/audit/progress"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -107,17 +108,22 @@ func AuditDMSCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 					ResourceID: d.id,
 					Check:      "idle_instance",
 					Status:     "WARN",
-					Detail:     fmt.Sprintf("class=%s, no replication tasks assigned", d.class),
-					RiskLevel:  "HIGH",
+					Detail: fmt.Sprintf(
+						"class=%s, no replication tasks assigned",
+						d.class,
+					),
+					RiskLevel:            "HIGH",
+					EstimatedMonthlyCost: pricing.DMSMonthly(d.class),
 				})
 			} else if stoppedTasks[d.arn] == taskCount[d.arn] {
 				local = append(local, audit.Finding{
-					Service:    "dms",
-					ResourceID: d.id,
-					Check:      "all_tasks_stopped",
-					Status:     "WARN",
-					Detail:     fmt.Sprintf("class=%s, all %d tasks stopped but instance running", d.class, stoppedTasks[d.arn]),
-					RiskLevel:  "MEDIUM",
+					Service:              "dms",
+					ResourceID:           d.id,
+					Check:                "all_tasks_stopped",
+					Status:               "WARN",
+					Detail:               fmt.Sprintf("class=%s, all %d tasks stopped but instance running", d.class, stoppedTasks[d.arn]),
+					RiskLevel:            "MEDIUM",
+					EstimatedMonthlyCost: pricing.DMSMonthly(d.class),
 				})
 			}
 
@@ -132,7 +138,8 @@ func AuditDMSCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 							"class=%s, consider upgrading to current gen",
 							d.class,
 						),
-						RiskLevel: "LOW",
+						RiskLevel:            "LOW",
+						EstimatedMonthlyCost: pricing.DMSMonthly(d.class),
 					})
 					break
 				}
@@ -148,7 +155,8 @@ func AuditDMSCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 						"class=%s, Multi-AZ enabled (2x instance cost)",
 						d.class,
 					),
-					RiskLevel: "LOW",
+					RiskLevel:            "LOW",
+					EstimatedMonthlyCost: pricing.DMSMonthly(d.class),
 				})
 			}
 
@@ -164,7 +172,8 @@ func AuditDMSCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 						d.class,
 						avgCPU,
 					),
-					RiskLevel: "MEDIUM",
+					RiskLevel:            "MEDIUM",
+					EstimatedMonthlyCost: pricing.DMSMonthly(d.class),
 				})
 			}
 
@@ -175,12 +184,13 @@ func AuditDMSCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 			} else {
 				mu.Lock()
 				findings = append(findings, audit.Finding{
-					Service:    "dms",
-					ResourceID: d.id,
-					Check:      "idle_instance",
-					Status:     "PASS",
-					Detail:     fmt.Sprintf("class=%s, active and right-sized", d.class),
-					RiskLevel:  "MINIMAL",
+					Service:              "dms",
+					ResourceID:           d.id,
+					Check:                "idle_instance",
+					Status:               "PASS",
+					Detail:               fmt.Sprintf("class=%s, active and right-sized", d.class),
+					RiskLevel:            "MINIMAL",
+					EstimatedMonthlyCost: pricing.DMSMonthly(d.class),
 				})
 				mu.Unlock()
 			}

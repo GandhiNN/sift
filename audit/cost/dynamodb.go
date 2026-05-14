@@ -6,6 +6,7 @@ import (
 	"sync"
 
 	"sift/audit"
+	"sift/audit/pricing"
 	"sift/audit/progress"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -117,33 +118,40 @@ func AuditDynamoDBCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, er
 						t.readCap,
 						t.writeCap,
 					),
-					RiskLevel: "LOW",
+					RiskLevel:            "LOW",
+					EstimatedMonthlyCost: pricing.DynamoDBProvisionedMonthly(t.readCap, t.writeCap),
 				})
 			}
 
 			for _, gsi := range t.gsis {
 				if gsi.ItemCount != nil && aws.ToInt64(gsi.ItemCount) == 0 {
 					findings = append(findings, audit.Finding{
-						Service:    "dynamodb",
-						ResourceID: fmt.Sprintf("%s/%s", t.name, aws.ToString(gsi.IndexName)),
-						Tags:       t.tags,
-						Check:      "unused_gsi",
-						Status:     "WARN",
-						Detail:     "GSI has zero items - wasting provisioned capacity",
-						RiskLevel:  "MEDIUM",
+						Service: "dynamodb",
+						ResourceID: fmt.Sprintf(
+							"%s/%s",
+							t.name,
+							aws.ToString(gsi.IndexName),
+						),
+						Tags:                 t.tags,
+						Check:                "unused_gsi",
+						Status:               "WARN",
+						Detail:               "GSI has zero items - wasting provisioned capacity",
+						RiskLevel:            "MEDIUM",
+						EstimatedMonthlyCost: 0,
 					})
 				}
 			}
 
 			if len(findings) == 0 {
 				findings = append(findings, audit.Finding{
-					Service:    "dynamodb",
-					ResourceID: t.name,
-					Tags:       t.tags,
-					Check:      "dynamodb_cost",
-					Status:     "PASS",
-					Detail:     "no cost issues detected",
-					RiskLevel:  "MINIMAL",
+					Service:              "dynamodb",
+					ResourceID:           t.name,
+					Tags:                 t.tags,
+					Check:                "dynamodb_cost",
+					Status:               "PASS",
+					Detail:               "no cost issues detected",
+					RiskLevel:            "MINIMAL",
+					EstimatedMonthlyCost: 0,
 				})
 			}
 

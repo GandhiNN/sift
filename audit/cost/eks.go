@@ -7,6 +7,7 @@ import (
 	"sync"
 
 	"sift/audit"
+	"sift/audit/pricing"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/eks"
@@ -97,13 +98,14 @@ func AuditEKSCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 			if len(allNodegroups) == 0 {
 				mu.Lock()
 				findings = append(findings, audit.Finding{
-					Service:    "eks",
-					ResourceID: name,
-					Tags:       clusterTags,
-					Check:      "cluster_no_nodegroups",
-					Status:     "WARN",
-					Detail:     "paying for control plane ($0.10/hr) with no node groups",
-					RiskLevel:  "HIGH",
+					Service:              "eks",
+					ResourceID:           name,
+					Tags:                 clusterTags,
+					Check:                "cluster_no_nodegroups",
+					Status:               "WARN",
+					Detail:               "paying for control plane ($0.10/hr) with no node groups",
+					RiskLevel:            "HIGH",
+					EstimatedMonthlyCost: pricing.EKSClusterMonthly(),
 				})
 				mu.Unlock()
 				return
@@ -134,6 +136,10 @@ func AuditEKSCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 					}
 
 					n := parseEKSCostNodegroup(name, ngResp.Nodegroup)
+					var nodeCost float64
+					if len(n.instanceTypes) > 0 {
+						nodeCost = pricing.EC2Monthly(n.instanceTypes[0])
+					}
 					var ngFindings []audit.Finding
 
 					for _, iType := range n.instanceTypes {
@@ -145,8 +151,12 @@ func AuditEKSCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 									Tags:       n.tags,
 									Check:      "previous_gen_node",
 									Status:     "WARN",
-									Detail:     fmt.Sprintf("type=%s, consider upgrading", iType),
-									RiskLevel:  "LOW",
+									Detail: fmt.Sprintf(
+										"type=%s, consider upgrading",
+										iType,
+									),
+									RiskLevel:            "LOW",
+									EstimatedMonthlyCost: nodeCost,
 								})
 								break
 							}
@@ -155,13 +165,14 @@ func AuditEKSCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 
 					if n.desiredSize == 0 {
 						ngFindings = append(ngFindings, audit.Finding{
-							Service:    "eks_nodegroup",
-							ResourceID: fmt.Sprintf("%s/%s", n.cluster, n.name),
-							Tags:       n.tags,
-							Check:      "empty_nodegroup",
-							Status:     "WARN",
-							Detail:     "desired size is 0, consider removing if unused",
-							RiskLevel:  "MEDIUM",
+							Service:              "eks_nodegroup",
+							ResourceID:           fmt.Sprintf("%s/%s", n.cluster, n.name),
+							Tags:                 n.tags,
+							Check:                "empty_nodegroup",
+							Status:               "WARN",
+							Detail:               "desired size is 0, consider removing if unused",
+							RiskLevel:            "MEDIUM",
+							EstimatedMonthlyCost: nodeCost,
 						})
 					}
 
@@ -172,13 +183,14 @@ func AuditEKSCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 					} else {
 						mu.Lock()
 						findings = append(findings, audit.Finding{
-							Service:    "eks_nodegroup",
-							ResourceID: fmt.Sprintf("%s/%s", n.cluster, n.name),
-							Tags:       n.tags,
-							Check:      "nodegroup_cost",
-							Status:     "PASS",
-							Detail:     fmt.Sprintf("desired=%d, current-gen instances", n.desiredSize),
-							RiskLevel:  "MINIMAL",
+							Service:              "eks_nodegroup",
+							ResourceID:           fmt.Sprintf("%s/%s", n.cluster, n.name),
+							Tags:                 n.tags,
+							Check:                "nodegroup_cost",
+							Status:               "PASS",
+							Detail:               fmt.Sprintf("desired=%d, current-gen instances", n.desiredSize),
+							RiskLevel:            "MINIMAL",
+							EstimatedMonthlyCost: nodeCost,
 						})
 						mu.Unlock()
 					}

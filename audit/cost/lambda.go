@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"sift/audit"
+	"sift/audit/pricing"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/cloudwatch"
@@ -110,7 +111,8 @@ func AuditLambdaCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, erro
 						"memory=%dMB, zero invocations in last 30 days",
 						f.memoryMB,
 					),
-					RiskLevel: "LOW",
+					RiskLevel:            "LOW",
+					EstimatedMonthlyCost: 0,
 				})
 			}
 
@@ -133,6 +135,10 @@ func AuditLambdaCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, erro
 								allocated,
 							),
 							RiskLevel: "HIGH",
+							EstimatedMonthlyCost: pricing.LambdaProvisionedMonthly(
+								f.memoryMB,
+								allocated,
+							),
 						})
 					}
 				}
@@ -145,13 +151,14 @@ func AuditLambdaCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, erro
 			} else {
 				mu.Lock()
 				findings = append(findings, audit.Finding{
-					Service:    "lambda",
-					ResourceID: f.name,
-					Tags:       f.tags,
-					Check:      "unused_function",
-					Status:     "PASS",
-					Detail:     fmt.Sprintf("memory=%dMB, active in last 30 days", f.memoryMB),
-					RiskLevel:  "MINIMAL",
+					Service:              "lambda",
+					ResourceID:           f.name,
+					Tags:                 f.tags,
+					Check:                "unused_function",
+					Status:               "PASS",
+					Detail:               fmt.Sprintf("memory=%dMB, active in last 30 days", f.memoryMB),
+					RiskLevel:            "MINIMAL",
+					EstimatedMonthlyCost: 0,
 				})
 				mu.Unlock()
 			}
