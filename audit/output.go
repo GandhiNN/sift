@@ -108,36 +108,67 @@ func writeTable(data any, out io.Writer) {
 	})
 
 	hasRegion := false
+	hasCost := false
 	for _, f := range findings {
 		if f.Region != "" {
 			hasRegion = true
-			break
+		}
+		if f.EstimatedMonthlyCost > 0 {
+			hasCost = true
 		}
 	}
 
 	w := tabwriter.NewWriter(out, 0, 4, 2, ' ', 0)
 
 	if hasRegion {
-		fmt.Fprintln(w, "RISK\tREGION\tSERVICE\tRESOURCE\tCHECK\tDETAIL")
-		for _, f := range findings {
-			fmt.Fprintf(
-				w,
-				"%s\t%s\t%s\t%s\t%s\t%s\n",
-				colorRisk(
-					f.RiskLevel,
-				),
-				f.Region,
-				f.Service,
-				f.ResourceID,
-				f.Check,
-				truncate(f.Detail, 80),
-			)
+		if hasCost {
+			fmt.Fprintln(w, "RISK\tREGION\tSERVICE\tRESOURCE\tCHECK\t$/MO\tDETAIL")
+			for _, f := range findings {
+				cost := ""
+				if f.EstimatedMonthlyCost > 0 {
+					cost = fmt.Sprintf("$%.2f", f.EstimatedMonthlyCost)
+				}
+				fmt.Fprintf(
+					w,
+					"%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
+					colorRisk(
+						f.RiskLevel,
+					),
+					f.Region,
+					f.Service,
+					f.ResourceID,
+					f.Check,
+					cost,
+					truncate(f.Detail, 80),
+				)
+			}
+		} else {
+			fmt.Fprintln(w, "RISK\tREGION\tSERVICE\tRESOURCE\tCHECK\tDETAIL")
+			for _, f := range findings {
+				fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\n",
+					colorRisk(f.RiskLevel), f.Region, f.Service, f.ResourceID, f.Check, truncate(f.Detail, 80),
+				)
+			}
 		}
 	} else {
-		fmt.Fprintln(w, "RISK\tSERVICE\tRESOURCE\tCHECK\tDETAIL")
-		for _, f := range findings {
-			fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n",
-				colorRisk(f.RiskLevel), f.Service, f.ResourceID, f.Check, truncate(f.Detail, 80))
+		if hasCost {
+			fmt.Fprintln(w, "RISK\tSERVICE\tRESOURCE\tCHECK\t$/MO\tDETAIL")
+			for _, f := range findings {
+				cost := ""
+				if f.EstimatedMonthlyCost > 0 {
+					cost = fmt.Sprintf("$%.2f", f.EstimatedMonthlyCost)
+				}
+				fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\n",
+					colorRisk(f.RiskLevel), f.Service, f.ResourceID, f.Check, cost, truncate(f.Detail, 80),
+				)
+			}
+		} else {
+			fmt.Fprintln(w, "RISK\tSERVICE\tRESOURCE\tCHECK\tDETAIL")
+			for _, f := range findings {
+				fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n",
+					colorRisk(f.RiskLevel), f.Service, f.ResourceID, f.Check, truncate(f.Detail, 80),
+				)
+			}
 		}
 	}
 	w.Flush()
@@ -262,14 +293,21 @@ func printSummary(data any, startTime time.Time) {
 	}
 
 	counts := map[string]int{}
+	var totalWaste float64
 	for _, f := range findings {
 		counts[f.RiskLevel]++
+		if f.Status != "PASS" && f.EstimatedMonthlyCost > 0 {
+			totalWaste += f.EstimatedMonthlyCost
+		}
 	}
 	fmt.Fprintf(os.Stderr, "\nSummary: %d findings", len(findings))
 	for _, level := range []string{"CRITICAL", "HIGH", "MEDIUM", "LOW", "MINIMAL"} {
 		if c, ok := counts[level]; ok && c > 0 {
 			fmt.Fprintf(os.Stderr, ", %d %s", c, level)
 		}
+	}
+	if totalWaste > 0 {
+		fmt.Fprintf(os.Stderr, " | estimated waste: $%.2f/mo", totalWaste)
 	}
 	if !startTime.IsZero() {
 		fmt.Fprintf(os.Stderr, " (completed in %.1fs)", time.Since(startTime).Seconds())
