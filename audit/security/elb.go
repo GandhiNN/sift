@@ -3,6 +3,7 @@ package security
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"sift/audit"
 	"sift/audit/progress"
 	"sync"
@@ -11,6 +12,8 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/ec2"
 	elbv2 "github.com/aws/aws-sdk-go-v2/service/elasticloadbalancingv2"
 	elbtypes "github.com/aws/aws-sdk-go-v2/service/elasticloadbalancingv2/types"
+	"github.com/aws/aws-sdk-go-v2/service/shield"
+	"github.com/aws/aws-sdk-go-v2/service/wafv2"
 )
 
 var sensitivePortSet = map[int32]string{
@@ -142,6 +145,8 @@ func AuditELB(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) {
 
 	var wg sync.WaitGroup
 	sem := make(chan struct{}, audit.GetThresholds(ctx).Concurrency)
+	var mu sync.Mutex
+	var extraFindings []audit.Finding
 
 	for i, lb := range allLBs {
 		wg.Add(1)
@@ -173,10 +178,94 @@ func AuditELB(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) {
 				Detail:     detail,
 				RiskLevel:  risk,
 			}
+
+			// DDoS readiness for internet-facing ALBs
+			if e.scheme == "internet-facing" && e.lbType == "application" {
+				ddosFindings := checkDDoSReadiness(ctx, cfg, e.arn, e.name, e.tags)
+				mu.Lock()
+				extraFindings = append(extraFindings, ddosFindings...)
+				mu.Unlock()
+			}
 			bar.Add(1)
 		}(i, lb)
 	}
 	wg.Wait()
 
-	return results, nil
+	return append(results, extraFindings...), nil
+}
+
+func checkDDoSReadiness(
+	ctx context.Context,
+	cfg aws.Config,
+	arn, name string,
+	tags map[string]string,
+) []audit.Finding {
+	var findings []audit.Finding
+
+	wafClient := wafv2.NewFromConfig(cfg)
+	shieldClient := shield.NewFromConfig(cfg, func(o *shield.Options) {
+		o.Region = "us-east-1" // Shield API is global
+	})
+
+	// Check WAF association
+	hasWAF := false
+	hasRateRule := false
+	wafResp, err := wafClient.GetWebACLForResource(ctx, &wafv2.GetWebACLForResourceInput{
+		ResourceArn: &arn,
+	})
+	if err != nil {
+		slog.Debug("waf check failed", "elb", name, "error", err)
+	} else if wafResp.WebACL != nil {
+		hasWAF = true
+		// Check for rate-based rules
+		for _, rule := range wafResp.WebACL.Rules {
+			if rule.Statement != nil && rule.Statement.RateBasedStatement != nil {
+				hasRateRule = true
+				break
+			}
+		}
+	}
+
+	if !hasWAF {
+		findings = append(findings, audit.Finding{
+			Service:     "elb",
+			ResourceID:  name,
+			Tags:        tags,
+			Check:       "ddos_no_waf",
+			Status:      "FAIL",
+			Detail:      "internet-facing ALB has no WAF associated",
+			RiskLevel:   "HIGH",
+			Remediation: "Associate a WAF WebACL with rate-based rules to mitigate DDoS",
+		})
+	} else if !hasRateRule {
+		findings = append(findings, audit.Finding{
+			Service:     "elb",
+			ResourceID:  name,
+			Tags:        tags,
+			Check:       "ddos_no_rate_rule",
+			Status:      "FAIL",
+			Detail:      "WAF attached but no rate-based rule configured",
+			RiskLevel:   "MEDIUM",
+			Remediation: "Add a rate-based rule to the WAF WebACL to throttle flood traffic",
+		})
+	}
+
+	// Check Shield Advanced protection
+	_, err = shieldClient.DescribeProtection(ctx, &shield.DescribeProtectionInput{
+		ResourceArn: &arn,
+	})
+	if err != nil {
+		findings = append(findings, audit.Finding{
+			Service:     "elb",
+			ResourceID:  name,
+			Tags:        tags,
+			Check:       "ddos_no_shield",
+			Status:      "FAIL",
+			Detail:      "internet-facing ALB not protected by Shield Advanced",
+			RiskLevel:   "MEDIUM",
+			Remediation: "Enable AWS Shield Advanced for DDoS response team support",
+		})
+	}
+
+	return findings
 }
