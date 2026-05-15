@@ -8,7 +8,7 @@ AWS security and cost audit CLI tool. Scans your AWS resources for misconfigurat
 make build
 ```
 
-Requires Go 1.25+ and AWS credentials configured in `~/.aws/credentials`.
+Requires Go 1.25+ and a configured AWS profile (supports SSO, static credentials, and all standard AWS credential sources).
 
 ## Usage
 
@@ -20,7 +20,7 @@ sift <command> --profile <aws-profile> [flags]
 
 | Flag | Default | Description |
 |------|---------|-------------|
-| `--profile` | `default` | AWS profile from `~/.aws/credentials` |
+| `--profile` | `default` | AWS profile name (from `~/.aws/config`) |
 | `--format` | `table` (terminal) / `json` (pipe) | Output format: `json`, `csv`, or `table` |
 | `--risk-level` | | Minimum risk level to show: `MINIMAL`, `LOW`, `MEDIUM`, `HIGH`, `CRITICAL` |
 | `--region` | profile region | AWS region(s), comma-separated or `all` |
@@ -391,8 +391,17 @@ sift/
         └── lambda.go           # Unused functions, provisioned concurrency
 ```
 
+## Authentication
+
+Sift uses the standard AWS SDK credential chain. Any method supported by the AWS SDK for Go v2 works:
+
+- **SSO** (recommended): `aws configure sso`, then `aws sso login --profile <name>` before running sift
+- **Static credentials**: `~/.aws/credentials`
+- **Environment variables**: `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`
+- **IAM roles**: EC2 instance profiles, ECS task roles
+
 ## Environment variables
 
 | Variable | Description |
 |----------|-------------|
-| `SSO_CREDENTIAL_PATH` | Override default credentials file path (`~/.aws/credentials`) |
+| `AWS_PROFILE` | Override default profile |
