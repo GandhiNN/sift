@@ -14,24 +14,32 @@ import (
 )
 
 func Output(format string, data any) error {
-	return OutputWithFilter(format, data, "", time.Time{}, "")
+	return OutputWithFilter(format, data, "", "", time.Time{}, "")
 }
 
 func OutputWithFilter(
 	format string,
 	data any,
 	minRisk string,
+	sortBy string,
 	startTime time.Time,
 	outputFile string,
 ) error {
 	if minRisk != "" {
 		data = filterByRisk(data, minRisk)
 	}
-	// Replace nil slices with empty to avoid "null" output
+
 	findings, _ := data.([]Finding)
 	if len(findings) == 0 {
 		fmt.Println("No findings.")
 		return nil
+	}
+
+	if sortBy == "cost" {
+		sort.Slice(findings, func(i, j int) bool {
+			return findings[i].EstimatedMonthlyCost > findings[j].EstimatedMonthlyCost
+		})
+		data = findings
 	}
 
 	out := os.Stdout

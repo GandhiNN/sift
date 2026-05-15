@@ -82,7 +82,7 @@ var triageCmd = &cobra.Command{
 			}(cfg)
 		}
 		wg.Wait()
-		if err := audit.OutputWithFilter(format, allResults, riskLevel, start, outputFile); err != nil {
+		if err := audit.OutputWithFilter(format, allResults, riskLevel, sortBy, start, outputFile); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(2)
 		}

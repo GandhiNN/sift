@@ -30,6 +30,7 @@ var (
 	cpuIdlePercent  float64
 	snapshotAgeDays int
 	concurrency     int
+	sortBy          string
 )
 
 var rootCmd = &cobra.Command{
@@ -74,6 +75,8 @@ func init() {
 	)
 	rootCmd.PersistentFlags().
 		IntVar(&concurrency, "concurrency", 10, "Max parallel AWS API calls per service")
+	rootCmd.PersistentFlags().
+		StringVar(&sortBy, "sort-by", "risk", "Sort results by: risk or cost")
 }
 
 func buildAWSConfig() (context.Context, aws.Config, context.CancelFunc, error) {

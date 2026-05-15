@@ -64,7 +64,7 @@ func runAudit(serviceFlag string, validServices map[string]bool, fn auditFunc) {
 	}
 	wg.Wait()
 
-	if err := audit.OutputWithFilter(format, allFindings, riskLevel, start, outputFile); err != nil {
+	if err := audit.OutputWithFilter(format, allFindings, riskLevel, sortBy, start, outputFile); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(2)
 	}
