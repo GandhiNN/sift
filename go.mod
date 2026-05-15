@@ -23,6 +23,8 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/sagemaker v1.242.0
 	github.com/aws/aws-sdk-go-v2/service/secretsmanager v1.41.6
 	github.com/aws/aws-sdk-go-v2/service/servicequotas v1.34.7
+	github.com/aws/aws-sdk-go-v2/service/shield v1.34.23
+	github.com/aws/aws-sdk-go-v2/service/wafv2 v1.71.5
 	github.com/schollz/progressbar/v3 v3.19.0
 	github.com/spf13/cobra v1.10.2
 	golang.org/x/term v0.28.0
