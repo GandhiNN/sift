@@ -64,6 +64,15 @@ var triageCmd = &cobra.Command{
 					fmt.Fprintf(os.Stderr, "Error in %s: %v\n", cfg.Region, err)
 					return
 				}
+
+				// Baseline checks (CloudTrail/GuardDuty)
+				baselineResults, err := security.AuditBaseline(ctx, cfg)
+				if err != nil {
+					fmt.Fprintf(os.Stderr, "Baseline check error in %s: %v\n", cfg.Region, err)
+				} else {
+					results = append(results, baselineResults...)
+				}
+
 				for i := range results {
 					results[i].Region = cfg.Region
 				}
