@@ -8,6 +8,7 @@ import (
 
 	"sift/audit"
 	"sift/audit/pricing"
+	"sift/audit/progress"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/cloudwatch"
@@ -78,6 +79,7 @@ func AuditS3Cost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) {
 	var findings []audit.Finding
 	var wg sync.WaitGroup
 	sem := make(chan struct{}, audit.GetThresholds(ctx).Concurrency)
+	bar := progress.NewBar(ctx, int64(len(resp.Buckets)), "Auditing S3 cost")
 
 	for _, b := range resp.Buckets {
 		if b.Name == nil {
@@ -88,6 +90,7 @@ func AuditS3Cost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) {
 			defer wg.Done()
 			sem <- struct{}{}
 			defer func() { <-sem }()
+			defer bar.Add(1)
 
 			bucket := parseS3CostBucket(ctx, client, cwClient, name)
 			monthlyCost := pricing.S3Monthly(bucket.sizeGB)
