@@ -4,19 +4,29 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"time"
 
 	"sift/audit"
+	"sift/audit/pricing"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/cloudwatch"
+	cwtypes "github.com/aws/aws-sdk-go-v2/service/cloudwatch/types"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 )
 
 type s3CostBucket struct {
-	name string
-	tags map[string]string
+	name   string
+	sizeGB float64
+	tags   map[string]string
 }
 
-func parseS3CostBucket(ctx context.Context, client *s3.Client, name string) s3CostBucket {
+func parseS3CostBucket(
+	ctx context.Context,
+	client *s3.Client,
+	cwClient *cloudwatch.Client,
+	name string,
+) s3CostBucket {
 	b := s3CostBucket{name: name}
 	tagResp, err := client.GetBucketTagging(ctx, &s3.GetBucketTaggingInput{Bucket: &name})
 	if err == nil {
@@ -25,11 +35,39 @@ func parseS3CostBucket(ctx context.Context, client *s3.Client, name string) s3Co
 			b.tags[aws.ToString(t.Key)] = aws.ToString(t.Value)
 		}
 	}
+
+	// Fetch bucket size from Cloudwatch
+	end := time.Now()
+	start := end.AddDate(0, 0, -2)
+	resp, err := cwClient.GetMetricStatistics(ctx, &cloudwatch.GetMetricStatisticsInput{
+		Namespace:  aws.String("AWS/S3"),
+		MetricName: aws.String("BucketSizeBytes"),
+		Dimensions: []cwtypes.Dimension{
+			{Name: aws.String("BucketName"), Value: &name},
+			{Name: aws.String("StorageType"), Value: aws.String("StandardStorage")},
+		},
+		StartTime:  &start,
+		EndTime:    &end,
+		Period:     aws.Int32(86400),
+		Statistics: []cwtypes.Statistic{cwtypes.StatisticAverage},
+	})
+	if err == nil && len(resp.Datapoints) > 0 {
+		// Use most recent datapoint
+		latest := resp.Datapoints[0]
+		for _, dp := range resp.Datapoints[1:] {
+			if dp.Timestamp.After(*latest.Timestamp) {
+				latest = dp
+			}
+		}
+		b.sizeGB = aws.ToFloat64(latest.Average) / (1024 * 1024 * 1024)
+	}
+
 	return b
 }
 
 func AuditS3Cost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) {
 	client := s3.NewFromConfig(cfg)
+	cwClient := cloudwatch.NewFromConfig(cfg)
 
 	resp, err := client.ListBuckets(ctx, &s3.ListBucketsInput{})
 	if err != nil {
@@ -51,7 +89,8 @@ func AuditS3Cost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) {
 			sem <- struct{}{}
 			defer func() { <-sem }()
 
-			bucket := parseS3CostBucket(ctx, client, name)
+			bucket := parseS3CostBucket(ctx, client, cwClient, name)
+			monthlyCost := pricing.S3Monthly(bucket.sizeGB)
 
 			_, err := client.GetBucketLifecycleConfiguration(
 				ctx,
@@ -65,20 +104,25 @@ func AuditS3Cost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) {
 					Tags:       bucket.tags,
 					Check:      "no_lifecycle_policy",
 					Status:     "WARN",
-					Detail:     "data may grow indefinitely without expiration rules",
-					RiskLevel:  "MEDIUM",
+					Detail: fmt.Sprintf(
+						"size=%.2fGB, data may grow indefinitely without expiration rules",
+						bucket.sizeGB,
+					),
+					RiskLevel:            "MEDIUM",
+					EstimatedMonthlyCost: monthlyCost,
 				})
 				mu.Unlock()
 			} else {
 				mu.Lock()
 				findings = append(findings, audit.Finding{
-					Service:    "s3",
-					ResourceID: bucket.name,
-					Tags:       bucket.tags,
-					Check:      "no_lifecycle_policy",
-					Status:     "PASS",
-					Detail:     "lifecycle policy configured",
-					RiskLevel:  "MINIMAL",
+					Service:              "s3",
+					ResourceID:           bucket.name,
+					Tags:                 bucket.tags,
+					Check:                "no_lifecycle_policy",
+					Status:               "PASS",
+					Detail:               fmt.Sprintf("size=%.2fGB, lifecycle policy configured", bucket.sizeGB),
+					RiskLevel:            "MINIMAL",
+					EstimatedMonthlyCost: monthlyCost,
 				})
 				mu.Unlock()
 			}
