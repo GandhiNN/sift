@@ -41,10 +41,11 @@ func Audit(ctx context.Context, cfg aws.Config, services []string) ([]audit.Find
 		{"iam", AuditIAMHygiene},
 		{"secrets", AuditSecrets},
 		{"glue", AuditGlue},
-		{"baseline", AuditBaseline},
 		{"lambda", AuditLambda},
 		{"dynamodb", AuditDynamoDB},
 		{"elb", AuditELB},
+		{"dms", AuditDMS},
+		{"ecr", AuditECR},
 	}
 
 	var checks []struct {

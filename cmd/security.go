@@ -10,8 +10,8 @@ var securityServices string
 
 var validSecurityServices = map[string]bool{
 	"ec2": true, "sagemaker": true, "s3": true, "rds": true, "eks": true,
-	"iam": true, "secrets": true, "glue": true, "baseline": true, "lambda": true,
-	"dynamodb": true, "elb": true,
+	"iam": true, "secrets": true, "glue": true, "lambda": true,
+	"dynamodb": true, "elb": true, "dms": true, "ecr": true,
 }
 
 var securityCmd = &cobra.Command{
