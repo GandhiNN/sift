@@ -28,7 +28,7 @@ var securityCmd = &cobra.Command{
 	Use:   "security",
 	Short: "Audit AWS resource security posture",
 	Run: func(cmd *cobra.Command, args []string) {
-		runAudit(securityServices, validSecurityServices, security.Audit)
+		runAudit("security", securityServices, validSecurityServices, security.Audit)
 	},
 }
 

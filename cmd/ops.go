@@ -16,7 +16,7 @@ var opsCmd = &cobra.Command{
 	Use:   "ops",
 	Short: "Audit operational risks and service limits",
 	Run: func(cmd *cobra.Command, args []string) {
-		runAudit(opsServices, validOpsServices, ops.Audit)
+		runAudit("ops", opsServices, validOpsServices, ops.Audit)
 	},
 }
 

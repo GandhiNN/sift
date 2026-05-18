@@ -30,7 +30,7 @@ var costCmd = &cobra.Command{
 	Use:   "cost",
 	Short: "Detect cost waste across AWS resources",
 	Run: func(cmd *cobra.Command, args []string) {
-		runAudit(costServices, validCostServices, cost.Audit)
+		runAudit("cost", costServices, validCostServices, cost.Audit)
 
 	},
 }

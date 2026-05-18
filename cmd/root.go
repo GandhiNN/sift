@@ -31,6 +31,7 @@ var (
 	snapshotAgeDays int
 	concurrency     int
 	sortBy          string
+	noSave          bool
 )
 
 var rootCmd = &cobra.Command{
@@ -77,6 +78,8 @@ func init() {
 		IntVar(&concurrency, "concurrency", 10, "Max parallel AWS API calls per service")
 	rootCmd.PersistentFlags().
 		StringVar(&sortBy, "sort-by", "risk", "Sort results by: risk or cost")
+	rootCmd.PersistentFlags().
+		BoolVar(&noSave, "no-save", false, "Don't save scan results to history")
 }
 
 func buildAWSConfig() (context.Context, aws.Config, context.CancelFunc, error) {

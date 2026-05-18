@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"sift/audit"
+	"sift/audit/history"
 	"sift/audit/progress"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -17,7 +18,7 @@ import (
 
 type auditFunc func(context.Context, aws.Config, []string) ([]audit.Finding, error)
 
-func runAudit(serviceFlag string, validServices map[string]bool, fn auditFunc) {
+func runAudit(command, serviceFlag string, validServices map[string]bool, fn auditFunc) {
 	start := time.Now()
 	ctx, configs, cancel, err := buildAWSConfigs()
 	if err != nil {
@@ -68,6 +69,17 @@ func runAudit(serviceFlag string, validServices map[string]bool, fn auditFunc) {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(2)
 	}
+
+	// Save to history
+	if !noSave {
+		store, err := history.NewStore()
+		if err == nil {
+			if err := store.Save(profile, command, allFindings); err != nil {
+				slog.Warn("failed to save history", "error", err)
+			}
+		}
+	}
+
 	if audit.HasHighRiskFindings(allFindings) {
 		os.Exit(1)
 	}
