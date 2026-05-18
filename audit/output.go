@@ -332,7 +332,7 @@ func printSummary(data any, startTime time.Time) {
 	}
 
 	b, _ := json.Marshal(summary)
-	fmt.Fprintln(os.Stderr, string(b))
+	fmt.Fprintln(os.Stderr, "\n", string(b))
 }
 
 // Returns true if any findings are CRITICAL or HIGH
