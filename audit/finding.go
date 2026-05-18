@@ -1,6 +1,9 @@
 package audit
 
-import "fmt"
+import (
+	"context"
+	"fmt"
+)
 
 type Finding struct {
 	Region               string            `json:"region,omitempty"`
@@ -24,4 +27,17 @@ func ErrorFinding(service, resourceID, check string, err error) Finding {
 		Detail:     fmt.Sprintf("audit failed: %v", err),
 		RiskLevel:  "UNKNOWN",
 	}
+}
+
+type checksKey struct{}
+
+func WithChecks(ctx context.Context, checks []string) context.Context {
+	return context.WithValue(ctx, checksKey{}, checks)
+}
+
+func GetChecks(ctx context.Context) []string {
+	if v, ok := ctx.Value(checksKey{}).([]string); ok {
+		return v
+	}
+	return nil
 }
