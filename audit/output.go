@@ -308,19 +308,31 @@ func printSummary(data any, startTime time.Time) {
 			totalWaste += f.EstimatedMonthlyCost
 		}
 	}
-	fmt.Fprintf(os.Stderr, "\nSummary: %d findings", len(findings))
-	for _, level := range []string{"CRITICAL", "HIGH", "MEDIUM", "LOW", "MINIMAL"} {
-		if c, ok := counts[level]; ok && c > 0 {
-			fmt.Fprintf(os.Stderr, ", %d %s", c, level)
-		}
-	}
-	if totalWaste > 0 {
-		fmt.Fprintf(os.Stderr, " | estimated waste: $%.2f/mo", totalWaste)
-	}
+	summary := struct {
+		Summary struct {
+			Total                 int     `json:"total"`
+			Critical              int     `json:"critical"`
+			High                  int     `json:"high"`
+			Medium                int     `json:"medium"`
+			Low                   int     `json:"low"`
+			Minimal               int     `json:"minimal"`
+			EstimatedWasteMonthly float64 `json:"estimated_waste_monthly"`
+			DurationSeconds       float64 `json:"duration_seconds"`
+		} `json:"summary"`
+	}{}
+	summary.Summary.Total = len(findings)
+	summary.Summary.Critical = counts["CRITICAL"]
+	summary.Summary.High = counts["HIGH"]
+	summary.Summary.Medium = counts["MEDIUM"]
+	summary.Summary.Low = counts["LOW"]
+	summary.Summary.Minimal = counts["MINIMAL"]
+	summary.Summary.EstimatedWasteMonthly = totalWaste
 	if !startTime.IsZero() {
-		fmt.Fprintf(os.Stderr, " (completed in %.1fs)", time.Since(startTime).Seconds())
+		summary.Summary.DurationSeconds = time.Since(startTime).Seconds()
 	}
-	fmt.Fprintln(os.Stderr)
+
+	b, _ := json.Marshal(summary)
+	fmt.Fprintln(os.Stderr, string(b))
 }
 
 // Returns true if any findings are CRITICAL or HIGH
