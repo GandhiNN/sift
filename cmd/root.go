@@ -32,6 +32,7 @@ var (
 	concurrency     int
 	sortBy          string
 	noSave          bool
+	diff            bool
 )
 
 var rootCmd = &cobra.Command{
@@ -80,6 +81,7 @@ func init() {
 		StringVar(&sortBy, "sort-by", "risk", "Sort results by: risk or cost")
 	rootCmd.PersistentFlags().
 		BoolVar(&noSave, "no-save", false, "Don't save scan results to history")
+	rootCmd.PersistentFlags().BoolVar(&diff, "diff", false, "Compare results to previous scan")
 }
 
 func buildAWSConfig() (context.Context, aws.Config, context.CancelFunc, error) {

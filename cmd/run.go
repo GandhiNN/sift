@@ -70,10 +70,22 @@ func runAudit(command, serviceFlag string, validServices map[string]bool, fn aud
 		os.Exit(2)
 	}
 
-	// Save to history
-	if !noSave {
-		store, err := history.NewStore()
-		if err == nil {
+	// Save to history and show diff
+	store, storeErr := history.NewStore()
+	if storeErr == nil {
+		if diff {
+			prev, ts, err := store.Latest(profile, command)
+			if err == nil && prev != nil {
+				d := history.ComputeDiff(prev, allFindings)
+				fmt.Fprintf(os.Stderr, "\nDiff vs %s:\n", ts.Format("2006-01-02 15:04"))
+				fmt.Fprintf(os.Stderr, " New:		%d\n", len(d.New))
+				fmt.Fprintf(os.Stderr, " Resolved: 	%d\n", len(d.Resolved))
+				fmt.Fprintf(os.Stderr, " Ongoing: 	%d\n", len(d.Ongoing))
+			} else if prev == nil {
+				fmt.Fprintf(os.Stderr, "\nNo previous scan found for diff.")
+			}
+		}
+		if !noSave {
 			if err := store.Save(profile, command, allFindings); err != nil {
 				slog.Warn("failed to save history", "error", err)
 			}
