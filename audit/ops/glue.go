@@ -3,14 +3,14 @@ package ops
 import (
 	"context"
 	"fmt"
+	"sort"
 	"strings"
-	"sync"
 
 	"sift/audit"
+	"sift/audit/progress"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/glue"
-	gluetypes "github.com/aws/aws-sdk-go-v2/service/glue/types"
 	"github.com/aws/aws-sdk-go-v2/service/servicequotas"
 )
 
@@ -22,71 +22,120 @@ const (
 func AuditGlueOps(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) {
 	glueClient := glue.NewFromConfig(cfg)
 
-	versionLimit := getCrawlerVersionLimit(ctx, cfg)
+	tableVersionLimit := getTableVersionLimit(ctx, cfg)
+	spinner := progress.NewSpinner(ctx, "Counting Glue table versions")
 
-	var allCrawlers []gluetypes.Crawler
-	input := &glue.GetCrawlersInput{}
+	// Count total table version across all databases, track per resources
+	type tableVersion struct {
+		db      string
+		table   string
+		version int64
+	}
+
+	var totalTableVersions int64
+	var tables []tableVersion
+	var dbInput *glue.GetDatabasesInput = &glue.GetDatabasesInput{}
 	for {
-		resp, err := glueClient.GetCrawlers(ctx, input)
+		dbResp, err := glueClient.GetDatabases(ctx, dbInput)
 		if err != nil {
-			return nil, fmt.Errorf("get crawlers: %w", err)
+			return nil, fmt.Errorf("get databases: %w", err)
 		}
-		allCrawlers = append(allCrawlers, resp.Crawlers...)
-		if resp.NextToken == nil {
+		for _, db := range dbResp.DatabaseList {
+			dbName := aws.ToString(db.Name)
+			tableInput := &glue.GetTablesInput{DatabaseName: &dbName}
+			for {
+				tableResp, err := glueClient.GetTables(ctx, tableInput)
+				if err != nil {
+					break
+				}
+				for _, t := range tableResp.TableList {
+					if t.VersionId != nil {
+						// VersionId is the current version number of this table
+						var v int64
+						fmt.Sscanf(aws.ToString(t.VersionId), "%d", &v)
+						totalTableVersions += v
+						tables = append(
+							tables,
+							tableVersion{db: dbName, table: aws.ToString(t.Name), version: v},
+						)
+					}
+				}
+				if tableResp.NextToken == nil {
+					break
+				}
+				tableInput.NextToken = tableResp.NextToken
+			}
+		}
+		if dbResp.NextToken == nil {
 			break
 		}
-		input.NextToken = resp.NextToken
+		dbInput.NextToken = dbResp.NextToken
 	}
 
-	var mu sync.Mutex
+	// Sort by version descending to find top contributors
+	sort.Slice(tables, func(i, j int) bool {
+		return tables[i].version > tables[j].version
+	})
+
+	spinner.Finish()
 	var findings []audit.Finding
-	var wg sync.WaitGroup
-	sem := make(chan struct{}, audit.GetThresholds(ctx).Concurrency)
 
-	for _, c := range allCrawlers {
-		wg.Add(1)
-		go func(c gluetypes.Crawler) {
-			defer wg.Done()
-			sem <- struct{}{}
-			defer func() { <-sem }()
-
-			name := aws.ToString(c.Name)
-			version := c.Version
-			pct := float64(version) / float64(versionLimit) * 100
-
-			var risk string
-			switch {
-			case pct >= 95:
-				risk = "CRITICAL"
-			case pct >= 80:
-				risk = "HIGH"
-			case pct >= 60:
-				risk = "MEDIUM"
-			default:
-				return
-			}
-
-			mu.Lock()
-			findings = append(findings, audit.Finding{
-				Service:    "glue",
-				ResourceID: name,
-				Check:      "crawler_version_limit",
-				Status:     "WARN",
-				Detail: fmt.Sprintf(
-					"version=%d, limit=%d, usage=%.1f%%",
-					version, versionLimit, pct,
-				),
-				RiskLevel: risk,
-			})
-			mu.Unlock()
-		}(c)
+	// Total table version check
+	pct := float64(totalTableVersions) / float64(tableVersionLimit) * 100
+	var risk string
+	switch {
+	case pct >= 95:
+		risk = "CRITICAL"
+	case pct >= 80:
+		risk = "HIGH"
+	case pct >= 60:
+		risk = "MEDIUM"
 	}
-	wg.Wait()
+	if risk != "" {
+		findings = append(findings, audit.Finding{
+			Service:    "glue",
+			ResourceID: "catalog",
+			Check:      "table_version_limit",
+			Status:     "WARN",
+			Detail: fmt.Sprintf(
+				"total_table_versions=%d, limit=%d, usage=%.1f%%",
+				totalTableVersions, tableVersionLimit, pct,
+			),
+			RiskLevel: risk,
+		})
+	} else {
+		findings = append(findings, audit.Finding{
+			Service:    "glue",
+			ResourceID: "catalog",
+			Check:      "table_version_limit",
+			Status:     "PASS",
+			Detail: fmt.Sprintf(
+				"total_table_versions=%d, limit=%d, usage=%.1f%%",
+				totalTableVersions, tableVersionLimit, pct,
+			),
+			RiskLevel: "MINIMAL",
+		})
+	}
 
+	// Add all tables as individual findings
+	for _, t := range tables {
+		pctContrib := float64(t.version) / float64(totalTableVersions) * 100
+		findings = append(findings, audit.Finding{
+			Service:    "glue",
+			ResourceID: fmt.Sprintf("%s/%s", t.db, t.table),
+			Check:      "table_version_contributor",
+			Status:     "INFO",
+			Detail: fmt.Sprintf(
+				"versions=%d, contribution=%.1f%%",
+				t.version, pctContrib,
+			),
+			RiskLevel: "LOW",
+		})
+	}
 	return findings, nil
 }
 
-func getCrawlerVersionLimit(ctx context.Context, cfg aws.Config) int64 {
+func getTableVersionLimit(ctx context.Context, cfg aws.Config) int64 {
 	sqClient := servicequotas.NewFromConfig(cfg)
 
 	input := &servicequotas.ListServiceQuotasInput{
@@ -99,7 +148,7 @@ func getCrawlerVersionLimit(ctx context.Context, cfg aws.Config) int64 {
 		}
 		for _, q := range resp.Quotas {
 			name := strings.ToLower(aws.ToString(q.QuotaName))
-			if strings.Contains(name, "crawler") && strings.Contains(name, "version") {
+			if strings.Contains(name, "table") && strings.Contains(name, "version") {
 				if q.Value != nil {
 					return int64(*q.Value)
 				}
