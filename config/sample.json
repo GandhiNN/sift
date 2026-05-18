@@ -1,0 +1,18 @@
+{
+    "thresholds": {
+        "global": {
+            "unused_days": 90,
+            "cpu_idle_percent": 10,
+            "concurrency": 10
+        },
+        "ebs": {
+            "snapshot_age_days": 14
+        },
+        "rds": {
+            "cpu_idle_percent": 15
+        },
+        "elb": {
+            "idle_days": 14
+        }
+    }
+}

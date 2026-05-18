@@ -123,15 +123,25 @@ func buildAWSConfig() (context.Context, aws.Config, context.CancelFunc, error) {
 	// Signal-based context cancellation for graceful Ctrl+C shutdown
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
 
-	ctx = audit.WithThresholds(ctx, audit.Thresholds{
-		UnusedDays:      unusedDays,
-		MinBackupDays:   minBackupDays,
-		CPUIdlePercent:  cpuIdlePercent,
-		SnapshotAgeDays: snapshotAgeDays,
-		RotationMaxDays: unusedDays,
-		Concurrency:     concurrency,
-	})
-
+	// Load from config file, then let CLI flags override
+	t := audit.LoadThresholds()
+	if rootCmd.PersistentFlags().Changed("unused-days") {
+		t.UnusedDays = unusedDays
+	}
+	if rootCmd.PersistentFlags().Changed("min-backup-days") {
+		t.MinBackupDays = minBackupDays
+	}
+	if rootCmd.PersistentFlags().Changed("cpu-idle-percent") {
+		t.CPUIdlePercent = cpuIdlePercent
+	}
+	if rootCmd.PersistentFlags().Changed("snapshot-age-days") {
+		t.SnapshotAgeDays = snapshotAgeDays
+	}
+	if rootCmd.PersistentFlags().Changed("concurrency") {
+		t.Concurrency = concurrency
+	}
+	t.RotationMaxDays = t.UnusedDays
+	ctx = audit.WithThresholds(ctx, t)
 	cfg, err := config.BuildConfig(ctx, profile)
 	if err != nil {
 		cancel()
