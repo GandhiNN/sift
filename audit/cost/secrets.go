@@ -52,7 +52,7 @@ func AuditSecretsCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, err
 
 	for _, secret := range allSecrets {
 		s := parseSecretCostEntry(secret)
-		if s.lastAccessedDays > t.UnusedDays {
+		if s.lastAccessedDays > t.GetInt("secrets", "unused_days", t.UnusedDays) {
 			findings = append(findings, audit.Finding{
 				Service:    "secrets_manager",
 				ResourceID: s.name,

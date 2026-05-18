@@ -117,7 +117,8 @@ func AuditEBSCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 	}
 
 	// Snapshots
-	cutoff := time.Now().AddDate(0, 0, -audit.GetThresholds(ctx).SnapshotAgeDays)
+	t := audit.GetThresholds(ctx)
+	cutoff := time.Now().AddDate(0, 0, -t.GetInt("ebs", "snapshot_age_days", t.SnapshotAgeDays))
 	snapPaginator := ec2.NewDescribeSnapshotsPaginator(client, &ec2.DescribeSnapshotsInput{
 		OwnerIds: []string{"self"},
 	})

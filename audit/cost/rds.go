@@ -94,7 +94,9 @@ func AuditRDSCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 				mu.Unlock()
 				return
 			}
-			if avgCPU < audit.GetThresholds(ctx).CPUIdlePercent {
+			t := audit.GetThresholds(ctx)
+			if avgCPU < audit.GetThresholds(ctx).
+				GetFloat("rds", "cpu_idle_percent", t.CPUIdlePercent) {
 				mu.Lock()
 				findings = append(findings, audit.Finding{
 					Service:    "rds",

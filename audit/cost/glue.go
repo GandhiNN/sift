@@ -148,7 +148,8 @@ func auditGlueJob(
 
 	if lastRun.CompletedOn != nil {
 		days := int(time.Since(*lastRun.CompletedOn).Hours() / 24)
-		if days > audit.GetThresholds(ctx).UnusedDays {
+		if days > audit.GetThresholds(ctx).
+			GetInt("glue", "unused_days", audit.GetThresholds(ctx).UnusedDays) {
 			findings = append(findings, audit.Finding{
 				Service:    "glue_job",
 				ResourceID: name,

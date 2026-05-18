@@ -56,7 +56,11 @@ func AuditSecrets(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 	for _, secret := range allSecrets {
 		s := parseSecretEntry(secret)
 
-		rotationOverdue := s.daysSinceRotated > t.RotationMaxDays
+		rotationOverdue := s.daysSinceRotated > t.GetInt(
+			"secrets",
+			"rotation_max_days",
+			t.RotationMaxDays,
+		)
 		risk := secretsRisk(s.rotationEnabled, rotationOverdue, s.daysSinceRotated)
 
 		detail := fmt.Sprintf("rotation_enabled=%t", s.rotationEnabled)
