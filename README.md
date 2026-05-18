@@ -83,9 +83,20 @@ sift ops --profile icloud-dev
 
 # Specific services
 sift ops --profile icloud-dev --service glue
+
+# Specific checks within a service
+sift ops --profile icloud-dev --service glue --check table_versions
+sift ops --profile icloud-dev --service glue --check crawlers,job_versions
 ```
 
 Available services: `glue`
+
+| Flag | Description |
+|------|-------------|
+| `--service` | Comma-separated services to audit |
+| `--check` | Comma-separated checks to run within a service |
+
+Available checks for `glue`: `table_versions`, `crawlers`, `job_versions`
 
 #### Triage
 
