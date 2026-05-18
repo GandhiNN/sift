@@ -1,5 +1,7 @@
 # sift
 
+![sift](assets/sift.png)
+
 AWS security and cost audit CLI tool. Scans your AWS resources for misconfigurations, overly permissive policies, unused resources, and network exposure risks. Includes estimated cost per resource and scan history with delta reporting.
 
 ## Install
