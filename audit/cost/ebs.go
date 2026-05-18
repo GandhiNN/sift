@@ -7,6 +7,7 @@ import (
 
 	"sift/audit"
 	"sift/audit/pricing"
+	"sift/audit/progress"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/ec2"
@@ -58,6 +59,8 @@ func parseEBSSnapshot(snap ec2types.Snapshot) ebsSnapshot {
 func AuditEBSCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) {
 	client := ec2.NewFromConfig(cfg)
 	var findings []audit.Finding
+
+	spinner := progress.NewSpinner(ctx, "Auditing EBS cost")
 
 	// All volumes
 	volPaginator := ec2.NewDescribeVolumesPaginator(client, &ec2.DescribeVolumesInput{})
@@ -159,5 +162,6 @@ func AuditEBSCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 		}
 	}
 
+	spinner.Finish()
 	return findings, nil
 }
