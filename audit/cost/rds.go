@@ -104,9 +104,10 @@ func AuditRDSCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 					Tags:       r.tags, Check: "oversized_instance",
 					Status: "WARN",
 					Detail: fmt.Sprintf(
-						"class=%s, avg CPU=%.1f%% over 7 days, consider downsizing",
+						"class=%s, avg CPU=%.1f%% over %d days, consider downsizing",
 						r.class,
 						avgCPU,
+						audit.GetThresholds(ctx).GetInt("rds", "cpu_lookback_days", 7),
 					),
 					RiskLevel:            "HIGH",
 					EstimatedMonthlyCost: pricing.RDSMonthly(r.class),
@@ -121,9 +122,10 @@ func AuditRDSCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 					Check:      "oversized_instance",
 					Status:     "PASS",
 					Detail: fmt.Sprintf(
-						"class=%s, avg CPU=%.1f%% over 7 days",
+						"class=%s, avg CPU=%.1f%% over %d days",
 						r.class,
 						avgCPU,
+						audit.GetThresholds(ctx).GetInt("rds", "cpu_lookback_days", 7),
 					),
 					RiskLevel:            "MINIMAL",
 					EstimatedMonthlyCost: pricing.RDSMonthly(r.class),
@@ -138,7 +140,8 @@ func AuditRDSCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 
 func getAvgCPU(ctx context.Context, client *cloudwatch.Client, dbID string) (float64, error) {
 	end := time.Now()
-	start := end.AddDate(0, 0, -7)
+	lookbackDays := audit.GetThresholds(ctx).GetInt("rds", "cpu_lookback_days", 7)
+	start := end.AddDate(0, 0, -lookbackDays)
 
 	resp, err := client.GetMetricStatistics(ctx, &cloudwatch.GetMetricStatisticsInput{
 		Namespace:  aws.String("AWS/RDS"),
