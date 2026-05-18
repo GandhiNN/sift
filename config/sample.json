@@ -9,7 +9,12 @@
             "snapshot_age_days": 14
         },
         "rds": {
+            "cpu_lookback_days": 14,
             "cpu_idle_percent": 15
+        },
+        "dms": {
+            "cpu_lookback_days": 14,
+            "cpu_idle_percent": 10
         },
         "elb": {
             "idle_days": 14
