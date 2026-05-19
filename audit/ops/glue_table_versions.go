@@ -40,7 +40,9 @@ func auditTableVersions(
 		db    string
 		table string
 	}
-	var refs []tableRef
+
+	// Get all databases first
+	var dbNames []string
 	dbInput := &glue.GetDatabasesInput{}
 	for {
 		dbResp, err := client.GetDatabases(ctx, dbInput)
@@ -48,27 +50,48 @@ func auditTableVersions(
 			return nil, fmt.Errorf("get databases: %w", err)
 		}
 		for _, db := range dbResp.DatabaseList {
-			dbName := aws.ToString(db.Name)
+			dbNames = append(dbNames, aws.ToString(db.Name))
+		}
+		if dbResp.NextToken == nil {
+			break
+		}
+		dbInput.NextToken = dbResp.NextToken
+	}
+
+	// Get tables per database concurrently
+	var refs []tableRef
+	var mu sync.Mutex
+	var wgTables sync.WaitGroup
+	concurrency := audit.GetThresholds(ctx).GetInt("glue", "table_version_concurrency", 50)
+	dbSem := make(chan struct{}, concurrency)
+
+	for _, dbName := range dbNames {
+		wgTables.Add(1)
+		go func(dbName string) {
+			defer wgTables.Done()
+			dbSem <- struct{}{}
+			defer func() { <-dbSem }()
+
 			tableInput := &glue.GetTablesInput{DatabaseName: &dbName}
 			for {
 				tableResp, err := client.GetTables(ctx, tableInput)
 				if err != nil {
 					break
 				}
+				mu.Lock()
 				for _, t := range tableResp.TableList {
 					refs = append(refs, tableRef{db: dbName, table: aws.ToString(t.Name)})
 				}
+				mu.Unlock()
 				spinner.Add(len(tableResp.TableList))
 				if tableResp.NextToken == nil {
 					break
 				}
 				tableInput.NextToken = tableResp.NextToken
 			}
-		}
-		if dbResp.NextToken == nil {
-			break
-		}
+		}(dbName)
 	}
+	wgTables.Wait()
 	spinner.Finish()
 
 	// Count versions per table concurrently
