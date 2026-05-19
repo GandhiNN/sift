@@ -119,6 +119,7 @@ func findIdleNATGateways(ctx context.Context, cfg aws.Config) ([]audit.Finding, 
 					RiskLevel:            "HIGH",
 					EstimatedMonthlyCost: pricing.NATGatewayMonthly(),
 					Remediation: remediation.Recommend(
+						"cost",
 						"nat_gateway",
 						"idle_nat_gateway",
 						n.id,

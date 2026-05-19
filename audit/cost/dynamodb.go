@@ -122,6 +122,7 @@ func AuditDynamoDBCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, er
 					RiskLevel:            "LOW",
 					EstimatedMonthlyCost: pricing.DynamoDBProvisionedMonthly(t.readCap, t.writeCap),
 					Remediation: remediation.Recommend(
+						"cost",
 						"dynamodb",
 						"provisioned_mode",
 						t.name,
@@ -146,6 +147,7 @@ func AuditDynamoDBCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, er
 						RiskLevel:            "MEDIUM",
 						EstimatedMonthlyCost: 0,
 						Remediation: remediation.Recommend(
+							"cost",
 							"dynamodb",
 							"unused_gsi",
 							fmt.Sprintf("%s/%s", t.name, aws.ToString(gsi.IndexName)),

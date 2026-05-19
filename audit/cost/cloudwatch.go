@@ -66,6 +66,7 @@ func AuditCloudwatchCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, 
 					RiskLevel:            "MEDIUM",
 					EstimatedMonthlyCost: pricing.CloudWatchLogsMonthly(e.sizeGB),
 					Remediation: remediation.Recommend(
+						"cost",
 						"cloudwatch_logs",
 						"no_retention_policy",
 						e.name,

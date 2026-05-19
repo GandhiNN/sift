@@ -108,6 +108,7 @@ func AuditEKSCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 					RiskLevel:            "HIGH",
 					EstimatedMonthlyCost: pricing.EKSClusterMonthly(),
 					Remediation: remediation.Recommend(
+						"cost",
 						"eks",
 						"cluster_no_nodegroups",
 						name,
@@ -165,6 +166,7 @@ func AuditEKSCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 									RiskLevel:            "LOW",
 									EstimatedMonthlyCost: nodeCost,
 									Remediation: remediation.Recommend(
+										"cost",
 										"eks",
 										"previous_gen_node",
 										fmt.Sprintf("%s/%s", n.cluster, n.name),
@@ -187,6 +189,7 @@ func AuditEKSCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 							RiskLevel:            "MEDIUM",
 							EstimatedMonthlyCost: nodeCost,
 							Remediation: remediation.Recommend(
+								"cost",
 								"eks",
 								"empty_nodegroup",
 								fmt.Sprintf("%s/%s", n.cluster, n.name),

@@ -21,20 +21,20 @@ type template struct {
 	ActionRisk string `json:"action_risk"`
 }
 
-// service -> check -> template
-var table map[string]map[string]template
+// module -> service -> check -> template
+var table map[string]map[string]map[string]template
 
 func init() {
 	table = load()
 }
 
-func load() map[string]map[string]template {
+func load() map[string]map[string]map[string]template {
 	// Try user override
 	home, err := os.UserHomeDir()
 	if err == nil {
 		override := filepath.Join(home, ".sift", "remediations.json")
 		if data, err := os.ReadFile(override); err == nil {
-			var t map[string]map[string]template
+			var t map[string]map[string]map[string]template
 			if json.Unmarshal(data, &t) == nil {
 				return t
 			}
@@ -46,16 +46,20 @@ func load() map[string]map[string]template {
 	if err != nil {
 		panic(fmt.Sprintf("failed to read embedded remediations: %v", err))
 	}
-	var t map[string]map[string]template
+	var t map[string]map[string]map[string]template
 	if err := json.Unmarshal(data, &t); err != nil {
 		panic(fmt.Sprintf("failed to parse embedded remediations: %v", err))
 	}
 	return t
 }
 
-// Recommend returns a Remediation for the given service/check, or nil if none defined.
-func Recommend(service, check, resourceID, evidence string) *audit.Remediation {
-	svc, ok := table[service]
+// Recommend returns a Remediation for the given module/service/check, or nil if none defined.
+func Recommend(module, service, check, resourceID, evidence string) *audit.Remediation {
+	mod, ok := table[module]
+	if !ok {
+		return nil
+	}
+	svc, ok := mod[service]
 	if !ok {
 		return nil
 	}

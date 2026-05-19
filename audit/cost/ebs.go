@@ -85,6 +85,7 @@ func AuditEBSCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 					RiskLevel:            "MEDIUM",
 					EstimatedMonthlyCost: pricing.EBSMonthly(v.volumeType, v.size),
 					Remediation: remediation.Recommend(
+						"cost",
 						"ebs",
 						"unattached_volume",
 						v.id,
@@ -107,6 +108,7 @@ func AuditEBSCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 					RiskLevel:            "LOW",
 					EstimatedMonthlyCost: pricing.EBSMonthly(v.volumeType, v.size),
 					Remediation: remediation.Recommend(
+						"cost",
 						"ebs",
 						"gp2_volume",
 						v.id,
@@ -161,6 +163,7 @@ func AuditEBSCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 					RiskLevel:            "LOW",
 					EstimatedMonthlyCost: pricing.SnapshotMonthly(s.size),
 					Remediation: remediation.Recommend(
+						"cost",
 						"ebs_snapshot",
 						"old_snapshot",
 						s.id,

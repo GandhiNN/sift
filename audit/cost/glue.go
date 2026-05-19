@@ -49,6 +49,7 @@ func AuditGlueCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error)
 				Detail:     fmt.Sprintf("dpus=%d, ~$%.2f/hr", dpus, float64(dpus)*0.44),
 				RiskLevel:  "HIGH",
 				Remediation: remediation.Recommend(
+					"cost",
 					"glue_dev_endpoint",
 					"active_dev_endpoint",
 					name,
@@ -144,14 +145,20 @@ func auditGlueJob(
 
 	if string(lastRun.JobRunState) == "FAILED" {
 		findings = append(findings, audit.Finding{
-			Service:     "glue_job",
-			ResourceID:  name,
-			Tags:        tags,
-			Check:       "failed_job",
-			Status:      "WARN",
-			Detail:      fmt.Sprintf("last run failed: %s", aws.ToString(lastRun.ErrorMessage)),
-			RiskLevel:   "MEDIUM",
-			Remediation: remediation.Recommend("glue_job", "failed_job", name, "last run failed"),
+			Service:    "glue_job",
+			ResourceID: name,
+			Tags:       tags,
+			Check:      "failed_job",
+			Status:     "WARN",
+			Detail:     fmt.Sprintf("last run failed: %s", aws.ToString(lastRun.ErrorMessage)),
+			RiskLevel:  "MEDIUM",
+			Remediation: remediation.Recommend(
+				"cost",
+				"glue_job",
+				"failed_job",
+				name,
+				"last run failed",
+			),
 		})
 	}
 
@@ -168,6 +175,7 @@ func auditGlueJob(
 				Detail:     fmt.Sprintf("last run %d days ago", days),
 				RiskLevel:  "LOW",
 				Remediation: remediation.Recommend(
+					"cost",
 					"glue_job",
 					"unused_job",
 					name,
@@ -193,6 +201,7 @@ func auditGlueJob(
 			),
 			RiskLevel: "LOW",
 			Remediation: remediation.Recommend(
+				"cost",
 				"glue_job",
 				"consider_python_shell",
 				name,
@@ -211,6 +220,7 @@ func auditGlueJob(
 			Detail:     "using G.2X workers (8vCPU/32GB at $0.88/DPU/hr), consider G.1X if memory allows",
 			RiskLevel:  "MEDIUM",
 			Remediation: remediation.Recommend(
+				"cost",
 				"glue_job",
 				"expensive_worker_type",
 				name,
@@ -243,6 +253,7 @@ func auditGlueJob(
 						),
 						RiskLevel: "MEDIUM",
 						Remediation: remediation.Recommend(
+							"cost",
 							"glue_job",
 							"overprovisioned_job",
 							name,

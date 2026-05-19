@@ -141,6 +141,7 @@ func AuditLambdaCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, erro
 								allocated,
 							),
 							Remediation: remediation.Recommend(
+								"cost",
 								"lambda",
 								"unused_provisioned_concurrency",
 								f.name,

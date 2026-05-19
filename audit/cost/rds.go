@@ -113,6 +113,7 @@ func AuditRDSCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 					RiskLevel:            "HIGH",
 					EstimatedMonthlyCost: pricing.RDSMonthly(r.class),
 					Remediation: remediation.Recommend(
+						"cost",
 						"rds",
 						"oversized_instance",
 						r.id,

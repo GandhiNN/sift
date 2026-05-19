@@ -97,6 +97,7 @@ func AuditSagemakerCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, e
 					RiskLevel:            "MEDIUM",
 					EstimatedMonthlyCost: monthlyCost * 0.1, // rough EBS-only estimate
 					Remediation: remediation.Recommend(
+						"cost",
 						"sagemaker",
 						"stopped_notebook",
 						e.name,

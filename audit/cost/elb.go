@@ -135,6 +135,7 @@ func AuditELBCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 					RiskLevel:            "MEDIUM",
 					EstimatedMonthlyCost: pricing.ELBMonthly(e.lbType),
 					Remediation: remediation.Recommend(
+						"cost",
 						"elb",
 						"no_targets",
 						e.name,
@@ -178,6 +179,7 @@ func AuditELBCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 					RiskLevel:            "MINIMAL",
 					EstimatedMonthlyCost: pricing.ELBMonthly(e.lbType),
 					Remediation: remediation.Recommend(
+						"cost",
 						"elb",
 						"idle_lb",
 						e.name,

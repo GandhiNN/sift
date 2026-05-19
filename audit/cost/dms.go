@@ -116,6 +116,7 @@ func AuditDMSCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 					RiskLevel:            "HIGH",
 					EstimatedMonthlyCost: pricing.DMSMonthly(d.class),
 					Remediation: remediation.Recommend(
+						"cost",
 						"dms",
 						"idle_instance",
 						d.id,
@@ -131,7 +132,8 @@ func AuditDMSCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 					Detail:               fmt.Sprintf("class=%s, all %d tasks stopped but instance running", d.class, stoppedTasks[d.arn]),
 					RiskLevel:            "MEDIUM",
 					EstimatedMonthlyCost: pricing.DMSMonthly(d.class),
-					Remediation:          remediation.Recommend("dms", "all_tasks_stopped", d.id, fmt.Sprintf("all %d tasks stopped", stoppedTasks[d.arn])),
+					Remediation: remediation.Recommend("cost",
+						"dms", "all_tasks_stopped", d.id, fmt.Sprintf("all %d tasks stopped", stoppedTasks[d.arn])),
 				})
 			}
 
@@ -149,6 +151,7 @@ func AuditDMSCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 						RiskLevel:            "LOW",
 						EstimatedMonthlyCost: pricing.DMSMonthly(d.class),
 						Remediation: remediation.Recommend(
+							"cost",
 							"dms",
 							"all_tasks_stopped",
 							d.id,
@@ -191,6 +194,7 @@ func AuditDMSCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 					RiskLevel:            "MEDIUM",
 					EstimatedMonthlyCost: pricing.DMSMonthly(d.class),
 					Remediation: remediation.Recommend(
+						"cost",
 						"dms",
 						"oversized_instance",
 						d.id,

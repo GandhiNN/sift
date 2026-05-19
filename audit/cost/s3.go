@@ -115,6 +115,7 @@ func AuditS3Cost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) {
 					RiskLevel:            "MEDIUM",
 					EstimatedMonthlyCost: monthlyCost,
 					Remediation: remediation.Recommend(
+						"cost",
 						"s3",
 						"no_lifecycle_policy",
 						bucket.name,

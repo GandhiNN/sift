@@ -67,6 +67,7 @@ func AuditSecretsCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, err
 				RiskLevel:            "LOW",
 				EstimatedMonthlyCost: pricing.SecretMonthly(),
 				Remediation: remediation.Recommend(
+					"cost",
 					"secrets_manager",
 					"unused_secret",
 					s.name,

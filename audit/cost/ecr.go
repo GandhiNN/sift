@@ -91,6 +91,7 @@ func AuditECRCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 					),
 					RiskLevel: "LOW",
 					Remediation: remediation.Recommend(
+						"cost",
 						"ecr",
 						"no_lifecycle_policy",
 						r.name,
