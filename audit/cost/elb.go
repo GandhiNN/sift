@@ -10,6 +10,7 @@ import (
 	"sift/audit"
 	"sift/audit/pricing"
 	"sift/audit/progress"
+	"sift/audit/remediation"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/cloudwatch"
@@ -133,6 +134,12 @@ func AuditELBCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 					),
 					RiskLevel:            "MEDIUM",
 					EstimatedMonthlyCost: pricing.ELBMonthly(e.lbType),
+					Remediation: remediation.Recommend(
+						"elb",
+						"no_targets",
+						e.name,
+						"no target groups attached",
+					),
 				})
 				mu.Unlock()
 				return
@@ -170,6 +177,12 @@ func AuditELBCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 					Detail:               fmt.Sprintf("type=%s, unable to fetch metrics", e.lbType),
 					RiskLevel:            "MINIMAL",
 					EstimatedMonthlyCost: pricing.ELBMonthly(e.lbType),
+					Remediation: remediation.Recommend(
+						"elb",
+						"idle_lb",
+						e.name,
+						"zero traffic over 30 days",
+					),
 				})
 				mu.Unlock()
 				return

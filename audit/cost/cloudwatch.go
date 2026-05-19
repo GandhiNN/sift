@@ -6,6 +6,7 @@ import (
 
 	"sift/audit"
 	"sift/audit/pricing"
+	"sift/audit/remediation"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs"
@@ -64,6 +65,12 @@ func AuditCloudwatchCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, 
 					),
 					RiskLevel:            "MEDIUM",
 					EstimatedMonthlyCost: pricing.CloudWatchLogsMonthly(e.sizeGB),
+					Remediation: remediation.Recommend(
+						"cloudwatch_logs",
+						"no_retention_policy",
+						e.name,
+						"logs never expire",
+					),
 				})
 			} else {
 				findings = append(findings, audit.Finding{
@@ -75,6 +82,7 @@ func AuditCloudwatchCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, 
 					Detail:               fmt.Sprintf("retention=%d days", aws.ToInt32(lg.RetentionInDays)),
 					RiskLevel:            "MINIMAL",
 					EstimatedMonthlyCost: pricing.CloudWatchLogsMonthly(e.sizeGB),
+					Remediation:          nil,
 				})
 			}
 		}

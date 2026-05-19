@@ -8,6 +8,7 @@ import (
 
 	"sift/audit"
 	"sift/audit/pricing"
+	"sift/audit/remediation"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/eks"
@@ -106,6 +107,12 @@ func AuditEKSCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 					Detail:               "paying for control plane ($0.10/hr) with no node groups",
 					RiskLevel:            "HIGH",
 					EstimatedMonthlyCost: pricing.EKSClusterMonthly(),
+					Remediation: remediation.Recommend(
+						"eks",
+						"cluster_no_nodegroups",
+						name,
+						"no node groups attached",
+					),
 				})
 				mu.Unlock()
 				return
@@ -157,6 +164,12 @@ func AuditEKSCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 									),
 									RiskLevel:            "LOW",
 									EstimatedMonthlyCost: nodeCost,
+									Remediation: remediation.Recommend(
+										"eks",
+										"previous_gen_node",
+										fmt.Sprintf("%s/%s", n.cluster, n.name),
+										fmt.Sprintf("type=%s", iType),
+									),
 								})
 								break
 							}
@@ -173,6 +186,12 @@ func AuditEKSCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 							Detail:               "desired size is 0, consider removing if unused",
 							RiskLevel:            "MEDIUM",
 							EstimatedMonthlyCost: nodeCost,
+							Remediation: remediation.Recommend(
+								"eks",
+								"empty_nodegroup",
+								fmt.Sprintf("%s/%s", n.cluster, n.name),
+								"desired size is 0",
+							),
 						})
 					}
 
@@ -191,6 +210,7 @@ func AuditEKSCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 							Detail:               fmt.Sprintf("desired=%d, current-gen instances", n.desiredSize),
 							RiskLevel:            "MINIMAL",
 							EstimatedMonthlyCost: nodeCost,
+							Remediation:          nil,
 						})
 						mu.Unlock()
 					}

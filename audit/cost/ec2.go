@@ -7,6 +7,7 @@ import (
 
 	"sift/audit"
 	"sift/audit/pricing"
+	"sift/audit/remediation"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/ec2"
@@ -62,6 +63,12 @@ func AuditEC2Cost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 					),
 					RiskLevel:            "MEDIUM",
 					EstimatedMonthlyCost: pricing.EC2Monthly(i.instanceType),
+					Remediation: remediation.Recommend(
+						"ec2",
+						"stopped_instance",
+						i.id,
+						"instasnce in stopped state",
+					),
 				})
 			}
 		}
@@ -98,6 +105,12 @@ func AuditEC2Cost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 							),
 							RiskLevel:            "LOW",
 							EstimatedMonthlyCost: pricing.EC2Monthly(i.instanceType),
+							Remediation: remediation.Recommend(
+								"ec2",
+								"previous_gen_instance",
+								i.id,
+								"previous-gen instance type",
+							),
 						})
 						break
 					}
@@ -139,6 +152,12 @@ func AuditEC2Cost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 					Detail:               fmt.Sprintf("ip=%s", aws.ToString(addr.PublicIp)),
 					RiskLevel:            "LOW",
 					EstimatedMonthlyCost: pricing.ElasticIPMonthly(),
+					Remediation: remediation.Recommend(
+						"eip",
+						"unused_elastic_ip",
+						aws.ToString(addr.AllocationId),
+						"EIP not associated",
+					),
 				})
 			}
 		}

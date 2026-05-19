@@ -228,25 +228,37 @@ func checkDDoSReadiness(
 
 	if !hasWAF {
 		findings = append(findings, audit.Finding{
-			Service:     "elb",
-			ResourceID:  name,
-			Tags:        tags,
-			Check:       "ddos_no_waf",
-			Status:      "FAIL",
-			Detail:      "internet-facing ALB has no WAF associated",
-			RiskLevel:   "HIGH",
-			Remediation: "Associate a WAF WebACL with rate-based rules to mitigate DDoS",
+			Service:    "elb",
+			ResourceID: name,
+			Tags:       tags,
+			Check:      "ddos_no_waf",
+			Status:     "FAIL",
+			Detail:     "internet-facing ALB has no WAF associated",
+			RiskLevel:  "HIGH",
+			Remediation: &audit.Remediation{
+				Action:     "Associate a WAF WebACL with rate-based rules",
+				Command:    "aws wafv2 associate-web-acl --web-acl-arn <acl-arn> --resource-arn <lb-arn>",
+				Evidence:   "No WAF WebACL associated with internet-facing ALB",
+				Confidence: "HIGH",
+				ActionRisk: "LOW",
+			},
 		})
 	} else if !hasRateRule {
 		findings = append(findings, audit.Finding{
-			Service:     "elb",
-			ResourceID:  name,
-			Tags:        tags,
-			Check:       "ddos_no_rate_rule",
-			Status:      "FAIL",
-			Detail:      "WAF attached but no rate-based rule configured",
-			RiskLevel:   "MEDIUM",
-			Remediation: "Add a rate-based rule to the WAF WebACL to throttle flood traffic",
+			Service:    "elb",
+			ResourceID: name,
+			Tags:       tags,
+			Check:      "ddos_no_rate_rule",
+			Status:     "FAIL",
+			Detail:     "WAF attached but no rate-based rule configured",
+			RiskLevel:  "MEDIUM",
+			Remediation: &audit.Remediation{
+				Action:     "Add a rate-based rule to the WAF WebACL",
+				Command:    "aws wafv2 update-web-acl --name <acl-name> --scope REGIONAL --rules <rate-rule>",
+				Evidence:   "WAF WebACL has no rate-based rule to throttle flood traffic",
+				Confidence: "HIGH",
+				ActionRisk: "LOW",
+			},
 		})
 	}
 
@@ -256,14 +268,20 @@ func checkDDoSReadiness(
 	})
 	if err != nil {
 		findings = append(findings, audit.Finding{
-			Service:     "elb",
-			ResourceID:  name,
-			Tags:        tags,
-			Check:       "ddos_no_shield",
-			Status:      "FAIL",
-			Detail:      "internet-facing ALB not protected by Shield Advanced",
-			RiskLevel:   "MEDIUM",
-			Remediation: "Enable AWS Shield Advanced for DDoS response team support",
+			Service:    "elb",
+			ResourceID: name,
+			Tags:       tags,
+			Check:      "ddos_no_shield",
+			Status:     "FAIL",
+			Detail:     "internet-facing ALB not protected by Shield Advanced",
+			RiskLevel:  "MEDIUM",
+			Remediation: &audit.Remediation{
+				Action:     "Enable AWS Shield Advanced",
+				Command:    "aws shield create-protection --name <name> --resource-arn <lb-arn>",
+				Evidence:   "Internet-facing ALB has no Shield Advanced protection",
+				Confidence: "HIGH",
+				ActionRisk: "LOW",
+			},
 		})
 	}
 

@@ -8,6 +8,7 @@ import (
 
 	"sift/audit"
 	"sift/audit/pricing"
+	"sift/audit/remediation"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/cloudwatch"
@@ -111,6 +112,12 @@ func AuditRDSCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 					),
 					RiskLevel:            "HIGH",
 					EstimatedMonthlyCost: pricing.RDSMonthly(r.class),
+					Remediation: remediation.Recommend(
+						"rds",
+						"oversized_instance",
+						r.id,
+						fmt.Sprintf("avg CPU %.1f%%", avgCPU),
+					),
 				})
 				mu.Unlock()
 			} else {
@@ -129,6 +136,7 @@ func AuditRDSCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 					),
 					RiskLevel:            "MINIMAL",
 					EstimatedMonthlyCost: pricing.RDSMonthly(r.class),
+					Remediation:          nil,
 				})
 				mu.Unlock()
 			}

@@ -6,6 +6,7 @@ import (
 	"sync"
 
 	"sift/audit"
+	"sift/audit/remediation"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/ecr"
@@ -89,18 +90,25 @@ func AuditECRCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 						imgCount,
 					),
 					RiskLevel: "LOW",
+					Remediation: remediation.Recommend(
+						"ecr",
+						"no_lifecycle_policy",
+						r.name,
+						"no lifecycle policy",
+					),
 				})
 				mu.Unlock()
 			} else {
 				mu.Lock()
 				findings = append(findings, audit.Finding{
-					Service:    "ecr",
-					ResourceID: r.name,
-					Tags:       r.tags,
-					Check:      "no_lifecycle_policy",
-					Status:     "PASS",
-					Detail:     "lifecyce policy configured",
-					RiskLevel:  "MINIMAL",
+					Service:     "ecr",
+					ResourceID:  r.name,
+					Tags:        r.tags,
+					Check:       "no_lifecycle_policy",
+					Status:      "PASS",
+					Detail:      "lifecyce policy configured",
+					RiskLevel:   "MINIMAL",
+					Remediation: nil,
 				})
 				mu.Unlock()
 			}

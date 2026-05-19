@@ -9,6 +9,7 @@ import (
 	"sift/audit"
 	"sift/audit/pricing"
 	"sift/audit/progress"
+	"sift/audit/remediation"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/cloudwatch"
@@ -113,6 +114,12 @@ func AuditS3Cost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) {
 					),
 					RiskLevel:            "MEDIUM",
 					EstimatedMonthlyCost: monthlyCost,
+					Remediation: remediation.Recommend(
+						"s3",
+						"no_lifecycle_policy",
+						bucket.name,
+						"no lifecycle policy configured",
+					),
 				})
 				mu.Unlock()
 			} else {

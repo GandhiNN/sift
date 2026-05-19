@@ -8,6 +8,7 @@ import (
 	"sift/audit"
 	"sift/audit/pricing"
 	"sift/audit/progress"
+	"sift/audit/remediation"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
@@ -120,6 +121,12 @@ func AuditDynamoDBCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, er
 					),
 					RiskLevel:            "LOW",
 					EstimatedMonthlyCost: pricing.DynamoDBProvisionedMonthly(t.readCap, t.writeCap),
+					Remediation: remediation.Recommend(
+						"dynamodb",
+						"provisioned_mode",
+						t.name,
+						fmt.Sprintf("RCU=%d, WCU=%d", t.readCap, t.writeCap),
+					),
 				})
 			}
 
@@ -138,6 +145,12 @@ func AuditDynamoDBCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, er
 						Detail:               "GSI has zero items - wasting provisioned capacity",
 						RiskLevel:            "MEDIUM",
 						EstimatedMonthlyCost: 0,
+						Remediation: remediation.Recommend(
+							"dynamodb",
+							"unused_gsi",
+							fmt.Sprintf("%s/%s", t.name, aws.ToString(gsi.IndexName)),
+							"GSI has zero items",
+						),
 					})
 				}
 			}
@@ -152,6 +165,7 @@ func AuditDynamoDBCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, er
 					Detail:               "no cost issues detected",
 					RiskLevel:            "MINIMAL",
 					EstimatedMonthlyCost: 0,
+					Remediation:          nil,
 				})
 			}
 

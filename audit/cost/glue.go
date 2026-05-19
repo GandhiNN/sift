@@ -8,6 +8,7 @@ import (
 
 	"sift/audit"
 	"sift/audit/progress"
+	"sift/audit/remediation"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/glue"
@@ -47,6 +48,12 @@ func AuditGlueCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error)
 				Status:     "WARN",
 				Detail:     fmt.Sprintf("dpus=%d, ~$%.2f/hr", dpus, float64(dpus)*0.44),
 				RiskLevel:  "HIGH",
+				Remediation: remediation.Recommend(
+					"glue_dev_endpoint",
+					"active_dev_endpoint",
+					name,
+					fmt.Sprintf("dpus=%d, running 24/7", dpus),
+				),
 			})
 		}
 	}
@@ -95,13 +102,14 @@ func AuditGlueCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error)
 			} else {
 				mu.Lock()
 				findings = append(findings, audit.Finding{
-					Service:    "glue_job",
-					ResourceID: g.name,
-					Tags:       g.tags,
-					Check:      "glue_job_cost",
-					Status:     "PASS",
-					Detail:     "no cost issues detected",
-					RiskLevel:  "MINIMAL",
+					Service:     "glue_job",
+					ResourceID:  g.name,
+					Tags:        g.tags,
+					Check:       "glue_job_cost",
+					Status:      "PASS",
+					Detail:      "no cost issues detected",
+					RiskLevel:   "MINIMAL",
+					Remediation: nil,
 				})
 				mu.Unlock()
 			}
@@ -136,13 +144,14 @@ func auditGlueJob(
 
 	if string(lastRun.JobRunState) == "FAILED" {
 		findings = append(findings, audit.Finding{
-			Service:    "glue_job",
-			ResourceID: name,
-			Tags:       tags,
-			Check:      "failed_job",
-			Status:     "WARN",
-			Detail:     fmt.Sprintf("last run failed: %s", aws.ToString(lastRun.ErrorMessage)),
-			RiskLevel:  "MEDIUM",
+			Service:     "glue_job",
+			ResourceID:  name,
+			Tags:        tags,
+			Check:       "failed_job",
+			Status:      "WARN",
+			Detail:      fmt.Sprintf("last run failed: %s", aws.ToString(lastRun.ErrorMessage)),
+			RiskLevel:   "MEDIUM",
+			Remediation: remediation.Recommend("glue_job", "failed_job", name, "last run failed"),
 		})
 	}
 
@@ -158,6 +167,12 @@ func auditGlueJob(
 				Status:     "WARN",
 				Detail:     fmt.Sprintf("last run %d days ago", days),
 				RiskLevel:  "LOW",
+				Remediation: remediation.Recommend(
+					"glue_job",
+					"unused_job",
+					name,
+					fmt.Sprintf("last run %d days ago", days),
+				),
 			})
 		}
 	}
@@ -177,6 +192,12 @@ func auditGlueJob(
 				lastRun.ExecutionTime,
 			),
 			RiskLevel: "LOW",
+			Remediation: remediation.Recommend(
+				"glue_job",
+				"consider_python_shell",
+				name,
+				fmt.Sprintf("workers=%d, runtime=%ds", workers, lastRun.ExecutionTime),
+			),
 		})
 	}
 
@@ -189,6 +210,12 @@ func auditGlueJob(
 			Status:     "WARN",
 			Detail:     "using G.2X workers (8vCPU/32GB at $0.88/DPU/hr), consider G.1X if memory allows",
 			RiskLevel:  "MEDIUM",
+			Remediation: remediation.Recommend(
+				"glue_job",
+				"expensive_worker_type",
+				name,
+				"using G.2X workers",
+			),
 		})
 	}
 
@@ -215,6 +242,12 @@ func auditGlueJob(
 							utilization,
 						),
 						RiskLevel: "MEDIUM",
+						Remediation: remediation.Recommend(
+							"glue_job",
+							"overprovisioned_job",
+							name,
+							fmt.Sprintf("Utilization %.0f%%", utilization),
+						),
 					})
 				}
 			}

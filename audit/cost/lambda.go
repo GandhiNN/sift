@@ -8,6 +8,7 @@ import (
 
 	"sift/audit"
 	"sift/audit/pricing"
+	"sift/audit/remediation"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/cloudwatch"
@@ -139,6 +140,12 @@ func AuditLambdaCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, erro
 								f.memoryMB,
 								allocated,
 							),
+							Remediation: remediation.Recommend(
+								"lambda",
+								"unused_provisioned_concurrency",
+								f.name,
+								"zero invocations with provisioned concurrency",
+							),
 						})
 					}
 				}
@@ -159,6 +166,7 @@ func AuditLambdaCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, erro
 					Detail:               fmt.Sprintf("memory=%dMB, active in last 30 days", f.memoryMB),
 					RiskLevel:            "MINIMAL",
 					EstimatedMonthlyCost: 0,
+					Remediation:          nil,
 				})
 				mu.Unlock()
 			}

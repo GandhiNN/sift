@@ -6,6 +6,7 @@ import (
 	"sift/audit"
 	"sift/audit/pricing"
 	"sift/audit/progress"
+	"sift/audit/remediation"
 	"sync"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -95,6 +96,12 @@ func AuditSagemakerCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, e
 					),
 					RiskLevel:            "MEDIUM",
 					EstimatedMonthlyCost: monthlyCost * 0.1, // rough EBS-only estimate
+					Remediation: remediation.Recommend(
+						"sagemaker",
+						"stopped_notebook",
+						e.name,
+						"notebook stopped but EBS still billed",
+					),
 				}
 			case smtypes.NotebookInstanceStatusInService:
 				finding = audit.Finding{

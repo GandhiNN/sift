@@ -5,6 +5,14 @@ import (
 	"fmt"
 )
 
+type Remediation struct {
+	Action     string `json:"action"`
+	Command    string `json:"command,omitempty"`
+	Evidence   string `json:"evidence"`
+	Confidence string `json:"confidence"`
+	ActionRisk string `json:"action_risk"`
+}
+
 type Finding struct {
 	Region               string            `json:"region,omitempty"`
 	Service              string            `json:"service"`
@@ -15,7 +23,7 @@ type Finding struct {
 	Detail               string            `json:"detail"`
 	RiskLevel            string            `json:"risk_level"`
 	EstimatedMonthlyCost float64           `json:"estimated_monthly_cost,omitempty"`
-	Remediation          string            `json:"remediation,omitempty"`
+	Remediation          *Remediation      `json:"remediation,omitempty"`
 }
 
 func ErrorFinding(service, resourceID, check string, err error) Finding {

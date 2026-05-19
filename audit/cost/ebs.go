@@ -8,6 +8,7 @@ import (
 	"sift/audit"
 	"sift/audit/pricing"
 	"sift/audit/progress"
+	"sift/audit/remediation"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/ec2"
@@ -83,6 +84,12 @@ func AuditEBSCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 					Detail:               fmt.Sprintf("size=%dGB, type=%s", v.size, v.volumeType),
 					RiskLevel:            "MEDIUM",
 					EstimatedMonthlyCost: pricing.EBSMonthly(v.volumeType, v.size),
+					Remediation: remediation.Recommend(
+						"ebs",
+						"unattached_volume",
+						v.id,
+						"volume status=available",
+					),
 				})
 			}
 
@@ -99,6 +106,12 @@ func AuditEBSCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 					),
 					RiskLevel:            "LOW",
 					EstimatedMonthlyCost: pricing.EBSMonthly(v.volumeType, v.size),
+					Remediation: remediation.Recommend(
+						"ebs",
+						"gp2_volume",
+						v.id,
+						"gp2 volume type",
+					),
 				})
 			}
 
@@ -114,6 +127,7 @@ func AuditEBSCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 					Detail:               fmt.Sprintf("size=%dGB, type=%s, attached", v.size, v.volumeType),
 					RiskLevel:            "MINIMAL",
 					EstimatedMonthlyCost: pricing.EBSMonthly(v.volumeType, v.size),
+					Remediation:          nil,
 				})
 			}
 		}
@@ -146,6 +160,15 @@ func AuditEBSCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 					),
 					RiskLevel:            "LOW",
 					EstimatedMonthlyCost: pricing.SnapshotMonthly(s.size),
+					Remediation: remediation.Recommend(
+						"ebs_snapshot",
+						"old_snapshot",
+						s.id,
+						fmt.Sprintf(
+							"snapshot age %d days",
+							int(time.Since(*s.startTime).Hours()/24),
+						),
+					),
 				})
 			} else {
 				findings = append(findings, audit.Finding{
@@ -157,6 +180,7 @@ func AuditEBSCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 					Detail:               fmt.Sprintf("size=%dGB, within retention period", s.size),
 					RiskLevel:            "MINIMAL",
 					EstimatedMonthlyCost: pricing.SnapshotMonthly(s.size),
+					Remediation:          nil,
 				})
 			}
 		}
