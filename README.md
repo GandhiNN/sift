@@ -139,6 +139,36 @@ Diff vs 2026-05-18 09:30:
 
 History is retained for the last 30 scans per profile/command. Disable saving with `--no-save`.
 
+## Remediation recommendations
+
+Findings include actionable remediation recommendations with:
+- **Action**: What to do
+- **Command**: AWS CLI command to execute
+- **Evidence**: Data supporting the recommendation
+- **Confidence**: HIGH, MEDIUM, or LOW — based on signal strength
+- **Action risk**: LOW, MEDIUM, or HIGH — risk of taking the action
+
+Example (JSON output):
+```json
+{
+  "service": "elb",
+  "resource_id": "k8s-diiotitb-chronogr-b61a3a3daa",
+  "check": "idle_lb",
+  "status": "WARN",
+  "risk_level": "HIGH",
+  "estimated_monthly_cost": 18.40,
+  "remediation": {
+    "action": "Delete idle load balancer",
+    "command": "aws elbv2 delete-load-balancer --load-balancer-arn <arn>",
+    "evidence": "zero traffic over 30 days",
+    "confidence": "HIGH",
+    "action_risk": "HIGH"
+  }
+}
+```
+
+Remediations can be customized without rebuilding by placing a `remediations.json` at `~/.sift/remediations.json`. See `audit/remediation/remediations.json` for the format.
+
 ## Risk matrices
 
 ### EC2
