@@ -4,8 +4,11 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+
 	"sift/audit"
 	"sift/audit/progress"
+	"sift/audit/remediation"
+
 	"sync"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -235,30 +238,24 @@ func checkDDoSReadiness(
 			Status:     "FAIL",
 			Detail:     "internet-facing ALB has no WAF associated",
 			RiskLevel:  "HIGH",
-			Remediation: &audit.Remediation{
-				Action:     "Associate a WAF WebACL with rate-based rules",
-				Command:    "aws wafv2 associate-web-acl --web-acl-arn <acl-arn> --resource-arn <lb-arn>",
-				Evidence:   "No WAF WebACL associated with internet-facing ALB",
-				Confidence: "HIGH",
-				ActionRisk: "LOW",
-			},
+			Remediation: remediation.Recommend(
+				"security",
+				"elb",
+				"no_waf",
+				name,
+				"internet-facing ALB has no WAF associated",
+			),
 		})
 	} else if !hasRateRule {
 		findings = append(findings, audit.Finding{
-			Service:    "elb",
-			ResourceID: name,
-			Tags:       tags,
-			Check:      "ddos_no_rate_rule",
-			Status:     "FAIL",
-			Detail:     "WAF attached but no rate-based rule configured",
-			RiskLevel:  "MEDIUM",
-			Remediation: &audit.Remediation{
-				Action:     "Add a rate-based rule to the WAF WebACL",
-				Command:    "aws wafv2 update-web-acl --name <acl-name> --scope REGIONAL --rules <rate-rule>",
-				Evidence:   "WAF WebACL has no rate-based rule to throttle flood traffic",
-				Confidence: "HIGH",
-				ActionRisk: "LOW",
-			},
+			Service:     "elb",
+			ResourceID:  name,
+			Tags:        tags,
+			Check:       "ddos_no_rate_rule",
+			Status:      "FAIL",
+			Detail:      "WAF attached but no rate-based rule configured",
+			RiskLevel:   "MEDIUM",
+			Remediation: remediation.Recommend("security", "elb", "no_rate_rule", name, "WAF has no rate-based rule"),
 		})
 	}
 
@@ -275,13 +272,13 @@ func checkDDoSReadiness(
 			Status:     "FAIL",
 			Detail:     "internet-facing ALB not protected by Shield Advanced",
 			RiskLevel:  "MEDIUM",
-			Remediation: &audit.Remediation{
-				Action:     "Enable AWS Shield Advanced",
-				Command:    "aws shield create-protection --name <name> --resource-arn <lb-arn>",
-				Evidence:   "Internet-facing ALB has no Shield Advanced protection",
-				Confidence: "HIGH",
-				ActionRisk: "LOW",
-			},
+			Remediation: remediation.Recommend(
+				"security",
+				"elb",
+				"no_shield",
+				name,
+				"internet-facing ALB not protected by Shield Advanced",
+			),
 		})
 	}
 
