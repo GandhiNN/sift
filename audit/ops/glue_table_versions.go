@@ -75,7 +75,10 @@ func auditTableVersions(
 	results := make([]tableVersionCount, len(refs))
 	var totalVersions atomic.Int64
 	var wg sync.WaitGroup
-	sem := make(chan struct{}, audit.GetThresholds(ctx).Concurrency)
+	sem := make(
+		chan struct{},
+		audit.GetThresholds(ctx).GetInt("glue", "table_version_concurrency", 50),
+	)
 
 	for i, ref := range refs {
 		wg.Add(1)
