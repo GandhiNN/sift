@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"sync"
+	"sync/atomic"
 
 	"sift/audit"
 	"sift/audit/progress"
@@ -19,22 +21,26 @@ const (
 	glueServiceCode          = "glue"
 )
 
+type tableVersionCount struct {
+	db    string
+	table string
+	count int64
+}
+
 func auditTableVersions(
 	ctx context.Context,
 	client *glue.Client,
 	cfg aws.Config,
 ) ([]audit.Finding, error) {
 	limit := getTableVersionLimit(ctx, cfg)
-	spinner := progress.NewSpinner(ctx, "Counting Glue table versions")
+	spinner := progress.NewSpinner(ctx, "Counting Glue tables")
 
-	type tableVersion struct {
-		db      string
-		table   string
-		version int64
+	// Collect all db/table pairs
+	type tableRef struct {
+		db    string
+		table string
 	}
-
-	var total int64
-	var tables []tableVersion
+	var refs []tableRef
 	dbInput := &glue.GetDatabasesInput{}
 	for {
 		dbResp, err := client.GetDatabases(ctx, dbInput)
@@ -50,15 +56,7 @@ func auditTableVersions(
 					break
 				}
 				for _, t := range tableResp.TableList {
-					if t.VersionId != nil {
-						var v int64
-						fmt.Sscanf(aws.ToString(t.VersionId), "%d", &v)
-						total += v
-						tables = append(
-							tables,
-							tableVersion{db: dbName, table: aws.ToString(t.Name), version: v},
-						)
-					}
+					refs = append(refs, tableRef{db: dbName, table: aws.ToString(t.Name)})
 				}
 				if tableResp.NextToken == nil {
 					break
@@ -69,13 +67,51 @@ func auditTableVersions(
 		if dbResp.NextToken == nil {
 			break
 		}
-		dbInput.NextToken = dbResp.NextToken
 	}
-
-	sort.Slice(tables, func(i, j int) bool {
-		return tables[i].version > tables[j].version
-	})
 	spinner.Finish()
+
+	// Count versions per table concurrently
+	bar := progress.NewBar(ctx, int64(len(refs)), "Counting table versions")
+	results := make([]tableVersionCount, len(refs))
+	var totalVersions atomic.Int64
+	var wg sync.WaitGroup
+	sem := make(chan struct{}, audit.GetThresholds(ctx).Concurrency)
+
+	for i, ref := range refs {
+		wg.Add(1)
+		go func(i int, db, table string) {
+			defer wg.Done()
+			sem <- struct{}{}
+			defer func() { <-sem }()
+			defer bar.Add(1)
+
+			var count int64
+			input := &glue.GetTableVersionsInput{
+				DatabaseName: &db,
+				TableName:    &table,
+			}
+			for {
+				resp, err := client.GetTableVersions(ctx, input)
+				if err != nil {
+					break
+				}
+				count += int64(len(resp.TableVersions))
+				if resp.NextToken == nil {
+					break
+				}
+				input.NextToken = resp.NextToken
+			}
+			results[i] = tableVersionCount{db: db, table: table, count: count}
+			totalVersions.Add(count)
+		}(i, ref.db, ref.table)
+	}
+	wg.Wait()
+
+	total := totalVersions.Load()
+
+	sort.Slice(results, func(i, j int) bool {
+		return results[i].count > results[j].count
+	})
 
 	var findings []audit.Finding
 
@@ -114,14 +150,17 @@ func auditTableVersions(
 		})
 	}
 
-	for _, t := range tables {
-		pctContrib := float64(t.version) / float64(total) * 100
+	for _, t := range results {
+		if t.count == 0 {
+			continue
+		}
+		pctContrib := float64(t.count) / float64(total) * 100
 		findings = append(findings, audit.Finding{
 			Service:    "glue",
 			ResourceID: fmt.Sprintf("%s/%s", t.db, t.table),
 			Check:      "table_version_contributor",
 			Status:     "INFO",
-			Detail:     fmt.Sprintf("versions=%d ,contribution=%.1f%%", t.version, pctContrib),
+			Detail:     fmt.Sprintf("versions=%d ,contribution=%.1f%%", t.count, pctContrib),
 			RiskLevel:  "LOW",
 		})
 	}
