@@ -58,6 +58,7 @@ func auditTableVersions(
 				for _, t := range tableResp.TableList {
 					refs = append(refs, tableRef{db: dbName, table: aws.ToString(t.Name)})
 				}
+				spinner.Add(len(tableResp.TableList))
 				if tableResp.NextToken == nil {
 					break
 				}
