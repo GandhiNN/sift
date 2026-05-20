@@ -6,7 +6,6 @@ import (
 	"sort"
 	"strings"
 	"sync"
-	"sync/atomic"
 
 	"sift/audit"
 	"sift/audit/progress"
@@ -33,13 +32,8 @@ func auditTableVersions(
 	cfg aws.Config,
 ) ([]audit.Finding, error) {
 	limit := getTableVersionLimit(ctx, cfg)
-	spinner := progress.NewSpinner(ctx, "Counting Glue tables")
 
-	// Collect all db/table pairs
-	type tableRef struct {
-		db    string
-		table string
-	}
+	spinner := progress.NewSpinner(ctx, "Collecting Glue tables")
 
 	// Get all databases first
 	var dbNames []string
@@ -58,19 +52,19 @@ func auditTableVersions(
 		dbInput.NextToken = dbResp.NextToken
 	}
 
-	// Get tables per database concurrently
-	var refs []tableRef
+	// Get tables per database concurrently, using VersionId as version count
+	var tables []tableVersionCount
 	var mu sync.Mutex
-	var wgTables sync.WaitGroup
+	var wg sync.WaitGroup
 	concurrency := audit.GetThresholds(ctx).GetInt("glue", "table_version_concurrency", 50)
-	dbSem := make(chan struct{}, concurrency)
+	sem := make(chan struct{}, concurrency)
 
 	for _, dbName := range dbNames {
-		wgTables.Add(1)
+		wg.Add(1)
 		go func(dbName string) {
-			defer wgTables.Done()
-			dbSem <- struct{}{}
-			defer func() { <-dbSem }()
+			defer wg.Done()
+			sem <- struct{}{}
+			defer func() { <-sem }()
 
 			tableInput := &glue.GetTablesInput{DatabaseName: &dbName}
 			for {
@@ -80,7 +74,15 @@ func auditTableVersions(
 				}
 				mu.Lock()
 				for _, t := range tableResp.TableList {
-					refs = append(refs, tableRef{db: dbName, table: aws.ToString(t.Name)})
+					var v int64
+					if t.VersionId != nil {
+						fmt.Sscanf(aws.ToString(t.VersionId), "%d", &v)
+					}
+					tables = append(tables, tableVersionCount{
+						db:    dbName,
+						table: aws.ToString(t.Name),
+						count: v,
+					})
 				}
 				mu.Unlock()
 				spinner.Add(len(tableResp.TableList))
@@ -91,53 +93,17 @@ func auditTableVersions(
 			}
 		}(dbName)
 	}
-	wgTables.Wait()
+	wg.Wait()
 	spinner.Finish()
 
-	// Count versions per table concurrently
-	bar := progress.NewBar(ctx, int64(len(refs)), "Counting table versions")
-	results := make([]tableVersionCount, len(refs))
-	var totalVersions atomic.Int64
-	var wg sync.WaitGroup
-	sem := make(
-		chan struct{},
-		audit.GetThresholds(ctx).GetInt("glue", "table_version_concurrency", 50),
-	)
-
-	for i, ref := range refs {
-		wg.Add(1)
-		go func(i int, db, table string) {
-			defer wg.Done()
-			sem <- struct{}{}
-			defer func() { <-sem }()
-			defer bar.Add(1)
-
-			var count int64
-			input := &glue.GetTableVersionsInput{
-				DatabaseName: &db,
-				TableName:    &table,
-			}
-			for {
-				resp, err := client.GetTableVersions(ctx, input)
-				if err != nil {
-					break
-				}
-				count += int64(len(resp.TableVersions))
-				if resp.NextToken == nil {
-					break
-				}
-				input.NextToken = resp.NextToken
-			}
-			results[i] = tableVersionCount{db: db, table: table, count: count}
-			totalVersions.Add(count)
-		}(i, ref.db, ref.table)
+	// Calculate total and sort
+	var total int64
+	for _, t := range tables {
+		total += t.count
 	}
-	wg.Wait()
 
-	total := totalVersions.Load()
-
-	sort.Slice(results, func(i, j int) bool {
-		return results[i].count > results[j].count
+	sort.Slice(tables, func(i, j int) bool {
+		return tables[i].count > tables[j].count
 	})
 
 	var findings []audit.Finding
@@ -159,7 +125,7 @@ func auditTableVersions(
 			Check:      "table_version_limit",
 			Status:     "WARN",
 			Detail: fmt.Sprintf(
-				"total_table_versions=%d, limit=%d, usage=%.1f%%",
+				"total_table_versions=%d (estimated), limit=%d, usage=%.1f%%",
 				total,
 				limit,
 				pct,
@@ -172,12 +138,12 @@ func auditTableVersions(
 			ResourceID: "catalog",
 			Check:      "table_version_limit",
 			Status:     "PASS",
-			Detail:     fmt.Sprintf("total_table_versions=%d, limit=%d, usage=%.1f%%", total, limit, pct),
+			Detail:     fmt.Sprintf("total_table_versions=%d (estimated), limit=%d, usage=%.1f%%", total, limit, pct),
 			RiskLevel:  "MINIMAL",
 		})
 	}
 
-	for _, t := range results {
+	for _, t := range tables {
 		if t.count == 0 {
 			continue
 		}
