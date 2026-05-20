@@ -348,3 +348,102 @@ func HasHighRiskFindings(data any) bool {
 	}
 	return false
 }
+
+func OutputResources(
+	format string,
+	resources []Resource,
+	startTime time.Time,
+	outputFile string,
+) error {
+	if len(resources) == 0 {
+		fmt.Println("No resources found.")
+		return nil
+	}
+
+	out := os.Stdout
+	if outputFile != "" {
+		f, err := os.OpenFile(outputFile, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0600)
+		if err != nil {
+			return fmt.Errorf("create output file: %w", err)
+		}
+		defer f.Close()
+		out = f
+	}
+
+	switch format {
+	case "json":
+		b, err := json.MarshalIndent(resources, "", "\t")
+		if err != nil {
+			return err
+		}
+		fmt.Fprintln(out, string(b))
+	case "csv":
+		if err := writeResourceCSV(resources, out); err != nil {
+			return err
+		}
+	case "table":
+		writeResourceTable(resources, out)
+	default:
+		return fmt.Errorf("unknown format: %s", format)
+	}
+
+	if !startTime.IsZero() {
+		fmt.Fprintf(
+			os.Stderr,
+			"{\"total\":%d,\"duration_seconds\":%.1f}\n",
+			len(resources),
+			time.Since(startTime).Seconds(),
+		)
+	}
+	return nil
+}
+
+func writeResourceTable(resources []Resource, out io.Writer) {
+	w := tabwriter.NewWriter(out, 0, 4, 2, ' ', 0)
+	fmt.Fprintln(w, "SERVICE\tRESOURCE\tTYPE\tTAGS\tPROPERTIES")
+	for _, r := range resources {
+		tags := formatMap(r.Tags)
+		props := formatMap(r.Properties)
+		fmt.Fprintf(
+			w,
+			"%s\t%s\t%s\t%s\t%s\n",
+			r.Service,
+			r.ResourceID,
+			r.Type,
+			truncate(tags, 40),
+			truncate(props, 80),
+		)
+	}
+	w.Flush()
+}
+
+func writeResourceCSV(resources []Resource, out io.Writer) error {
+	w := csv.NewWriter(out)
+	defer w.Flush()
+	w.Write([]string{"region", "service", "resource_id", "type", "tags", "properties"})
+	for _, r := range resources {
+		w.Write(
+			[]string{
+				r.Region,
+				r.Service,
+				r.ResourceID,
+				r.Type,
+				formatMap(r.Tags),
+				formatMap(r.Properties),
+			},
+		)
+	}
+	return nil
+}
+
+func formatMap(m map[string]string) string {
+	if len(m) == 0 {
+		return ""
+	}
+	parts := make([]string, 0, len(m))
+	for k, v := range m {
+		parts = append(parts, k+"="+v)
+	}
+	sort.Strings(parts)
+	return strings.Join(parts, ";")
+}
