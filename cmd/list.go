@@ -61,6 +61,10 @@ var listCmd = &cobra.Command{
 			os.Exit(2)
 		}
 
+		for i := range resources {
+			resources[i].Region = cfg.Region
+		}
+
 		if err := audit.OutputResources(format, resources, start, outputFile); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(2)
