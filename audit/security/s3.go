@@ -9,6 +9,7 @@ import (
 	"sift/audit/progress"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/cloudtrail"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 )
@@ -60,6 +61,41 @@ func parseS3Bucket(ctx context.Context, client *s3.Client, name string) s3Bucket
 	return b
 }
 
+func hasS3DataEvents(ctx context.Context, cfg aws.Config) bool {
+	ctClient := cloudtrail.NewFromConfig(cfg)
+	resp, err := ctClient.DescribeTrails(ctx, &cloudtrail.DescribeTrailsInput{})
+	if err != nil {
+		return false
+	}
+	for _, trail := range resp.TrailList {
+		selResp, err := ctClient.GetEventSelectors(ctx, &cloudtrail.GetEventSelectorsInput{
+			TrailName: trail.TrailARN,
+		})
+		if err != nil {
+			continue
+		}
+		for _, sel := range selResp.EventSelectors {
+			for _, dr := range sel.DataResources {
+				if aws.ToString(dr.Type) == "AWS::S3::Object" {
+					return true
+				}
+			}
+		}
+		for _, adv := range selResp.AdvancedEventSelectors {
+			for _, fs := range adv.FieldSelectors {
+				if aws.ToString(fs.Field) == "resources.type" {
+					for _, v := range fs.Equals {
+						if v == "AWS::S3::Object" {
+							return true
+						}
+					}
+				}
+			}
+		}
+	}
+	return false
+}
+
 func AuditS3(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) {
 	client := s3.NewFromConfig(cfg)
 
@@ -74,6 +110,8 @@ func AuditS3(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) {
 
 	var wg sync.WaitGroup
 	sem := make(chan struct{}, audit.GetThresholds(ctx).Concurrency)
+
+	dataEventsEnabled := hasS3DataEvents(ctx, cfg)
 
 	for i, b := range buckets {
 		if b.Name == nil {
@@ -101,8 +139,12 @@ func AuditS3(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) {
 				Check:      "bucket_security",
 				Status:     statusFromRisk(risk),
 				Detail: fmt.Sprintf(
-					"public_blocked=%t, encrypted=%t, versioning=%t, logging=%t",
-					bucket.publicBlocked, bucket.encrypted, bucket.versioning, bucket.logging,
+					"public_blocked=%t, encrypted=%t, versioning=%t, logging=%t, cloudtrail_data_events=%t",
+					bucket.publicBlocked,
+					bucket.encrypted,
+					bucket.versioning,
+					bucket.logging,
+					dataEventsEnabled,
 				),
 				RiskLevel: risk,
 			}
