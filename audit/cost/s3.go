@@ -137,6 +137,72 @@ func AuditS3Cost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) {
 				})
 				mu.Unlock()
 			}
+
+			// Check read activity via GetRequests metric
+			end := time.Now()
+			start := end.AddDate(0, 0, -30)
+			metricsResp, err := cwClient.GetMetricStatistics(
+				ctx,
+				&cloudwatch.GetMetricStatisticsInput{
+					Namespace:  aws.String("AWS/S3"),
+					MetricName: aws.String("GetRequests"),
+					Dimensions: []cwtypes.Dimension{
+						{Name: aws.String("BucketName"), Value: &name},
+						{Name: aws.String("FilterId"), Value: aws.String("EntireBucket")},
+					},
+					StartTime:  &start,
+					EndTime:    &end,
+					Period:     aws.Int32(86400),
+					Statistics: []cwtypes.Statistic{cwtypes.StatisticSum},
+				},
+			)
+			if err != nil || len(metricsResp.Datapoints) == 0 {
+				mu.Lock()
+				findings = append(findings, audit.Finding{
+					Service:              "s3",
+					ResourceID:           bucket.name,
+					Tags:                 bucket.tags,
+					Check:                "read_activity",
+					Status:               "WARN",
+					Detail:               "request metrics not enabled - unable to determine read activity",
+					RiskLevel:            "LOW",
+					EstimatedMonthlyCost: monthlyCost,
+				})
+				mu.Unlock()
+				return
+			}
+
+			var totalGets float64
+			for _, dp := range metricsResp.Datapoints {
+				totalGets += aws.ToFloat64(dp.Sum)
+			}
+			if totalGets == 0 {
+				mu.Lock()
+				findings = append(findings, audit.Finding{
+					Service:              "s3",
+					ResourceID:           bucket.name,
+					Tags:                 bucket.tags,
+					Check:                "read_activity",
+					Status:               "WARN",
+					Detail:               "size=%.2fGB, zero GetRequests in last 30 days - no consumers",
+					RiskLevel:            "MEDIUM",
+					EstimatedMonthlyCost: monthlyCost,
+				})
+				mu.Unlock()
+			} else {
+				mu.Lock()
+				findings = append(findings, audit.Finding{
+					Service:              "s3",
+					ResourceID:           bucket.name,
+					Tags:                 bucket.tags,
+					Check:                "read_activity",
+					Status:               "PASS",
+					Detail:               fmt.Sprintf("%.0f GetRequests in last 30 days", totalGets),
+					RiskLevel:            "MINIMAL",
+					EstimatedMonthlyCost: monthlyCost,
+				})
+				mu.Unlock()
+			}
 		}(*b.Name)
 	}
 
