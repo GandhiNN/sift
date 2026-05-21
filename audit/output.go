@@ -272,7 +272,16 @@ func csvRow(v reflect.Value) []string {
 			if fv.IsNil() {
 				row = append(row, "")
 			} else {
-				row = append(row, fmt.Sprintf("%v", fv.Elem()))
+				elem := fv.Elem()
+				if elem.Kind() == reflect.Struct {
+					var buf strings.Builder
+					enc := json.NewEncoder(&buf)
+					enc.SetEscapeHTML(false)
+					enc.Encode(fv.Interface())
+					row = append(row, strings.TrimSpace(buf.String()))
+				} else {
+					row = append(row, fmt.Sprintf("%v", elem))
+				}
 			}
 		} else if fv.Kind() == reflect.Slice {
 			parts := make([]string, fv.Len())
