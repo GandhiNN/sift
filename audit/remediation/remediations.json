@@ -122,6 +122,12 @@
         "command": "aws s3api put-bucket-lifecycle-configuration --bucket {{.ResourceID}} --lifecycle-configuration file://lifecycle.json",
         "confidence": "HIGH",
         "action_risk": "LOW"
+      },
+      "read_activity": {
+        "action": "Enable S3 request metrics to track read activity",
+        "command": "aws s3api put-bucket-metrics-configuration --bucket {{.ResourceID}} --id EntireBucket --metrics-configuration Id=EntireBucket",
+        "confidence": "HIGH",
+        "action_risk": "LOW"
       }
     },
     "secrets_manager": {
