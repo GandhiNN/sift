@@ -98,6 +98,19 @@ Available services: `glue`
 
 Available checks for `glue`: `table_versions`, `crawlers`, `job_versions`
 
+#### List
+
+List AWS resources with metadata for inventory and discovery.
+
+```bash
+# List all Glue resources
+sift list glue --profile icloud-dev
+
+# List specific resource types
+sift list glue jobs --profile icloud-dev
+sift list glue crawlers --profile icloud-dev --format csv -o crawlers.csv
+```
+
 #### Triage
 
 Deep investigation of EC2 instances — combines security posture, IAM role analysis, VPC flow log queries, and baseline checks (CloudTrail/GuardDuty) to detect outbound connections to public IPs.
