@@ -162,6 +162,12 @@
         "command": "aws dms modify-replication-instance --replication-instance-identifier {{.ResourceID}} --replication-instance-class <current-gen>",
         "confidence": "LOW",
         "action_risk": "MEDIUM"
+      },
+      "multi_az": {
+        "action": "Disable Multi-AZ if HA is not required",
+        "command": "aws dms modify-replication-instance --replication-instance-identifier {{.ResourceID}} --no-multi-az",
+        "confidence": "LOW",
+        "action_risk": "MEDIUM"
       }
     },
     "lambda": {
