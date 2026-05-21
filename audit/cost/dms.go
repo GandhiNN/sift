@@ -167,14 +167,20 @@ func AuditDMSCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 					Service:    "dms",
 					ResourceID: d.id,
 					Check:      "multi_az",
-					Status:     "INFO",
+					Status:     "WARN",
 					Detail: fmt.Sprintf(
 						"class=%s, Multi-AZ enabled (2x instance cost)",
 						d.class,
 					),
 					RiskLevel:            "LOW",
 					EstimatedMonthlyCost: pricing.DMSMonthly(d.class),
-					Remediation:          nil,
+					Remediation: remediation.Recommend(
+						"cost",
+						"dms",
+						"multi_a",
+						d.id,
+						"Multi-AZ enabled, 2x cost",
+					),
 				})
 			}
 

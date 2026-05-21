@@ -12,6 +12,12 @@
         "command": "aws ec2 modify-instance-attribute --instance-id {{.ResourceID}} --instance-type <new-type>",
         "confidence": "LOW",
         "action_risk": "MEDIUM"
+      },
+      "multi_az": {
+        "action": "Disable Multi-AZ if HA is not required",
+        "command": "aws dms modify-replication-instance --replication-instance-identifier {{.ResourceID}} --no-multi-az",
+        "confidence": "LOW",
+        "action_risk": "MEDIUM"
       }
     },
     "eip": {
