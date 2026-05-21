@@ -18,21 +18,17 @@ import (
 )
 
 var (
-	profile         string
-	format          string
-	riskLevel       string
-	region          string
-	verbose         bool
-	quiet           bool
-	outputFile      string
-	unusedDays      int
-	minBackupDays   int
-	cpuIdlePercent  float64
-	snapshotAgeDays int
-	concurrency     int
-	sortBy          string
-	noSave          bool
-	diff            bool
+	profile     string
+	format      string
+	riskLevel   string
+	region      string
+	verbose     bool
+	quiet       bool
+	outputFile  string
+	concurrency int
+	sortBy      string
+	noSave      bool
+	diff        bool
 )
 
 var rootCmd = &cobra.Command{
@@ -63,18 +59,6 @@ func init() {
 	rootCmd.PersistentFlags().BoolVar(&quiet, "quiet", false, "Supress progress bars")
 	rootCmd.PersistentFlags().
 		StringVarP(&outputFile, "output", "o", "", "Write results to file instead of stdout")
-	rootCmd.PersistentFlags().
-		IntVar(&unusedDays, "unused-days", 90, "Days before a resource is considered unused")
-	rootCmd.PersistentFlags().
-		IntVar(&minBackupDays, "min-backup-days", 7, "Minimum backup retention days")
-	rootCmd.PersistentFlags().
-		Float64Var(&cpuIdlePercent, "cpu-idle-percent", 10, "CPU% below which an instance is considered oversized")
-	rootCmd.PersistentFlags().IntVar(
-		&snapshotAgeDays,
-		"snapshot-age-days",
-		90,
-		"Days before a snapshot is considered old",
-	)
 	rootCmd.PersistentFlags().
 		IntVar(&concurrency, "concurrency", 10, "Max parallel AWS API calls per service")
 	rootCmd.PersistentFlags().
@@ -125,22 +109,9 @@ func buildAWSConfig() (context.Context, aws.Config, context.CancelFunc, error) {
 
 	// Load from config file, then let CLI flags override
 	t := audit.LoadThresholds()
-	if rootCmd.PersistentFlags().Changed("unused-days") {
-		t.UnusedDays = unusedDays
-	}
-	if rootCmd.PersistentFlags().Changed("min-backup-days") {
-		t.MinBackupDays = minBackupDays
-	}
-	if rootCmd.PersistentFlags().Changed("cpu-idle-percent") {
-		t.CPUIdlePercent = cpuIdlePercent
-	}
-	if rootCmd.PersistentFlags().Changed("snapshot-age-days") {
-		t.SnapshotAgeDays = snapshotAgeDays
-	}
 	if rootCmd.PersistentFlags().Changed("concurrency") {
 		t.Concurrency = concurrency
 	}
-	t.RotationMaxDays = t.UnusedDays
 	ctx = audit.WithThresholds(ctx, t)
 	cfg, err := config.BuildConfig(ctx, profile)
 	if err != nil {
