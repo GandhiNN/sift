@@ -56,7 +56,7 @@ func init() {
 	rootCmd.PersistentFlags().
 		StringVar(&region, "region", "", "AWS region(s), comma-separated or 'all' (default: profile region)")
 	rootCmd.PersistentFlags().BoolVar(&verbose, "verbose", false, "Show detailed log output")
-	rootCmd.PersistentFlags().BoolVar(&quiet, "quiet", false, "Supress progress bars")
+	rootCmd.PersistentFlags().BoolVar(&quiet, "quiet", false, "Suppress progress bars")
 	rootCmd.PersistentFlags().
 		StringVarP(&outputFile, "output", "o", "", "Write results to file instead of stdout")
 	rootCmd.PersistentFlags().
