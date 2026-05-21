@@ -114,6 +114,13 @@ func AuditLambdaCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, erro
 					),
 					RiskLevel:            "LOW",
 					EstimatedMonthlyCost: 0,
+					Remediation: remediation.Recommend(
+						"cost",
+						"lambda",
+						"unused_function",
+						f.name,
+						"zero invocations in last 30 days",
+					),
 				})
 			}
 

@@ -167,6 +167,13 @@ func AuditS3Cost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) {
 					Detail:               "request metrics not enabled - unable to determine read activity",
 					RiskLevel:            "LOW",
 					EstimatedMonthlyCost: monthlyCost,
+					Remediation: remediation.Recommend(
+						"cost",
+						"s3",
+						"read_activity",
+						bucket.name,
+						"request metrics not enabled",
+					),
 				})
 				mu.Unlock()
 				return

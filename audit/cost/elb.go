@@ -209,6 +209,13 @@ func AuditELBCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 					),
 					RiskLevel:            "HIGH",
 					EstimatedMonthlyCost: pricing.ELBMonthly(e.lbType),
+					Remediation: remediation.Recommend(
+						"cost",
+						"elb",
+						"idle_lb",
+						e.name,
+						"zero traffic over 30 days",
+					),
 				})
 				mu.Unlock()
 			} else {
