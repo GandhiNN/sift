@@ -64,6 +64,20 @@
         "action_risk": "MEDIUM"
       }
     },
+    "docdb": {
+      "stopped_instance": {
+        "action": "Delete stopped cluster if unused",
+        "command": "aws docdb delete-db-instance --db-instance-identifier {{.ResourceID}}",
+        "confidence": "HIGH",
+        "action_risk": "HIGH"
+      },
+      "oversized_instance": {
+        "action": "Downsize to smaller instance class",
+        "command": "aws docdb modify-db-instance --db-instance-identifier {{.ResourceID}} --db-instance-class <smaller>",
+        "confidence": "MEDIUM",
+        "action_risk": "MEDIUM"
+      }
+    },
     "elb": {
       "idle_lb": {
         "action": "Delete idle load balancer",

@@ -3,6 +3,7 @@ package cost
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -61,9 +62,14 @@ func AuditRDSCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 	for _, db := range allDBs {
 		r := parseRDSCostInstance(db)
 
+		svc := "rds"
+		if strings.HasPrefix(r.engine, "docdb") {
+			svc = "docdb"
+		}
+
 		if r.status == "stopped" {
 			findings = append(findings, audit.Finding{
-				Service:    "rds",
+				Service:    svc,
 				ResourceID: r.id,
 				Tags:       r.tags,
 				Check:      "stopped_instance",
@@ -74,6 +80,13 @@ func AuditRDSCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 				),
 				RiskLevel:            "MEDIUM",
 				EstimatedMonthlyCost: pricing.RDSMonthly(r.class),
+				Remediation: remediation.Recommend(
+					"cost",
+					svc,
+					"stopped_instance",
+					r.id,
+					"instance in stopped state",
+				),
 			})
 			continue
 		}
@@ -83,15 +96,15 @@ func AuditRDSCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 		}
 
 		wg.Add(1)
-		go func(r rdsCostInstance) {
+		go func(r rdsCostInstance, svc string) {
 			defer wg.Done()
 			sem <- struct{}{}
 			defer func() { <-sem }()
 
-			avgCPU, err := getAvgCPU(ctx, cwClient, r.id)
+			avgCPU, err := getAvgCPU(ctx, cwClient, r.id, r.engine)
 			if err != nil {
 				mu.Lock()
-				findings = append(findings, audit.ErrorFinding("rds", r.id, "check_cpu", err))
+				findings = append(findings, audit.ErrorFinding(svc, r.id, "check_cpu", err))
 				mu.Unlock()
 				return
 			}
@@ -100,7 +113,7 @@ func AuditRDSCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 				GetFloat("rds", "cpu_idle_percent", t.CPUIdlePercent) {
 				mu.Lock()
 				findings = append(findings, audit.Finding{
-					Service:    "rds",
+					Service:    svc,
 					ResourceID: r.id,
 					Tags:       r.tags, Check: "oversized_instance",
 					Status: "WARN",
@@ -114,7 +127,7 @@ func AuditRDSCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 					EstimatedMonthlyCost: pricing.RDSMonthly(r.class),
 					Remediation: remediation.Recommend(
 						"cost",
-						"rds",
+						svc,
 						"oversized_instance",
 						r.id,
 						fmt.Sprintf("avg CPU %.1f%%", avgCPU),
@@ -124,7 +137,7 @@ func AuditRDSCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 			} else {
 				mu.Lock()
 				findings = append(findings, audit.Finding{
-					Service:    "rds",
+					Service:    svc,
 					ResourceID: r.id,
 					Tags:       r.tags,
 					Check:      "oversized_instance",
@@ -141,19 +154,28 @@ func AuditRDSCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 				})
 				mu.Unlock()
 			}
-		}(r)
+		}(r, svc)
 	}
 	wg.Wait()
 	return findings, nil
 }
 
-func getAvgCPU(ctx context.Context, client *cloudwatch.Client, dbID string) (float64, error) {
+func getAvgCPU(
+	ctx context.Context,
+	client *cloudwatch.Client,
+	dbID, engine string,
+) (float64, error) {
 	end := time.Now()
 	lookbackDays := audit.GetThresholds(ctx).GetInt("rds", "cpu_lookback_days", 7)
 	start := end.AddDate(0, 0, -lookbackDays)
 
+	namespace := "AWS/RDS"
+	if strings.HasPrefix(engine, "docdb") {
+		namespace = "AWS/DocDB"
+	}
+
 	resp, err := client.GetMetricStatistics(ctx, &cloudwatch.GetMetricStatisticsInput{
-		Namespace:  aws.String("AWS/RDS"),
+		Namespace:  aws.String(namespace),
 		MetricName: aws.String("CPUUtilization"),
 		Dimensions: []cwtypes.Dimension{{
 			Name:  aws.String("DBInstanceIdentifier"),
