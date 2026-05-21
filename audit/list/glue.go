@@ -52,6 +52,19 @@ func ListGlueJobs(ctx context.Context, cfg aws.Config) ([]audit.Resource, error)
 			if job.LastModifiedOn != nil {
 				props["modified"] = job.LastModifiedOn.Format("2006-01-02")
 			}
+
+			runsResp, err := client.GetJobRuns(ctx, &glue.GetJobRunsInput{
+				JobName:    job.Name,
+				MaxResults: aws.Int32(1),
+			})
+			if err == nil && len(runsResp.JobRuns) > 0 {
+				lastRun := runsResp.JobRuns[0]
+				if lastRun.StartedOn != nil {
+					props["last_run_time"] = lastRun.StartedOn.Format("2006-01-02")
+				}
+				props["last_run_status"] = string(lastRun.JobRunState)
+			}
+
 			r := audit.Resource{
 				Service:    "glue",
 				ResourceID: aws.ToString(job.Name),

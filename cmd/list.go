@@ -3,7 +3,6 @@ package cmd
 import (
 	"fmt"
 	"os"
-	"strings"
 	"time"
 
 	"sift/audit"
@@ -13,14 +12,15 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var (
-	listService  string
-	listResource string
-)
-
 var listCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List AWS resources with metadata",
+}
+
+var listGlueCmd = &cobra.Command{
+	Use:   "glue [resource]",
+	Short: "List Glue resources (jobs, crawlers)",
+	Args:  cobra.MaximumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		start := time.Now()
 		ctx, cfg, cancel, err := buildAWSConfig()
@@ -34,30 +34,43 @@ var listCmd = &cobra.Command{
 			ctx = progress.WithQuiet(ctx, true)
 		}
 
-		if listService == "" || listResource == "" {
-			fmt.Fprintln(os.Stderr, "Error: --service and --resource are required")
-			os.Exit(2)
-		}
+		var resources []audit.Resource
 
-		key := listService + "/" + listResource
-		fn, ok := list.Registry[key]
-		if !ok {
-			var available []string
-			for k := range list.Registry {
-				available = append(available, k)
+		switch {
+		case len(args) == 0:
+			// List all
+			jobs, err := list.ListGlueJobs(ctx, cfg)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+				os.Exit(2)
 			}
+			resources = append(resources, jobs...)
+			crawlers, err := list.ListGlueCrawlers(ctx, cfg)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+				os.Exit(2)
+			}
+			resources = append(resources, crawlers...)
+		case args[0] == "jobs":
+			var err error
+			resources, err = list.ListGlueJobs(ctx, cfg)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+				os.Exit(2)
+			}
+		case args[0] == "crawlers":
+			var err error
+			resources, err = list.ListGlueCrawlers(ctx, cfg)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+				os.Exit(2)
+			}
+		default:
 			fmt.Fprintf(
 				os.Stderr,
-				"Error: unknown resource %q. Available: %s\n",
-				key,
-				strings.Join(available, ", "),
+				"Error: unknown resource %q (available: jobs, crawlers)\n",
+				args[0],
 			)
-			os.Exit(2)
-		}
-
-		resources, err := fn(ctx, cfg)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(2)
 		}
 
@@ -73,8 +86,6 @@ var listCmd = &cobra.Command{
 }
 
 func init() {
-	listCmd.Flags().StringVar(&listService, "service", "", "Service to list (e.g. glue)")
-	listCmd.Flags().
-		StringVar(&listResource, "resource", "", "Resource type to list (e.g. jobs, crawlers)")
+	listCmd.AddCommand(listGlueCmd)
 	rootCmd.AddCommand(listCmd)
 }
