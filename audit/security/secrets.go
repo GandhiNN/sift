@@ -7,6 +7,7 @@ import (
 
 	"sift/audit"
 	"sift/audit/progress"
+	"sift/audit/remediation"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/secretsmanager"
@@ -70,14 +71,26 @@ func AuditSecrets(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 			detail += ", never_rotated=true"
 		}
 
+		var rem *audit.Remediation
+		if risk != "MINIMAL" {
+			rem = remediation.Recommend(
+				"security",
+				"secrets_manager",
+				"secret_rotation",
+				s.name,
+				detail,
+			)
+		}
+
 		findings = append(findings, audit.Finding{
-			Service:    "secrets_manager",
-			ResourceID: s.name,
-			Tags:       s.tags,
-			Check:      "secret_rotation",
-			Status:     statusFromRisk(risk),
-			Detail:     detail,
-			RiskLevel:  risk,
+			Service:     "secrets_manager",
+			ResourceID:  s.name,
+			Tags:        s.tags,
+			Check:       "secret_rotation",
+			Status:      statusFromRisk(risk),
+			Detail:      detail,
+			RiskLevel:   risk,
+			Remediation: rem,
 		})
 		bar.Add(1)
 	}

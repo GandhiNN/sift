@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"sift/audit"
 	"sift/audit/progress"
+	"sift/audit/remediation"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/redshift"
@@ -78,17 +79,31 @@ func AuditRedshift(ctx context.Context, cfg aws.Config) ([]audit.Finding, error)
 		entries := parseRedshiftSecurityEntry(ctx, client, page)
 		for _, e := range entries {
 			risk := redshiftRisk(e.publiclyAccessible, e.encrypted, e.loggingEnabled)
+			detail := fmt.Sprintf(
+				"publicly_accessible=%t, encrypted=%t, logging=%t",
+				e.publiclyAccessible, e.encrypted, e.loggingEnabled,
+			)
+
+			var rem *audit.Remediation
+			if risk != "MINIMAL" {
+				rem = remediation.Recommend(
+					"security",
+					"redshift",
+					"redshift_security",
+					e.id,
+					detail,
+				)
+			}
+
 			findings = append(findings, audit.Finding{
-				Service:    "redshift",
-				ResourceID: e.id,
-				Tags:       e.tags,
-				Check:      "redshift_security",
-				Status:     statusFromRisk(risk),
-				Detail: fmt.Sprintf(
-					"publicly_accessible=%t, encrypted=%t, logging=%t",
-					e.publiclyAccessible, e.encrypted, e.loggingEnabled,
-				),
-				RiskLevel: risk,
+				Service:     "redshift",
+				ResourceID:  e.id,
+				Tags:        e.tags,
+				Check:       "redshift_security",
+				Status:      statusFromRisk(risk),
+				Detail:      detail,
+				RiskLevel:   risk,
+				Remediation: rem,
 			})
 		}
 		bar.Add(len(entries))

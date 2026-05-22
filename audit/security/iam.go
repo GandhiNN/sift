@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"sift/audit"
+	"sift/audit/remediation"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/iam"
@@ -205,25 +206,41 @@ func AuditIAMHygiene(ctx context.Context, cfg aws.Config) ([]audit.Finding, erro
 				continue
 			}
 			if role.RoleLastUsed == nil || role.RoleLastUsed.LastUsedDate == nil {
+				detail := "role has never been used"
 				findings = append(findings, audit.Finding{
 					Service:    "iam",
 					ResourceID: name,
 					Check:      "unused_role",
 					Status:     "FAIL",
-					Detail:     "role has never been used",
+					Detail:     detail,
 					RiskLevel:  "MEDIUM",
+					Remediation: remediation.Recommend(
+						"security",
+						"iam",
+						"unused_role",
+						name,
+						detail,
+					),
 				})
 				continue
 			}
 			daysSince := int(time.Since(*role.RoleLastUsed.LastUsedDate).Hours() / 24)
 			if daysSince > audit.GetThresholds(ctx).UnusedDays {
+				detail := fmt.Sprintf("last used %d days ago", daysSince)
 				findings = append(findings, audit.Finding{
 					Service:    "iam",
 					ResourceID: name,
 					Check:      "unused_role",
 					Status:     "FAIL",
-					Detail:     fmt.Sprintf("last used %d days ago", daysSince),
+					Detail:     detail,
 					RiskLevel:  "MEDIUM",
+					Remediation: remediation.Recommend(
+						"security",
+						"iam",
+						"unused_role",
+						name,
+						detail,
+					),
 				})
 			}
 		}
@@ -274,24 +291,34 @@ func AuditIAMHygiene(ctx context.Context, cfg aws.Config) ([]audit.Finding, erro
 				var finding *audit.Finding
 				if lastUsed.AccessKeyLastUsed == nil ||
 					lastUsed.AccessKeyLastUsed.LastUsedDate == nil {
+					detail := "active access key has never been used"
 					finding = &audit.Finding{
 						Service:    "iam",
 						ResourceID: keyName,
 						Check:      "unused_access_key",
 						Status:     "FAIL",
-						Detail:     "active access key has never been used",
+						Detail:     detail,
 						RiskLevel:  "HIGH",
+						Remediation: remediation.Recommend(
+							"security",
+							"iam",
+							"unused_access_key",
+							keyName,
+							detail,
+						),
 					}
 				} else {
 					daysSince := int(time.Since(*lastUsed.AccessKeyLastUsed.LastUsedDate).Hours() / 24)
 					if daysSince > audit.GetThresholds(ctx).UnusedDays {
+						detail := fmt.Sprintf("last used %d days ago", daysSince)
 						finding = &audit.Finding{
-							Service:    "iam",
-							ResourceID: keyName,
-							Check:      "unused_access_key",
-							Status:     "FAIL",
-							Detail:     fmt.Sprintf("last used %d days ago", daysSince),
-							RiskLevel:  "HIGH",
+							Service:     "iam",
+							ResourceID:  keyName,
+							Check:       "unused_access_key",
+							Status:      "FAIL",
+							Detail:      detail,
+							RiskLevel:   "HIGH",
+							Remediation: remediation.Recommend("security", "iam", "unused_access_key", keyName, detail),
 						}
 					}
 				}
