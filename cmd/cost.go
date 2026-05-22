@@ -24,6 +24,7 @@ var validCostServices = map[string]bool{
 	"dms":        true,
 	"elb":        true,
 	"sagemaker":  true,
+	"redshift":   true,
 }
 
 var costCmd = &cobra.Command{
@@ -37,6 +38,6 @@ var costCmd = &cobra.Command{
 
 func init() {
 	costCmd.Flags().
-		StringVar(&costServices, "service", "", "comma-separated services to audit (ec2,ebs,rds,s3,eks,network,cloudwatch,ecr,secrets,glue,lambda,dynamodb,dms). Default: all")
+		StringVar(&costServices, "service", "", "comma-separated services to audit (ec2,ebs,rds,s3,eks,network,cloudwatch,ecr,secrets,glue,lambda,dynamodb,dms,elb,sagemaker,redshift). Default: all")
 	rootCmd.AddCommand(costCmd)
 }

@@ -48,6 +48,7 @@ func Audit(ctx context.Context, cfg aws.Config, services []string) ([]audit.Find
 		{"dms", AuditDMSCost},
 		{"elb", AuditELBCost},
 		{"sagemaker", AuditSagemakerCost},
+		{"redshift", AuditRedshiftCost},
 	}
 
 	var checks []struct {
