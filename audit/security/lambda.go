@@ -8,6 +8,7 @@ import (
 
 	"sift/audit"
 	"sift/audit/progress"
+	"sift/audit/remediation"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/lambda"
@@ -94,18 +95,26 @@ func AuditLambda(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) {
 					risk = "CRITICAL"
 				}
 				mu.Lock()
+				detail := fmt.Sprintf(
+					"url=%s, auth=%s",
+					aws.ToString(urlResp.FunctionUrl),
+					authType,
+				)
 				findings = append(findings, audit.Finding{
 					Service:    "lambda",
 					ResourceID: f.name,
 					Tags:       f.tags,
 					Check:      "public_function_url",
 					Status:     "FAIL",
-					Detail: fmt.Sprintf(
-						"url=%s, auth=%s",
-						aws.ToString(urlResp.FunctionUrl),
-						authType,
+					Detail:     detail,
+					RiskLevel:  risk,
+					Remediation: remediation.Recommend(
+						"security",
+						"lambda",
+						"lambda_security",
+						f.name,
+						detail,
 					),
-					RiskLevel: risk,
 				})
 				mu.Unlock()
 			}
@@ -114,17 +123,25 @@ func AuditLambda(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) {
 			if deprecatedRuntimes[f.runtime] {
 				hasIssue = true
 				mu.Lock()
+				detail := fmt.Sprintf(
+					"runtime=%s, no longer receives security patches",
+					f.runtime,
+				)
 				findings = append(findings, audit.Finding{
 					Service:    "lambda",
 					ResourceID: f.name,
 					Tags:       f.tags,
 					Check:      "deprecated_runtime",
 					Status:     "FAIL",
-					Detail: fmt.Sprintf(
-						"runtime=%s, no longer receives security patches",
-						f.runtime,
+					Detail:     detail,
+					RiskLevel:  "HIGH",
+					Remediation: remediation.Recommend(
+						"security",
+						"lambda",
+						"lambda_security",
+						f.name,
+						detail,
 					),
-					RiskLevel: "HIGH",
 				})
 				mu.Unlock()
 			}
@@ -141,7 +158,8 @@ func AuditLambda(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) {
 						"runtime=%s, no public URL, supported runtime",
 						f.runtime,
 					),
-					RiskLevel: "MINIMAL",
+					RiskLevel:   "MINIMAL",
+					Remediation: nil,
 				})
 				mu.Unlock()
 			}

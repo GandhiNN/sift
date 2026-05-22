@@ -7,6 +7,7 @@ import (
 
 	"sift/audit"
 	"sift/audit/progress"
+	"sift/audit/remediation"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/rds"
@@ -82,23 +83,31 @@ func AuditRDS(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) {
 				t.MinBackupDays,
 			)
 
+			detail := fmt.Sprintf(
+				"engine=%s, public=%t, encrypted=%t, multi_az=%t, backup_days=%d, delete_protection=%t, auto_upgrade=%t",
+				inst.engine,
+				inst.public,
+				inst.encrypted,
+				inst.multiAZ,
+				inst.backup,
+				inst.delProtect,
+				inst.autoUpgrade,
+			)
+
+			var rem *audit.Remediation
+			if risk != "MINIMAL" {
+				rem = remediation.Recommend("security", "rds", "rds_security", inst.id, detail)
+			}
+
 			results[i] = audit.Finding{
-				Service:    "rds",
-				ResourceID: inst.id,
-				Tags:       inst.tags,
-				Check:      "instance_security",
-				Status:     statusFromRisk(risk),
-				Detail: fmt.Sprintf(
-					"engine=%s, public=%t, encrypted=%t, multi_az=%t, backup_days=%d, delete_protection=%t, auto_upgrade=%t",
-					inst.engine,
-					inst.public,
-					inst.encrypted,
-					inst.multiAZ,
-					inst.backup,
-					inst.delProtect,
-					inst.autoUpgrade,
-				),
-				RiskLevel: risk,
+				Service:     "rds",
+				ResourceID:  inst.id,
+				Tags:        inst.tags,
+				Check:       "instance_security",
+				Status:      statusFromRisk(risk),
+				Detail:      detail,
+				RiskLevel:   risk,
+				Remediation: rem,
 			}
 			bar.Add(1)
 		}(i, db)

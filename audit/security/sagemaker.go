@@ -8,6 +8,7 @@ import (
 
 	"sift/audit"
 	"sift/audit/progress"
+	"sift/audit/remediation"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/ec2"
@@ -111,19 +112,34 @@ func AuditSagemaker(ctx context.Context, cfg aws.Config) ([]audit.Finding, error
 		default:
 			risk = "MINIMAL"
 		}
+
+		detail := fmt.Sprintf(
+			"status=%s, direct_internet=%t, public_subnet=%t, sg_open=%t",
+			nb.status,
+			nb.directInternetAccess,
+			publicSubnet,
+			sgOpen,
+		)
+
+		var rem *audit.Remediation
+		if risk != "MINIMAL" {
+			rem = remediation.Recommend(
+				"security",
+				"sagemaker",
+				"notebook_exposure",
+				nb.name,
+				detail,
+			)
+		}
+
 		findings = append(findings, audit.Finding{
-			Service:    "sagemaker",
-			ResourceID: nb.name,
-			Check:      "notebook_exposure",
-			Status:     statusFromRisk(risk),
-			Detail: fmt.Sprintf(
-				"status=%s, direct_internet=%t, public_subnet=%t, sg_open=%t",
-				nb.status,
-				nb.directInternetAccess,
-				publicSubnet,
-				sgOpen,
-			),
-			RiskLevel: risk,
+			Service:     "sagemaker",
+			ResourceID:  nb.name,
+			Check:       "notebook_exposure",
+			Status:      statusFromRisk(risk),
+			Detail:      detail,
+			RiskLevel:   risk,
+			Remediation: rem,
 		})
 		bar.Add(1)
 	}

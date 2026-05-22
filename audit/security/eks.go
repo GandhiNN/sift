@@ -8,6 +8,7 @@ import (
 
 	"sift/audit"
 	"sift/audit/progress"
+	"sift/audit/remediation"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/eks"
@@ -109,15 +110,22 @@ func AuditEKS(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) {
 			if len(c.logDisabled) > 0 {
 				detail += fmt.Sprintf(", logging_disabled=%s", strings.Join(c.logDisabled, ";"))
 			}
+
+			var rem *audit.Remediation
+			if risk != "MINIMAL" {
+				rem = remediation.Recommend("security", "eks", "eks_security", c.name, detail)
+			}
+
 			mu.Lock()
 			results = append(results, audit.Finding{
-				Service:    "eks",
-				ResourceID: c.name,
-				Tags:       c.tags,
-				Check:      "cluster_security",
-				Status:     statusFromRisk(risk),
-				Detail:     detail,
-				RiskLevel:  risk,
+				Service:     "eks",
+				ResourceID:  c.name,
+				Tags:        c.tags,
+				Check:       "cluster_security",
+				Status:      statusFromRisk(risk),
+				Detail:      detail,
+				RiskLevel:   risk,
+				Remediation: rem,
 			})
 			mu.Unlock()
 		}(name)
