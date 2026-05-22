@@ -6,6 +6,7 @@ import (
 	"sync"
 
 	"sift/audit"
+	"sift/audit/remediation"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/glue"
@@ -53,17 +54,25 @@ func AuditGlue(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) {
 
 		risk := glueCatalogRisk(catalogEncrypted, connEncrypted)
 
+		detail := fmt.Sprintf(
+			"catalog_encrypted=%t, connection_password_encrypted=%t",
+			catalogEncrypted,
+			connEncrypted,
+		)
+
+		var rem *audit.Remediation
+		if risk != "MINIMAL" {
+			rem = remediation.Recommend("security", "glue", "glue_security", "data_catalog", detail)
+		}
+
 		findings = append(findings, audit.Finding{
-			Service:    "glue",
-			ResourceID: "data_catalog",
-			Check:      "catalog_encryption",
-			Status:     statusFromRisk(risk),
-			Detail: fmt.Sprintf(
-				"catalog_encrypted=%t, connection_password_encrypted=%t",
-				catalogEncrypted,
-				connEncrypted,
-			),
-			RiskLevel: risk,
+			Service:     "glue",
+			ResourceID:  "data_catalog",
+			Check:       "catalog_encryption",
+			Status:      statusFromRisk(risk),
+			Detail:      detail,
+			RiskLevel:   risk,
+			Remediation: rem,
 		})
 	}
 
@@ -100,18 +109,27 @@ func AuditGlue(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) {
 				risk = "LOW"
 			}
 			mu.Lock()
+
+			detail := fmt.Sprintf(
+				"security_config=%t, role=%s",
+				g.encrypted,
+				g.role,
+			)
+
+			var rem *audit.Remediation
+			if risk != "MINIMAL" {
+				rem = remediation.Recommend("security", "glue", "glue_security", g.name, detail)
+			}
+
 			findings = append(findings, audit.Finding{
-				Service:    "glue",
-				ResourceID: g.name,
-				Tags:       g.tags,
-				Check:      "job_security",
-				Status:     statusFromRisk(risk),
-				Detail: fmt.Sprintf(
-					"security_config=%t, role=%s",
-					g.encrypted,
-					g.role,
-				),
-				RiskLevel: risk,
+				Service:     "glue",
+				ResourceID:  g.name,
+				Tags:        g.tags,
+				Check:       "job_security",
+				Status:      statusFromRisk(risk),
+				Detail:      detail,
+				RiskLevel:   risk,
+				Remediation: rem,
 			})
 			mu.Unlock()
 		}(job)
@@ -123,16 +141,24 @@ func AuditGlue(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) {
 	if err == nil {
 		for _, ep := range devResp.DevEndpoints {
 			name := aws.ToString(ep.EndpointName)
+			detail := fmt.Sprintf(
+				"status=%s, dev endpoints are deprecated and a security risk",
+				aws.ToString(ep.Status),
+			)
 			findings = append(findings, audit.Finding{
 				Service:    "glue",
 				ResourceID: name,
 				Check:      "dev_endpoint",
 				Status:     "FAIL",
-				Detail: fmt.Sprintf(
-					"status=%s, dev endpoints are deprecated and a security risk",
-					aws.ToString(ep.Status),
+				Detail:     detail,
+				RiskLevel:  "HIGH",
+				Remediation: remediation.Recommend(
+					"security",
+					"glue",
+					"glue_security",
+					name,
+					"dev endpoints are deprecated",
 				),
-				RiskLevel: "HIGH",
 			})
 		}
 	}
