@@ -212,6 +212,20 @@
         "action_risk": "HIGH"
       }
     },
+    "redshift": {
+      "idle_cluster": {
+        "action": "Delete idle Redshift cluster or pause it",
+        "command": "aws redshift pause-cluster --cluster-identifier {{.ResourceID}}",
+        "confidence": "MEDIUM",
+        "action_risk": "MEDIUM"
+      },
+      "oversized_cluster": {
+        "action": "Resize cluster to fewer/smaller nodes",
+        "command": "aws redshift resize-cluster --cluster-identifier {{.ResourceID}} --node-type <smaller> --number-of-nodes <fewer>",
+        "confidence": "MEDIUM",
+        "action_risk": "MEDIUM"
+      }
+    },
     "dynamodb": {
       "provisioned_mode": {
         "action": "Switch to on-demand billing if traffic is unpredictable",
