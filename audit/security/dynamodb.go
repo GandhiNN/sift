@@ -7,6 +7,7 @@ import (
 
 	"sift/audit"
 	"sift/audit/progress"
+	"sift/audit/remediation"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
@@ -102,14 +103,27 @@ func AuditDynamoDB(ctx context.Context, cfg aws.Config) ([]audit.Finding, error)
 			}
 
 			risk, detail := dynamoDBRisk(t.encrypted, t.pitr, t.deletionProtection)
+
+			var rem *audit.Remediation
+			if risk != "MINIMAL" {
+				rem = remediation.Recommend(
+					"security",
+					"dynamodb",
+					"dynamodb_security",
+					t.name,
+					detail,
+				)
+			}
+
 			results[i] = audit.Finding{
-				Service:    "dynamodb",
-				ResourceID: t.name,
-				Tags:       t.tags,
-				Check:      "table_posture",
-				Status:     statusFromRisk(risk),
-				Detail:     detail,
-				RiskLevel:  risk,
+				Service:     "dynamodb",
+				ResourceID:  t.name,
+				Tags:        t.tags,
+				Check:       "table_posture",
+				Status:      statusFromRisk(risk),
+				Detail:      detail,
+				RiskLevel:   risk,
+				Remediation: rem,
 			}
 			bar.Add(1)
 		}(i, name)

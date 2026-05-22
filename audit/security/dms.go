@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"sift/audit"
 	"sift/audit/progress"
+	"sift/audit/remediation"
 	"sync"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -78,6 +79,21 @@ func AuditDMS(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) {
 			d := parseDMSSecurityEntry(inst)
 			risk := dmsRisk(d.publiclyAccessible, d.encrypted)
 
+			var rem *audit.Remediation
+			if risk != "MINIMAL" {
+				rem = remediation.Recommend(
+					"security",
+					"dms",
+					"dms_security",
+					d.id,
+					fmt.Sprintf(
+						"publicly_accessible=%t, encrypted=%t",
+						d.publiclyAccessible,
+						d.encrypted,
+					),
+				)
+			}
+
 			detail := fmt.Sprintf(
 				"publicly_accessible=%t, encrypted=%t, multi_az=%t",
 				d.publiclyAccessible,
@@ -86,12 +102,13 @@ func AuditDMS(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) {
 			)
 
 			results[i] = audit.Finding{
-				Service:    "dms",
-				ResourceID: d.id,
-				Check:      "dms_security",
-				Status:     statusFromRisk(risk),
-				Detail:     detail,
-				RiskLevel:  risk,
+				Service:     "dms",
+				ResourceID:  d.id,
+				Check:       "dms_security",
+				Status:      statusFromRisk(risk),
+				Detail:      detail,
+				RiskLevel:   risk,
+				Remediation: rem,
 			}
 			bar.Add(1)
 		}(i, inst)

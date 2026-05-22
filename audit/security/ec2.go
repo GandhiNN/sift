@@ -6,6 +6,7 @@ import (
 
 	"sift/audit"
 	"sift/audit/progress"
+	"sift/audit/remediation"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/ec2"
@@ -39,14 +40,22 @@ func AuditEC2(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) {
 		if inst.roleARN != nil {
 			detail += fmt.Sprintf(", role=%s", *inst.roleARN)
 		}
+
+		// Compute remediation recommendation
+		var rem *audit.Remediation
+		if risk != "MINIMAL" {
+			rem = remediation.Recommend("security", "ec2", "ec2_posture", inst.instanceID, detail)
+		}
+
 		findings = append(findings, audit.Finding{
-			Service:    "ec2",
-			ResourceID: inst.instanceID,
-			Tags:       inst.tags,
-			Check:      "instance_exposure",
-			Status:     statusFromRisk(risk),
-			Detail:     detail,
-			RiskLevel:  risk,
+			Service:     "ec2",
+			ResourceID:  inst.instanceID,
+			Tags:        inst.tags,
+			Check:       "instance_exposure",
+			Status:      statusFromRisk(risk),
+			Detail:      detail,
+			RiskLevel:   risk,
+			Remediation: rem,
 		})
 	}
 	return findings, nil
