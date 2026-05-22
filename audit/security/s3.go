@@ -7,6 +7,7 @@ import (
 
 	"sift/audit"
 	"sift/audit/progress"
+	"sift/audit/remediation"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/cloudtrail"
@@ -132,21 +133,35 @@ func AuditS3(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) {
 				bucket.logging,
 			)
 
+			detail := fmt.Sprintf(
+				"public_blocked=%t, encrypted=%t, versioning=%t, logging=%t, cloudtrail_data_events=%t",
+				bucket.publicBlocked,
+				bucket.encrypted,
+				bucket.versioning,
+				bucket.logging,
+				dataEventsEnabled,
+			)
+
+			var rem *audit.Remediation
+			if risk != "MINIMAL" {
+				rem = remediation.Recommend(
+					"security",
+					"s3",
+					"bucket_security",
+					bucket.name,
+					detail,
+				)
+			}
+
 			results[i] = audit.Finding{
-				Service:    "s3",
-				ResourceID: bucket.name,
-				Tags:       bucket.tags,
-				Check:      "bucket_security",
-				Status:     statusFromRisk(risk),
-				Detail: fmt.Sprintf(
-					"public_blocked=%t, encrypted=%t, versioning=%t, logging=%t, cloudtrail_data_events=%t",
-					bucket.publicBlocked,
-					bucket.encrypted,
-					bucket.versioning,
-					bucket.logging,
-					dataEventsEnabled,
-				),
-				RiskLevel: risk,
+				Service:     "s3",
+				ResourceID:  bucket.name,
+				Tags:        bucket.tags,
+				Check:       "bucket_security",
+				Status:      statusFromRisk(risk),
+				Detail:      detail,
+				RiskLevel:   risk,
+				Remediation: rem,
 			}
 			bar.Add(1)
 		}(i, *b.Name)

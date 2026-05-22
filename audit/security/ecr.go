@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"sift/audit"
 	"sift/audit/progress"
+	"sift/audit/remediation"
 	"sync"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -93,14 +94,30 @@ func AuditECR(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) {
 				e.imageTagMutable,
 			)
 
+			var rem *audit.Remediation
+			if risk != "MINIMAL" {
+				rem = remediation.Recommend(
+					"security",
+					"ecr",
+					"ecr_security",
+					e.name,
+					fmt.Sprintf(
+						"scan_on_push=%t, image_tag_mutable=%t",
+						e.scanOnPush,
+						e.imageTagMutable,
+					),
+				)
+			}
+
 			results[i] = audit.Finding{
-				Service:    "ecr",
-				ResourceID: e.name,
-				Tags:       e.tags,
-				Check:      "ecr_security",
-				Status:     statusFromRisk(risk),
-				Detail:     detail,
-				RiskLevel:  risk,
+				Service:     "ecr",
+				ResourceID:  e.name,
+				Tags:        e.tags,
+				Check:       "ecr_security",
+				Status:      statusFromRisk(risk),
+				Detail:      detail,
+				RiskLevel:   risk,
+				Remediation: rem,
 			}
 			bar.Add(1)
 		}(i, repo)
