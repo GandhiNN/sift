@@ -226,6 +226,14 @@
         "action_risk": "MEDIUM"
       }
     },
+    "stepfunctions": {
+      "unused_state_machine": {
+        "action": "Delete unused state machine",
+        "command": "aws stepfunctions delete-state-machine --state-machine-arn <arn>",
+        "confidence": "MEDIUM",
+        "action_risk": "MEDIUM"
+      }
+    },
     "dynamodb": {
       "provisioned_mode": {
         "action": "Switch to on-demand billing if traffic is unpredictable",
@@ -414,6 +422,14 @@
       "glue_security": {
         "action": "Enable catalog encryption and security configuration",
         "command": "aws glue put-data-catalog-encryption-settings --data-catalog-encryption-settings '{\"EncryptionAtRest\":{\"CatalogEncryptionMode\":\"SSE-KMS\"}}'",
+        "confidence": "HIGH",
+        "action_risk": "LOW"
+      }
+    },
+    "stepfunctions": {
+      "stepfunctions_security": {
+        "action": "Enable logging and X-Ray tracing",
+        "command": "aws stepfunctions update-state-machine --state-machine-arn <arn> --logging-configuration level=ALL,includeExecutionData=true",
         "confidence": "HIGH",
         "action_risk": "LOW"
       }
