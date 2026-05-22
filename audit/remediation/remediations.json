@@ -301,6 +301,14 @@
         "confidence": "HIGH",
         "action_risk": "LOW"
       }
+    },
+    "redshift": {
+      "redshift_security": {
+        "action": "Disable public access and enable encryption",
+        "command": "aws redshift modify-cluster --cluster-identifier {{.ResourceID}} --no-publicly-accessible --encrypted",
+        "confidence": "HIGH",
+        "action_risk": "MEDIUM"
+      }
     }
   }
 }
