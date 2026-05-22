@@ -300,6 +300,12 @@
         "command": "aws shield create-protection --name <name> --resource-arn <lb-arn>",
         "confidence": "HIGH",
         "action_risk": "LOW"
+      },
+      "lb_exposure": {
+        "action": "Restrict security group ingress or switch to internal",
+        "command": "aws ec2 revoke-security-group-ingress --group-id <sg-id> --protocol all --cidr 0.0.0.0/0",
+        "confidence": "HIGH",
+        "action_risk": "MEDIUM"
       }
     },
     "redshift": {
@@ -322,6 +328,78 @@
       "ecr_security": {
         "action": "Enable scan on push and set tag immutability",
         "command": "aws ecr put-image-scanning-configuration --repository-name {{.ResourceID}} --image-scanning-configuration scanOnPush=true",
+        "confidence": "HIGH",
+        "action_risk": "LOW"
+      }
+    },
+    "ec2": {
+      "ec2_posture": {
+        "action": "Enable IMDSv2 and restrict security group ingress",
+        "command": "aws ec2 modify-instance-metadata-options --instance-id {{.ResourceID}} --http-tokens required",
+        "confidence": "HIGH",
+        "action_risk": "LOW"
+      }
+    },
+    "s3": {
+      "bucket_security": {
+        "action": "Enable public access block and encryption",
+        "command": "aws s3api put-public-access-block --bucket {{.ResourceID}} --public-access-block-configuration BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true",
+        "confidence": "HIGH",
+        "action_risk": "LOW"
+      }
+    },
+    "rds": {
+      "rds_security": {
+        "action": "Disable public access and enable encryption",
+        "command": "aws rds modify-db-instance --db-instance-identifier {{.ResourceID}} --no-publicly-accessible",
+        "confidence": "HIGH",
+        "action_risk": "MEDIUM"
+      }
+    },
+    "eks": {
+      "eks_security": {
+        "action": "Disable public endpoint and enable secrets encryption",
+        "command": "aws eks update-cluster-config --name {{.ResourceID}} --resources-vpc-config endpointPublicAccess=false,endpointPrivateAccess=true",
+        "confidence": "HIGH",
+        "action_risk": "HIGH"
+      }
+    },
+    "sagemaker": {
+      "notebook_exposure": {
+        "action": "Disable direct internet access",
+        "command": "aws sagemaker update-notebook-instance --notebook-instance-name {{.ResourceID}} --direct-internet-access Disabled",
+        "confidence": "HIGH",
+        "action_risk": "LOW"
+      }
+    },
+    "dynamodb": {
+      "dynamodb_security": {
+        "action": "Enable encryption and point-in-time recovery",
+        "command": "aws dynamodb update-continuous-backups --table-name {{.ResourceID}} --point-in-time-recovery-specification PointInTimeRecoveryEnabled=true",
+        "confidence": "HIGH",
+        "action_risk": "LOW"
+      }
+    },
+    "secrets_manager": {
+      "secret_rotation": {
+        "action": "Enable automatic rotation",
+        "command": "aws secretsmanager rotate-secret --secret-id {{.ResourceID}}",
+        "confidence": "HIGH",
+        "action_risk": "LOW"
+      }
+    },
+    "lambda": {
+      "lambda_security": {
+        "action": "Remove public function URL or add authentication",
+        "command": "aws lambda delete-function-url-config --function-name {{.ResourceID}}",
+        "confidence": "HIGH",
+        "action_risk": "MEDIUM"
+      }
+    },
+    "glue": {
+      "glue_security": {
+        "action": "Enable catalog encryption and security configuration",
+        "command": "aws glue put-data-catalog-encryption-settings --data-catalog-encryption-settings '{\"EncryptionAtRest\":{\"CatalogEncryptionMode\":\"SSE-KMS\"}}'",
         "confidence": "HIGH",
         "action_risk": "LOW"
       }
