@@ -172,14 +172,20 @@ func AuditELB(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) {
 				detail += ", sensitive_port_exposed=true"
 			}
 
+			var rem *audit.Remediation
+			if risk != "MINIMAL" {
+				rem = remediation.Recommend("security", "elb", "lb_exposure", e.name, detail)
+			}
+
 			results[i] = audit.Finding{
-				Service:    "elb",
-				ResourceID: e.name,
-				Tags:       e.tags,
-				Check:      "lb_exposure",
-				Status:     statusFromRisk(risk),
-				Detail:     detail,
-				RiskLevel:  risk,
+				Service:     "elb",
+				ResourceID:  e.name,
+				Tags:        e.tags,
+				Check:       "lb_exposure",
+				Status:      statusFromRisk(risk),
+				Detail:      detail,
+				RiskLevel:   risk,
+				Remediation: rem,
 			}
 
 			// DDoS readiness for internet-facing ALBs
@@ -264,20 +270,21 @@ func checkDDoSReadiness(
 		ResourceArn: &arn,
 	})
 	if err != nil {
+		detail := "internet-facing ALB not protected by Shield Advanced"
 		findings = append(findings, audit.Finding{
 			Service:    "elb",
 			ResourceID: name,
 			Tags:       tags,
 			Check:      "ddos_no_shield",
 			Status:     "FAIL",
-			Detail:     "internet-facing ALB not protected by Shield Advanced",
+			Detail:     detail,
 			RiskLevel:  "MEDIUM",
 			Remediation: remediation.Recommend(
 				"security",
 				"elb",
 				"no_shield",
 				name,
-				"internet-facing ALB not protected by Shield Advanced",
+				detail,
 			),
 		})
 	}
