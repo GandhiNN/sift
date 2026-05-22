@@ -24,6 +24,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/sagemaker v1.242.0
 	github.com/aws/aws-sdk-go-v2/service/secretsmanager v1.41.6
 	github.com/aws/aws-sdk-go-v2/service/servicequotas v1.34.7
+	github.com/aws/aws-sdk-go-v2/service/sfn v1.41.0
 	github.com/aws/aws-sdk-go-v2/service/shield v1.34.23
 	github.com/aws/aws-sdk-go-v2/service/sts v1.42.0
 	github.com/aws/aws-sdk-go-v2/service/wafv2 v1.71.5
