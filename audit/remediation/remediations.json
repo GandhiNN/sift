@@ -396,6 +396,20 @@
         "action_risk": "MEDIUM"
       }
     },
+    "iam": {
+      "unused_role": {
+        "action": "Delete unused IAM role",
+        "command": "aws iam delete-role --role-name {{.ResourceID}}",
+        "confidence": "MEDIUM",
+        "action_risk": "MEDIUM"
+      },
+      "unused_access_key": {
+        "action": "Deactivate or delete unused access key",
+        "command": "aws iam update-access-key --access-key-id {{.ResourceID}} --status Inactive",
+        "confidence": "HIGH",
+        "action_risk": "MEDIUM"
+      }
+    },
     "glue": {
       "glue_security": {
         "action": "Enable catalog encryption and security configuration",
