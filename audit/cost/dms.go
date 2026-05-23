@@ -173,9 +173,9 @@ func AuditDMSCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 						Remediation: remediation.Recommend(
 							"cost",
 							"dms",
-							"all_tasks_stopped",
+							"previous_gen_instance",
 							d.id,
-							fmt.Sprintf("all %d tasks stopped", stoppedTasks[d.arn]),
+							"previou-gen instance type",
 						),
 					})
 					break
@@ -198,7 +198,7 @@ func AuditDMSCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 					Remediation: remediation.Recommend(
 						"cost",
 						"dms",
-						"multi_a",
+						"multi_az",
 						d.id,
 						"Multi-AZ enabled, 2x cost",
 					),
