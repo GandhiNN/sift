@@ -56,6 +56,7 @@ func AuditBackupCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, erro
 				BackupVaultName: &vaultName,
 			}
 			var oldCount, totalCount int
+			var oldBytes int64
 			for {
 				rpResp, err := client.ListRecoveryPointsByBackupVault(ctx, rpInput)
 				if err != nil {
@@ -65,6 +66,9 @@ func AuditBackupCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, erro
 					totalCount++
 					if rp.CreationDate != nil && rp.CreationDate.Before(cutoff) {
 						oldCount++
+						if rp.BackupSizeInBytes != nil {
+							oldBytes += *rp.BackupSizeInBytes
+						}
 					}
 				}
 				if rpResp.NextToken == nil {
@@ -73,26 +77,31 @@ func AuditBackupCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, erro
 				rpInput.NextToken = rpResp.NextToken
 			}
 
+			oldGB := float64(oldBytes) / (1024 * 1024 * 1024)
+			costPerGB := t.GetFloat("backup", "storage_per_gb", 0.05)
+
 			if oldCount > 0 {
 				detail := fmt.Sprintf(
-					"total=%d, older_than_%dd=%d",
+					"total=%d, older_than_%dd=%d, old_size=%.1fGB",
 					totalCount,
 					retentionDays,
 					oldCount,
+					oldGB,
 				)
 				results[i] = audit.Finding{
-					Service:    "backup",
-					ResourceID: vaultName,
-					Check:      "old_recovery_points",
-					Status:     "WARN",
-					Detail:     detail,
-					RiskLevel:  "LOW",
+					Service:              "backup",
+					ResourceID:           vaultName,
+					Check:                "old_recovery_points",
+					Status:               "WARN",
+					Detail:               detail,
+					RiskLevel:            "LOW",
+					EstimatedMonthlyCost: oldGB * costPerGB,
 					Remediation: remediation.Recommend(
 						"cost",
 						"backup",
 						"old_recovery_points",
 						vaultName,
-						fmt.Sprintf("old_recovery_points=%d", oldCount),
+						fmt.Sprintf("old_recovery_points=%d, size=%.1fGB", oldCount, oldGB),
 					),
 				}
 			} else {
