@@ -234,6 +234,14 @@
         "action_risk": "MEDIUM"
       }
     },
+    "backup": {
+      "old_recovery_points": {
+        "action": "Delete old recovery points or adjust retention policy",
+        "command": "aws backup delete-recovery-point --backup-vault-name {{.ResourceID}} --recovery-point-arn <arn>",
+        "confidence": "LOW",
+        "action_risk": "HIGH"
+      }
+    },
     "dynamodb": {
       "provisioned_mode": {
         "action": "Switch to on-demand billing if traffic is unpredictable",
@@ -430,6 +438,14 @@
       "stepfunctions_security": {
         "action": "Enable logging and X-Ray tracing",
         "command": "aws stepfunctions update-state-machine --state-machine-arn <arn> --logging-configuration level=ALL,includeExecutionData=true",
+        "confidence": "HIGH",
+        "action_risk": "LOW"
+      }
+    },
+    "backup": {
+      "vault_security": {
+        "action": "Enable vault encryption with KMS",
+        "command": "aws backup create-backup-vault --backup-vault-name {{.ResourceID}} --encryption-key-arn <kms-arn>",
         "confidence": "HIGH",
         "action_risk": "LOW"
       }
