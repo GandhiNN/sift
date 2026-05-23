@@ -7,6 +7,7 @@ import (
 
 	"sift/audit"
 	"sift/audit/pricing"
+	"sift/audit/progress"
 	"sift/audit/remediation"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -49,6 +50,8 @@ func AuditSecretsCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, err
 		allSecrets = append(allSecrets, page.SecretList...)
 	}
 
+	bar := progress.NewBar(ctx, int64(len(allSecrets)), "Auditing Secrets Manager cost")
+
 	t := audit.GetThresholds(ctx)
 
 	for _, secret := range allSecrets {
@@ -87,6 +90,7 @@ func AuditSecretsCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, err
 				Remediation:          nil,
 			})
 		}
+		bar.Add(1)
 	}
 	return findings, nil
 }
