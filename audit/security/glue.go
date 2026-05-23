@@ -6,6 +6,7 @@ import (
 	"sync"
 
 	"sift/audit"
+	"sift/audit/progress"
 	"sift/audit/remediation"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -95,6 +96,7 @@ func AuditGlue(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) {
 	var mu sync.Mutex
 	var wg sync.WaitGroup
 	sem := make(chan struct{}, audit.GetThresholds(ctx).Concurrency)
+	bar := progress.NewBar(ctx, int64(len(allJobs)), "Auditing Glue job security")
 
 	for _, job := range allJobs {
 		wg.Add(1)
@@ -102,6 +104,7 @@ func AuditGlue(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) {
 			defer wg.Done()
 			sem <- struct{}{}
 			defer func() { <-sem }()
+			defer bar.Add(1)
 
 			g := parseGlueJob(ctx, client, job)
 			risk := "MINIMAL"
