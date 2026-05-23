@@ -7,6 +7,7 @@ import (
 
 	"sift/audit"
 	"sift/audit/pricing"
+	"sift/audit/progress"
 	"sift/audit/remediation"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -36,6 +37,8 @@ func AuditEC2Cost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 	client := ec2.NewFromConfig(cfg)
 	var findings []audit.Finding
 
+	spinner := progress.NewSpinner(ctx, "Auditing EC2 cost")
+
 	// Stopped instances
 	stoppedPaginator := ec2.NewDescribeInstancesPaginator(client, &ec2.DescribeInstancesInput{
 		Filters: []ec2types.Filter{{
@@ -46,6 +49,7 @@ func AuditEC2Cost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 	for stoppedPaginator.HasMorePages() {
 		page, err := stoppedPaginator.NextPage(ctx)
 		if err != nil {
+			spinner.Finish()
 			return nil, fmt.Errorf("describe stopped instances: %w", err)
 		}
 		for _, res := range page.Reservations {
@@ -68,7 +72,7 @@ func AuditEC2Cost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 						"ec2",
 						"stopped_instance",
 						i.id,
-						"instasnce in stopped state",
+						"instance in stopped state",
 					),
 				})
 			}
@@ -85,6 +89,7 @@ func AuditEC2Cost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 	for runningPaginator.HasMorePages() {
 		page, err := runningPaginator.NextPage(ctx)
 		if err != nil {
+			spinner.Finish()
 			return nil, fmt.Errorf("describe running instances: %w", err)
 		}
 		for _, res := range page.Reservations {
@@ -166,5 +171,6 @@ func AuditEC2Cost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 		}
 	}
 
+	spinner.Finish()
 	return findings, nil
 }
