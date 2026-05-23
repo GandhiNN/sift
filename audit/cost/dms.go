@@ -30,15 +30,33 @@ type dmsCostInstance struct {
 	arn     string
 	class   string
 	multiAZ bool
+	tags    map[string]string
 }
 
-func parseDMSCostInstance(inst dmstypes.ReplicationInstance) dmsCostInstance {
-	return dmsCostInstance{
+func parseDMSCostInstance(
+	ctx context.Context,
+	client *databasemigrationservice.Client,
+	inst dmstypes.ReplicationInstance,
+) dmsCostInstance {
+	d := dmsCostInstance{
 		id:      aws.ToString(inst.ReplicationInstanceIdentifier),
 		arn:     aws.ToString(inst.ReplicationInstanceArn),
 		class:   aws.ToString(inst.ReplicationInstanceClass),
 		multiAZ: inst.MultiAZ,
 	}
+	tagResp, err := client.ListTagsForResource(
+		ctx,
+		&databasemigrationservice.ListTagsForResourceInput{
+			ResourceArn: &d.arn,
+		},
+	)
+	if err == nil {
+		d.tags = make(map[string]string, len(tagResp.TagList))
+		for _, t := range tagResp.TagList {
+			d.tags[aws.ToString(t.Key)] = aws.ToString(t.Value)
+		}
+	}
+	return d
 }
 
 func AuditDMSCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) {
@@ -99,7 +117,7 @@ func AuditDMSCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 			defer func() { <-sem }()
 			defer bar.Add(1)
 
-			d := parseDMSCostInstance(inst)
+			d := parseDMSCostInstance(ctx, client, inst)
 
 			var local []audit.Finding
 
@@ -107,6 +125,7 @@ func AuditDMSCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 				local = append(local, audit.Finding{
 					Service:    "dms",
 					ResourceID: d.id,
+					Tags:       d.tags,
 					Check:      "idle_instance",
 					Status:     "WARN",
 					Detail: fmt.Sprintf(
@@ -142,6 +161,7 @@ func AuditDMSCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 					local = append(local, audit.Finding{
 						Service:    "dms",
 						ResourceID: d.id,
+						Tags:       d.tags,
 						Check:      "previous_gen_instance",
 						Status:     "WARN",
 						Detail: fmt.Sprintf(
@@ -166,6 +186,7 @@ func AuditDMSCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 				local = append(local, audit.Finding{
 					Service:    "dms",
 					ResourceID: d.id,
+					Tags:       d.tags,
 					Check:      "multi_az",
 					Status:     "WARN",
 					Detail: fmt.Sprintf(
@@ -189,6 +210,7 @@ func AuditDMSCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 				local = append(local, audit.Finding{
 					Service:    "dms",
 					ResourceID: d.id,
+					Tags:       d.tags,
 					Check:      "oversized_instance",
 					Status:     "WARN",
 					Detail: fmt.Sprintf(
@@ -218,6 +240,7 @@ func AuditDMSCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 				findings = append(findings, audit.Finding{
 					Service:              "dms",
 					ResourceID:           d.id,
+					Tags:                 d.tags,
 					Check:                "idle_instance",
 					Status:               "PASS",
 					Detail:               fmt.Sprintf("class=%s, active and right-sized", d.class),
