@@ -165,7 +165,7 @@ func TestDynamoDBRisk(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			risk, _ := dynamoDBRisk(tt.encrypted, tt.pitr, tt.deletionProtection)
+			risk := dynamoDBRisk(tt.encrypted, tt.pitr, tt.deletionProtection)
 			if risk != tt.want {
 				t.Errorf("dynamoDBRisk() = %s, want %s", risk, tt.want)
 			}
