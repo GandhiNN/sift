@@ -6,16 +6,33 @@ import (
 	"sync"
 
 	"sift/audit"
+	"sift/audit/progress"
+	"sift/audit/remediation"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/cloudtrail"
 	"github.com/aws/aws-sdk-go-v2/service/guardduty"
 )
 
+func baselineRisk(check string) string {
+	switch check {
+	case "no_trails", "logging_disabled", "not_enabled", "detector_disabled":
+		return "CRITICAL"
+	case "single_region":
+		return "HIGH"
+	case "no_log_validation":
+		return "MEDIUM"
+	default:
+		return "MINIMAL"
+	}
+}
+
 func AuditBaseline(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) {
 	var ctFindings, gdFindings []audit.Finding
 	var ctErr, gdErr error
 	var wg sync.WaitGroup
+
+	spinner := progress.NewSpinner(ctx, "Auditing baseline security")
 
 	wg.Add(2)
 	go func() {
@@ -27,11 +44,11 @@ func AuditBaseline(ctx context.Context, cfg aws.Config) ([]audit.Finding, error)
 		gdFindings, gdErr = auditGuardDuty(ctx, cfg)
 	}()
 	wg.Wait()
+	spinner.Finish()
 
 	if ctErr != nil {
 		return nil, fmt.Errorf("cloudtrail: %w", ctErr)
 	}
-
 	if gdErr != nil {
 		return nil, fmt.Errorf("guardduty: %w", gdErr)
 	}
@@ -41,7 +58,6 @@ func AuditBaseline(ctx context.Context, cfg aws.Config) ([]audit.Finding, error)
 
 func auditCloudTrail(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) {
 	client := cloudtrail.NewFromConfig(cfg)
-	var findings []audit.Finding
 
 	resp, err := client.DescribeTrails(ctx, &cloudtrail.DescribeTrailsInput{})
 	if err != nil {
@@ -49,15 +65,25 @@ func auditCloudTrail(ctx context.Context, cfg aws.Config) ([]audit.Finding, erro
 	}
 
 	if len(resp.TrailList) == 0 {
+		risk := baselineRisk("no_trails")
+		detail := "no CloudTrail trails configured"
 		return []audit.Finding{{
 			Service:   "cloudtrail",
 			Check:     "no_trails",
-			Status:    "FAIL",
-			Detail:    "no CloudTrail trails configured",
-			RiskLevel: "CRITICAL",
+			Status:    statusFromRisk(risk),
+			Detail:    detail,
+			RiskLevel: risk,
+			Remediation: remediation.Recommend(
+				"security",
+				"cloudtrail",
+				"no_trails",
+				"account",
+				detail,
+			),
 		}}, nil
 	}
 
+	var findings []audit.Finding
 	for _, trail := range resp.TrailList {
 		name := aws.ToString(trail.Name)
 
@@ -70,36 +96,55 @@ func auditCloudTrail(ctx context.Context, cfg aws.Config) ([]audit.Finding, erro
 		}
 
 		if !aws.ToBool(status.IsLogging) {
+			risk := baselineRisk("logging_disabled")
+			detail := "trail exists but logging is disabled"
 			findings = append(findings, audit.Finding{
 				Service:    "cloudtrail",
 				ResourceID: name,
 				Check:      "logging_disabled",
-				Status:     "FAIL",
-				Detail:     "trail exists but logging is disabled",
-				RiskLevel:  "CRITICAL",
+				Status:     statusFromRisk(risk),
+				Detail:     detail,
+				RiskLevel:  risk,
+				Remediation: remediation.Recommend(
+					"security",
+					"cloudtrail",
+					"logging_disabled",
+					name,
+					detail,
+				),
 			})
 			continue
 		}
 
 		if !aws.ToBool(trail.IsMultiRegionTrail) {
+			risk := baselineRisk("single_region")
+			detail := "trail is not multi-region"
 			findings = append(findings, audit.Finding{
 				Service:    "cloudtrail",
 				ResourceID: name,
 				Check:      "single_region",
-				Status:     "FAIL",
-				Detail:     "trail is not multi-region",
-				RiskLevel:  "HIGH",
+				Status:     statusFromRisk(risk),
+				Detail:     detail,
+				RiskLevel:  risk,
+				Remediation: remediation.Recommend(
+					"security", "cloudtrail", "single_region", name, detail,
+				),
 			})
 		}
 
 		if !aws.ToBool(trail.LogFileValidationEnabled) {
+			risk := baselineRisk("no_log_validation")
+			detail := "trail has no log file validation"
 			findings = append(findings, audit.Finding{
 				Service:    "cloudtrail",
 				ResourceID: name,
 				Check:      "no_log_validation",
-				Status:     "FAIL",
-				Detail:     "trail has no log file validation",
-				RiskLevel:  "MEDIUM",
+				Status:     statusFromRisk(risk),
+				Detail:     detail,
+				RiskLevel:  risk,
+				Remediation: remediation.Recommend(
+					"security", "cloudtrail", "no_log_validation", name, detail,
+				),
 			})
 		}
 	}
@@ -119,7 +164,6 @@ func auditCloudTrail(ctx context.Context, cfg aws.Config) ([]audit.Finding, erro
 
 func auditGuardDuty(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) {
 	client := guardduty.NewFromConfig(cfg)
-	var findings []audit.Finding
 
 	resp, err := client.ListDetectors(ctx, &guardduty.ListDetectorsInput{})
 	if err != nil {
@@ -127,30 +171,43 @@ func auditGuardDuty(ctx context.Context, cfg aws.Config) ([]audit.Finding, error
 	}
 
 	if len(resp.DetectorIds) == 0 {
+		risk := baselineRisk("not_enabled")
+		detail := "GuardDuty is not enabled"
 		return []audit.Finding{{
 			Service:   "guardduty",
 			Check:     "not_enabled",
-			Status:    "FAIL",
-			Detail:    "GuardDuty is not enabled",
-			RiskLevel: "CRITICAL",
+			Status:    statusFromRisk(risk),
+			Detail:    detail,
+			RiskLevel: risk,
+			Remediation: remediation.Recommend(
+				"security", "guardduty", "not_enabled", "account", detail,
+			),
 		}}, nil
 	}
 
+	var findings []audit.Finding
 	for _, id := range resp.DetectorIds {
 		det, err := client.GetDetector(ctx, &guardduty.GetDetectorInput{
 			DetectorId: &id,
 		})
 		if err != nil {
+			findings = append(findings, audit.ErrorFinding("guardduty", id, "detector_status", err))
 			continue
 		}
 
 		if string(det.Status) != "ENABLED" {
+			risk := baselineRisk("detector_disabled")
+			detail := "detector is not enabled"
 			findings = append(findings, audit.Finding{
-				Service:   "guardduty",
-				Check:     "detector_disabled",
-				Status:    "FAIL",
-				Detail:    "detector is not enabled",
-				RiskLevel: "CRITICAL",
+				Service:    "guardduty",
+				ResourceID: id,
+				Check:      "detector_disabled",
+				Status:     statusFromRisk(risk),
+				Detail:     detail,
+				RiskLevel:  risk,
+				Remediation: remediation.Recommend(
+					"security", "guardduty", "detector_disabled", id, detail,
+				),
 			})
 		}
 	}

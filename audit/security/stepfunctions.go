@@ -14,6 +14,17 @@ import (
 	sfntypes "github.com/aws/aws-sdk-go-v2/service/sfn/types"
 )
 
+func stepFunctionsRisk(loggingEnabled, tracingEnabled bool) string {
+	switch {
+	case !loggingEnabled && !tracingEnabled:
+		return "MEDIUM"
+	case !loggingEnabled:
+		return "LOW"
+	default:
+		return "MINIMAL"
+	}
+}
+
 func AuditStepFunctions(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) {
 	client := sfn.NewFromConfig(cfg)
 
@@ -31,15 +42,14 @@ func AuditStepFunctions(ctx context.Context, cfg aws.Config) ([]audit.Finding, e
 		input.NextToken = resp.NextToken
 	}
 
+	results := make([]audit.Finding, len(machines))
 	bar := progress.NewBar(ctx, int64(len(machines)), "Auditing Step Functions security")
-	var findings []audit.Finding
-	var mu sync.Mutex
 	var wg sync.WaitGroup
 	sem := make(chan struct{}, audit.GetThresholds(ctx).Concurrency)
 
-	for _, sm := range machines {
+	for i, sm := range machines {
 		wg.Add(1)
-		go func(sm sfntypes.StateMachineListItem) {
+		go func(i int, sm sfntypes.StateMachineListItem) {
 			defer wg.Done()
 			sem <- struct{}{}
 			defer func() { <-sem }()
@@ -52,28 +62,16 @@ func AuditStepFunctions(ctx context.Context, cfg aws.Config) ([]audit.Finding, e
 				StateMachineArn: &arn,
 			})
 			if err != nil {
-				mu.Lock()
-				findings = append(
-					findings,
-					audit.ErrorFinding("stepfunctions", name, "describe", err),
-				)
-				mu.Unlock()
+				results[i] = audit.ErrorFinding("stepfunctions", name, "describe", err)
 				return
 			}
 
 			loggingEnabled := desc.LoggingConfiguration != nil &&
 				desc.LoggingConfiguration.Level != sfntypes.LogLevelOff
-
 			tracingEnabled := desc.TracingConfiguration != nil &&
 				desc.TracingConfiguration.Enabled
 
-			risk := "MINIMAL"
-			if !loggingEnabled && !tracingEnabled {
-				risk = "MEDIUM"
-			} else if !loggingEnabled {
-				risk = "LOW"
-			}
-
+			risk := stepFunctionsRisk(loggingEnabled, tracingEnabled)
 			detail := fmt.Sprintf(
 				"logging=%t, tracing=%t, type=%s",
 				loggingEnabled,
@@ -92,8 +90,7 @@ func AuditStepFunctions(ctx context.Context, cfg aws.Config) ([]audit.Finding, e
 				)
 			}
 
-			mu.Lock()
-			findings = append(findings, audit.Finding{
+			results[i] = audit.Finding{
 				Service:     "stepfunctions",
 				ResourceID:  name,
 				Check:       "stepfunctions_security",
@@ -101,11 +98,16 @@ func AuditStepFunctions(ctx context.Context, cfg aws.Config) ([]audit.Finding, e
 				Detail:      detail,
 				RiskLevel:   risk,
 				Remediation: rem,
-			})
-			mu.Unlock()
-		}(sm)
+			}
+		}(i, sm)
 	}
 	wg.Wait()
 
-	return findings, nil
+	out := results[:0]
+	for _, f := range results {
+		if f.ResourceID != "" {
+			out = append(out, f)
+		}
+	}
+	return out, nil
 }

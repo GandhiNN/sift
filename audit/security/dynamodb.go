@@ -22,6 +22,19 @@ type dynamoDBTable struct {
 	tags               map[string]string
 }
 
+func dynamoDBRisk(encrypted, pitr, deletionProtection bool) string {
+	switch {
+	case !encrypted:
+		return "HIGH"
+	case !pitr && !deletionProtection:
+		return "MEDIUM"
+	case pitr && deletionProtection:
+		return "MINIMAL"
+	default:
+		return "LOW"
+	}
+}
+
 func parseDynamoDBTable(
 	ctx context.Context,
 	client *dynamodb.Client,
@@ -102,7 +115,11 @@ func AuditDynamoDB(ctx context.Context, cfg aws.Config) ([]audit.Finding, error)
 				return
 			}
 
-			risk, detail := dynamoDBRisk(t.encrypted, t.pitr, t.deletionProtection)
+			risk := dynamoDBRisk(t.encrypted, t.pitr, t.deletionProtection)
+			detail := fmt.Sprintf(
+				"encrypted=%t, pitr=%t, deletion_protection=%t",
+				t.encrypted, t.pitr, t.deletionProtection,
+			)
 
 			var rem *audit.Remediation
 			if risk != "MINIMAL" {
@@ -137,24 +154,4 @@ func AuditDynamoDB(ctx context.Context, cfg aws.Config) ([]audit.Finding, error)
 		}
 	}
 	return findings, nil
-}
-
-func dynamoDBRisk(encrypted, pitr, deletionProtection bool) (string, string) {
-	if !encrypted {
-		return "HIGH", "encryption not enabled"
-	}
-	if !pitr && !deletionProtection {
-		return "MEDIUM", "no PITR, no deletion protection"
-	}
-	if pitr && deletionProtection {
-		return "MINIMAL", "encrypted, PITR enabled, deletion protection on"
-	}
-	detail := "encrypted"
-	if !pitr {
-		detail += ", no PITR"
-	}
-	if !deletionProtection {
-		detail += ", no deletion protection"
-	}
-	return "LOW", detail
 }

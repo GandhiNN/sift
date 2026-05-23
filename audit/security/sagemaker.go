@@ -25,6 +25,21 @@ type sageMakerNotebook struct {
 	roleARN              *string
 }
 
+func sagemakerRisk(directInternet, publicSubnet, sgOpen bool) string {
+	switch {
+	case directInternet:
+		return "HIGH"
+	case publicSubnet && sgOpen:
+		return "HIGH"
+	case publicSubnet:
+		return "MEDIUM"
+	case sgOpen:
+		return "LOW"
+	default:
+		return "MINIMAL"
+	}
+}
+
 func AuditSagemaker(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) {
 	notebooks, err := listNotebooks(ctx, cfg)
 	if err != nil {
@@ -86,10 +101,10 @@ func AuditSagemaker(ctx context.Context, cfg aws.Config) ([]audit.Finding, error
 		}
 	}
 
-	bar := progress.NewBar(ctx, int64(len(notebooks)), "Analyzing SageMaker exposure")
-	var findings []audit.Finding
+	results := make([]audit.Finding, len(notebooks))
+	bar := progress.NewBar(ctx, int64(len(notebooks)), "Auditing SageMaker exposure")
 
-	for _, nb := range notebooks {
+	for i, nb := range notebooks {
 		sgOpen := false
 		for _, id := range nb.securityGroupIDs {
 			if openSGs[id] {
@@ -99,20 +114,7 @@ func AuditSagemaker(ctx context.Context, cfg aws.Config) ([]audit.Finding, error
 		}
 		publicSubnet := nb.subnetID != nil && publicSubnets[*nb.subnetID]
 
-		var risk string
-		switch {
-		case nb.directInternetAccess:
-			risk = "HIGH"
-		case publicSubnet && sgOpen:
-			risk = "HIGH"
-		case publicSubnet:
-			risk = "MEDIUM"
-		case sgOpen:
-			risk = "LOW"
-		default:
-			risk = "MINIMAL"
-		}
-
+		risk := sagemakerRisk(nb.directInternetAccess, publicSubnet, sgOpen)
 		detail := fmt.Sprintf(
 			"status=%s, direct_internet=%t, public_subnet=%t, sg_open=%t",
 			nb.status,
@@ -132,7 +134,7 @@ func AuditSagemaker(ctx context.Context, cfg aws.Config) ([]audit.Finding, error
 			)
 		}
 
-		findings = append(findings, audit.Finding{
+		results[i] = audit.Finding{
 			Service:     "sagemaker",
 			ResourceID:  nb.name,
 			Check:       "notebook_exposure",
@@ -140,10 +142,10 @@ func AuditSagemaker(ctx context.Context, cfg aws.Config) ([]audit.Finding, error
 			Detail:      detail,
 			RiskLevel:   risk,
 			Remediation: rem,
-		})
+		}
 		bar.Add(1)
 	}
-	return findings, nil
+	return results, nil
 }
 
 func listNotebooks(ctx context.Context, cfg aws.Config) ([]sageMakerNotebook, error) {
