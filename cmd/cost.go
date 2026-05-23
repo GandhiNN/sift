@@ -26,6 +26,7 @@ var validCostServices = map[string]bool{
 	"sagemaker":     true,
 	"redshift":      true,
 	"stepfunctions": true,
+	"backup":        true,
 }
 
 var costCmd = &cobra.Command{

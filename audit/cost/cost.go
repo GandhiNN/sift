@@ -50,6 +50,7 @@ func Audit(ctx context.Context, cfg aws.Config, services []string) ([]audit.Find
 		{"sagemaker", AuditSagemakerCost},
 		{"redshift", AuditRedshiftCost},
 		{"stepfunctions", AuditStepFunctionsCost},
+		{"backup", AuditBackupCost},
 	}
 
 	var checks []struct {

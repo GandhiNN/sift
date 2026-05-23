@@ -24,6 +24,7 @@ var validSecurityServices = map[string]bool{
 	"ecr":           true,
 	"redshift":      true,
 	"stepfunctions": true,
+	"backup":        true,
 }
 
 var securityCmd = &cobra.Command{
