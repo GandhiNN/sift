@@ -14,6 +14,8 @@ github.com/aws/aws-sdk-go-v2/internal/endpoints/v2 v2.7.23 h1:bpd8vxhlQi2r1hiueO
 github.com/aws/aws-sdk-go-v2/internal/endpoints/v2 v2.7.23/go.mod h1:15DfR2nw+CRHIk0tqNyifu3G1YdAOy68RftkhMDDwYk=
 github.com/aws/aws-sdk-go-v2/internal/v4a v1.4.23 h1:FPXsW9+gMuIeKmz7j6ENWcWtBGTe1kH8r9thNt5Uxx4=
 github.com/aws/aws-sdk-go-v2/internal/v4a v1.4.23/go.mod h1:7J8iGMdRKk6lw2C+cMIphgAnT8uTwBwNOsGkyOCm80U=
+github.com/aws/aws-sdk-go-v2/service/backup v1.56.0 h1:jAx1XkXf14DcuPDf5byG+ut2Ym4QiqCld1VYuBD/Vzk=
+github.com/aws/aws-sdk-go-v2/service/backup v1.56.0/go.mod h1:uMh3ZDoLKhXldYL1qcBYy1HsNQfKgL/w8iF2onOyoKY=
 github.com/aws/aws-sdk-go-v2/service/cloudtrail v1.55.10 h1:p+O8X2Om7CiYdN5FYzIdQJvaptNL2vLOtc9vl8MH0uE=
 github.com/aws/aws-sdk-go-v2/service/cloudtrail v1.55.10/go.mod h1:EmJiemyFSnlGbug6KkKYdmXzeavFVCYz86VPC4CZZSI=
 github.com/aws/aws-sdk-go-v2/service/cloudwatch v1.56.2 h1:AEdVlfaKtqjQgnAZ71TAghxd2We92jSez2VAnjOx1vg=
