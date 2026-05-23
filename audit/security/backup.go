@@ -10,59 +10,75 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/backup"
+	backuptypes "github.com/aws/aws-sdk-go-v2/service/backup/types"
 )
+
+type backupVaultEntry struct {
+	name           string
+	encrypted      bool
+	recoveryPoints int64
+}
+
+func parseBackupVaultEntry(v backuptypes.BackupVaultListMember) backupVaultEntry {
+	return backupVaultEntry{
+		name:           aws.ToString(v.BackupVaultName),
+		encrypted:      v.EncryptionKeyArn != nil && *v.EncryptionKeyArn != "",
+		recoveryPoints: v.NumberOfRecoveryPoints,
+	}
+}
+
+func backupRisk(encrypted bool) string {
+	if !encrypted {
+		return "HIGH"
+	}
+	return "MINIMAL"
+}
 
 func AuditBackup(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) {
 	client := backup.NewFromConfig(cfg)
 
-	var findings []audit.Finding
-	spinner := progress.NewSpinner(ctx, "Auditing Backup vaults")
-
-	// Check vaults
-	vaultInput := &backup.ListBackupVaultsInput{}
+	var vaults []backuptypes.BackupVaultListMember
+	input := &backup.ListBackupVaultsInput{}
 	for {
-		resp, err := client.ListBackupVaults(ctx, vaultInput)
+		resp, err := client.ListBackupVaults(ctx, input)
 		if err != nil {
-			spinner.Finish()
 			return nil, fmt.Errorf("list backup vaults: %w", err)
 		}
-		for _, v := range resp.BackupVaultList {
-			name := aws.ToString(v.BackupVaultName)
-			encrypted := v.EncryptionKeyArn != nil && *v.EncryptionKeyArn != ""
-
-			risk := "MINIMAL"
-			if !encrypted {
-				risk = "HIGH"
-			}
-
-			detail := fmt.Sprintf(
-				"encrypted=%t, recovery_points=%d",
-				encrypted,
-				v.NumberOfRecoveryPoints,
-			)
-
-			var rem *audit.Remediation
-			if risk != "MINIMAL" {
-				rem = remediation.Recommend("security", "backup", "vault_security", name, detail)
-			}
-
-			findings = append(findings, audit.Finding{
-				Service:     "backup",
-				ResourceID:  name,
-				Check:       "vault_security",
-				Status:      statusFromRisk(risk),
-				Detail:      detail,
-				RiskLevel:   risk,
-				Remediation: rem,
-			})
-		}
-		spinner.Add(len(resp.BackupVaultList))
+		vaults = append(vaults, resp.BackupVaultList...)
 		if resp.NextToken == nil {
 			break
 		}
-		vaultInput.NextToken = resp.NextToken
+		input.NextToken = resp.NextToken
 	}
-	spinner.Finish()
 
-	return findings, nil
+	// Check vaults
+	results := make([]audit.Finding, len(vaults))
+	bar := progress.NewBar(ctx, int64(len(vaults)), "Auditing Backup vaults")
+
+	for i, v := range vaults {
+		entry := parseBackupVaultEntry(v)
+		risk := backupRisk(entry.encrypted)
+		detail := fmt.Sprintf(
+			"encrypted=%t, recovery_points=%d",
+			entry.encrypted,
+			entry.recoveryPoints,
+		)
+
+		var rem *audit.Remediation
+		if risk != "MINIMAL" {
+			rem = remediation.Recommend("security", "backup", "vault_security", entry.name, detail)
+		}
+
+		results[i] = audit.Finding{
+			Service:     "backup",
+			ResourceID:  entry.name,
+			Check:       "vault_security",
+			Status:      statusFromRisk(risk),
+			Detail:      detail,
+			RiskLevel:   risk,
+			Remediation: rem,
+		}
+		bar.Add(1)
+	}
+	return results, nil
 }
