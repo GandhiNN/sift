@@ -40,6 +40,6 @@ var costCmd = &cobra.Command{
 
 func init() {
 	costCmd.Flags().
-		StringVar(&costServices, "service", "", "comma-separated services to audit (ec2,ebs,rds,s3,eks,network,cloudwatch,ecr,secrets,glue,lambda,dynamodb,dms,elb,sagemaker,redshift,stepfunctions). Default: all")
+		StringVar(&costServices, "service", "", serviceUsage(validCostServices))
 	rootCmd.AddCommand(costCmd)
 }

@@ -37,6 +37,6 @@ var securityCmd = &cobra.Command{
 
 func init() {
 	securityCmd.Flags().
-		StringVar(&securityServices, "service", "", "Comma-separated services to audit (ec2,sagemaker,s3,rds,eks,iam,baseline,secrets,glue,lambda,dynamodb,elb,dms,ecr,redshift,stepfunctions). Default: all")
+		StringVar(&securityServices, "service", "", serviceUsage(validSecurityServices))
 	rootCmd.AddCommand(securityCmd)
 }

@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"sort"
 	"strings"
 
 	"sift/audit"
@@ -165,4 +166,16 @@ func listEnabledRegions(ctx context.Context, cfg aws.Config) ([]string, error) {
 		regions = append(regions, aws.ToString(r.RegionName))
 	}
 	return regions, nil
+}
+
+func serviceUsage(services map[string]bool) string {
+	keys := make([]string, 0, len(services))
+	for k := range services {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return "Services to audit (comma-separated). Default: all\nAvailable: " + strings.Join(
+		keys,
+		", ",
+	)
 }
