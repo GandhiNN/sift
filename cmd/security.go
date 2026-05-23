@@ -15,6 +15,7 @@ var validSecurityServices = map[string]bool{
 	"rds":           true,
 	"eks":           true,
 	"iam":           true,
+	"baseline":      true,
 	"secrets":       true,
 	"glue":          true,
 	"lambda":        true,
