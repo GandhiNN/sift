@@ -75,8 +75,14 @@ func AuditECRCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 					&ecr.DescribeImagesInput{RepositoryName: &r.name},
 				)
 				imgCount := 0
+				var totalSizeGB float64
 				if imgResp != nil {
 					imgCount = len(imgResp.ImageDetails)
+					for _, img := range imgResp.ImageDetails {
+						if img.ImageSizeInBytes != nil {
+							totalSizeGB += float64(*img.ImageSizeInBytes) / (1024 * 1024 * 1024)
+						}
+					}
 				}
 				mu.Lock()
 				findings = append(findings, audit.Finding{
@@ -86,8 +92,9 @@ func AuditECRCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 					Check:      "no_lifecycle_policy",
 					Status:     "WARN",
 					Detail: fmt.Sprintf(
-						"images=%d, old images never cleaned up ($0.10/GB/mo)",
+						"images=%d, size=%.2fGB, old images never cleaned up",
 						imgCount,
+						totalSizeGB,
 					),
 					RiskLevel: "LOW",
 					Remediation: remediation.Recommend(

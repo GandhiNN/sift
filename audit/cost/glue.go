@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"sift/audit"
+	"sift/audit/pricing"
 	"sift/audit/progress"
 	"sift/audit/remediation"
 
@@ -41,13 +42,15 @@ func AuditGlueCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error)
 		for _, ep := range devResp.DevEndpoints {
 			name := aws.ToString(ep.EndpointName)
 			dpus := ep.NumberOfNodes
+			hourlyCost := pricing.GlueJobHourlyCost("Standard", dpus)
 			findings = append(findings, audit.Finding{
-				Service:    "glue_dev_endpoint",
-				ResourceID: name,
-				Check:      "active_dev_endpoint",
-				Status:     "WARN",
-				Detail:     fmt.Sprintf("dpus=%d, ~$%.2f/hr", dpus, float64(dpus)*0.44),
-				RiskLevel:  "HIGH",
+				Service:              "glue_dev_endpoint",
+				ResourceID:           name,
+				Check:                "active_dev_endpoint",
+				Status:               "WARN",
+				Detail:               fmt.Sprintf("dpus=%d, ~$%.2f/hr", dpus, hourlyCost),
+				RiskLevel:            "HIGH",
+				EstimatedMonthlyCost: hourlyCost * 730,
 				Remediation: remediation.Recommend(
 					"cost",
 					"glue_dev_endpoint",
