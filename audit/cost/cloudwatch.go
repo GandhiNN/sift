@@ -6,6 +6,7 @@ import (
 
 	"sift/audit"
 	"sift/audit/pricing"
+	"sift/audit/progress"
 	"sift/audit/remediation"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -41,6 +42,7 @@ func AuditCloudwatchCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, 
 	client := cloudwatchlogs.NewFromConfig(cfg)
 	var findings []audit.Finding
 
+	var allGroups []cwltypes.LogGroup
 	paginator := cloudwatchlogs.NewDescribeLogGroupsPaginator(
 		client,
 		&cloudwatchlogs.DescribeLogGroupsInput{},
@@ -50,43 +52,48 @@ func AuditCloudwatchCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, 
 		if err != nil {
 			return nil, fmt.Errorf("describe log groups: %w", err)
 		}
-		for _, lg := range page.LogGroups {
-			e := parseLogGroup(ctx, client, lg)
-			if lg.RetentionInDays == nil {
-				findings = append(findings, audit.Finding{
-					Service:    "cloudwatch_logs",
-					ResourceID: e.name,
-					Tags:       e.tags,
-					Check:      "no_retention_policy",
-					Status:     "WARN",
-					Detail: fmt.Sprintf(
-						"stored=%.2fGB, logs never expire ($0.03/GB/mo)",
-						e.sizeGB,
-					),
-					RiskLevel:            "MEDIUM",
-					EstimatedMonthlyCost: pricing.CloudWatchLogsMonthly(e.sizeGB),
-					Remediation: remediation.Recommend(
-						"cost",
-						"cloudwatch_logs",
-						"no_retention_policy",
-						e.name,
-						"logs never expire",
-					),
-				})
-			} else {
-				findings = append(findings, audit.Finding{
-					Service:              "cloudwatch_logs",
-					ResourceID:           e.name,
-					Tags:                 e.tags,
-					Check:                "no_retention_policy",
-					Status:               "PASS",
-					Detail:               fmt.Sprintf("retention=%d days", aws.ToInt32(lg.RetentionInDays)),
-					RiskLevel:            "MINIMAL",
-					EstimatedMonthlyCost: pricing.CloudWatchLogsMonthly(e.sizeGB),
-					Remediation:          nil,
-				})
-			}
+		allGroups = append(allGroups, page.LogGroups...)
+	}
+
+	bar := progress.NewBar(ctx, int64(len(allGroups)), "Auditing CloudWatch Logs cost")
+
+	for _, lg := range allGroups {
+		e := parseLogGroup(ctx, client, lg)
+		if lg.RetentionInDays == nil {
+			findings = append(findings, audit.Finding{
+				Service:    "cloudwatch_logs",
+				ResourceID: e.name,
+				Tags:       e.tags,
+				Check:      "no_retention_policy",
+				Status:     "WARN",
+				Detail: fmt.Sprintf(
+					"stored=%.2fGB, logs never expire ($0.03/GB/mo)",
+					e.sizeGB,
+				),
+				RiskLevel:            "MEDIUM",
+				EstimatedMonthlyCost: pricing.CloudWatchLogsMonthly(e.sizeGB),
+				Remediation: remediation.Recommend(
+					"cost",
+					"cloudwatch_logs",
+					"no_retention_policy",
+					e.name,
+					"logs never expire",
+				),
+			})
+		} else {
+			findings = append(findings, audit.Finding{
+				Service:              "cloudwatch_logs",
+				ResourceID:           e.name,
+				Tags:                 e.tags,
+				Check:                "no_retention_policy",
+				Status:               "PASS",
+				Detail:               fmt.Sprintf("retention=%d days", aws.ToInt32(lg.RetentionInDays)),
+				RiskLevel:            "MINIMAL",
+				EstimatedMonthlyCost: pricing.CloudWatchLogsMonthly(e.sizeGB),
+				Remediation:          nil,
+			})
 		}
+		bar.Add(1)
 	}
 	return findings, nil
 }
