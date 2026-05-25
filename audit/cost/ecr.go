@@ -6,6 +6,7 @@ import (
 	"sync"
 
 	"sift/audit"
+	"sift/audit/pricing"
 	"sift/audit/remediation"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -96,7 +97,8 @@ func AuditECRCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 						imgCount,
 						totalSizeGB,
 					),
-					RiskLevel: "LOW",
+					RiskLevel:            "LOW",
+					EstimatedMonthlyCost: pricing.ECRMonthly(totalSizeGB),
 					Remediation: remediation.Recommend(
 						"cost",
 						"ecr",
