@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"sync"
+	"time"
 
 	"sift/audit"
 	"sift/audit/pricing"
@@ -11,6 +13,8 @@ import (
 	"sift/audit/remediation"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/cloudwatch"
+	cwtypes "github.com/aws/aws-sdk-go-v2/service/cloudwatch/types"
 	"github.com/aws/aws-sdk-go-v2/service/ec2"
 	ec2types "github.com/aws/aws-sdk-go-v2/service/ec2/types"
 )
@@ -35,6 +39,8 @@ func parseEC2CostInstance(inst ec2types.Instance) ec2CostInstance {
 
 func AuditEC2Cost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) {
 	client := ec2.NewFromConfig(cfg)
+	cwClient := cloudwatch.NewFromConfig(cfg)
+	t := audit.GetThresholds(ctx)
 	var findings []audit.Finding
 
 	spinner := progress.NewSpinner(ctx, "Auditing EC2 cost")
@@ -79,7 +85,8 @@ func AuditEC2Cost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 		}
 	}
 
-	// Previous-gen instances
+	// Collect running instances for type and util checks
+	var running []ec2CostInstance
 	runningPaginator := ec2.NewDescribeInstancesPaginator(client, &ec2.DescribeInstancesInput{
 		Filters: []ec2types.Filter{{
 			Name:   aws.String("instance-state-name"),
@@ -94,52 +101,120 @@ func AuditEC2Cost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 		}
 		for _, res := range page.Reservations {
 			for _, inst := range res.Instances {
-				i := parseEC2CostInstance(inst)
-				isPrevGen := false
-				for _, prefix := range PrevGenPrefixes {
-					if strings.HasPrefix(i.instanceType, prefix) {
-						isPrevGen = true
-						findings = append(findings, audit.Finding{
-							Service:    "ec2",
-							ResourceID: i.id,
-							Tags:       i.tags,
-							Check:      "previous_gen_instance",
-							Status:     "WARN",
-							Detail: fmt.Sprintf(
-								"type=%s, consider upgrading",
-								i.instanceType,
-							),
-							RiskLevel:            "LOW",
-							EstimatedMonthlyCost: pricing.EC2Monthly(i.instanceType),
-							Remediation: remediation.Recommend(
-								"cost",
-								"ec2",
-								"previous_gen_instance",
-								i.id,
-								"previous-gen instance type",
-							),
-						})
-						break
-					}
-				}
-				if !isPrevGen {
-					findings = append(findings, audit.Finding{
-						Service:    "ec2",
-						ResourceID: i.id,
-						Tags:       i.tags,
-						Check:      "previous_gen_instance",
-						Status:     "PASS",
-						Detail: fmt.Sprintf(
-							"type=%s, current generation",
-							i.instanceType,
-						),
-						RiskLevel:            "MINIMAL",
-						EstimatedMonthlyCost: pricing.EC2Monthly(i.instanceType),
-					})
-				}
+				running = append(running, parseEC2CostInstance(inst))
 			}
 		}
 	}
+
+	spinner.Finish()
+
+	// Previous gen check
+	for _, i := range running {
+		isPrevGen := false
+		for _, prefix := range PrevGenPrefixes {
+			if strings.HasPrefix(i.instanceType, prefix) {
+				isPrevGen = true
+				findings = append(findings, audit.Finding{
+					Service:    "ec2",
+					ResourceID: i.id,
+					Tags:       i.tags,
+					Check:      "previous_gen_instance",
+					Status:     "WARN",
+					Detail: fmt.Sprintf(
+						"type=%s, consider upgrading",
+						i.instanceType,
+					),
+					RiskLevel:            "LOW",
+					EstimatedMonthlyCost: pricing.EC2Monthly(i.instanceType),
+					Remediation: remediation.Recommend(
+						"cost", "ec2", "previous_gen_instance", i.id, "previous-gen instance type",
+					),
+				})
+				break
+			}
+		}
+		if !isPrevGen {
+			findings = append(findings, audit.Finding{
+				Service:              "ec2",
+				ResourceID:           i.id,
+				Tags:                 i.tags,
+				Check:                "previous_gen_instance",
+				Status:               "PASS",
+				Detail:               fmt.Sprintf("type=%s, current generation", i.instanceType),
+				RiskLevel:            "MINIMAL",
+				EstimatedMonthlyCost: pricing.EC2Monthly(i.instanceType),
+			})
+		}
+	}
+
+	// Oversized instances (low CPU)
+	cpuThreshold := t.GetFloat("ec2", "cpu_idle_percent", t.CPUIdlePercent)
+	lookback := t.GetInt("ec2", "cpu_lookback_days", 7)
+	end := time.Now()
+	start := end.AddDate(0, 0, -lookback)
+
+	bar := progress.NewBar(ctx, int64(len(running)), "Checking EC2 CPU utilization")
+	var mu sync.Mutex
+	var wg sync.WaitGroup
+	sem := make(chan struct{}, t.Concurrency)
+
+	for _, i := range running {
+		wg.Add(1)
+		go func(i ec2CostInstance) {
+			defer wg.Done()
+			sem <- struct{}{}
+			defer func() { <-sem }()
+			defer bar.Add(1)
+
+			resp, err := cwClient.GetMetricStatistics(ctx, &cloudwatch.GetMetricStatisticsInput{
+				Namespace:  aws.String("AWS/EC2"),
+				MetricName: aws.String("CPUUtilization"),
+				Dimensions: []cwtypes.Dimension{{
+					Name:  aws.String("InstanceId"),
+					Value: aws.String(i.id),
+				}},
+				StartTime:  &start,
+				EndTime:    &end,
+				Period:     aws.Int32(86400),
+				Statistics: []cwtypes.Statistic{cwtypes.StatisticAverage},
+			})
+			if err != nil || len(resp.Datapoints) == 0 {
+				return
+			}
+
+			var total float64
+			for _, dp := range resp.Datapoints {
+				total += aws.ToFloat64(dp.Average)
+			}
+			avgCPU := total / float64(len(resp.Datapoints))
+
+			if avgCPU < cpuThreshold {
+				detail := fmt.Sprintf(
+					"type=%s, avg_cpu=%.1f%% over %d days",
+					i.instanceType,
+					avgCPU,
+					lookback,
+				)
+				mu.Lock()
+				findings = append(findings, audit.Finding{
+					Service:              "ec2",
+					ResourceID:           i.id,
+					Tags:                 i.tags,
+					Check:                "oversized_instance",
+					Status:               "WARN",
+					Detail:               detail,
+					RiskLevel:            "HIGH",
+					EstimatedMonthlyCost: pricing.EC2Monthly(i.instanceType),
+					Remediation: remediation.Recommend(
+						"cost", "ec2", "oversized_instance", i.id,
+						fmt.Sprintf("avg CPU %.1f%%", avgCPU),
+					),
+				})
+				mu.Unlock()
+			}
+		}(i)
+	}
+	wg.Wait()
 
 	// Unused Elastic IPs
 	addrs, err := client.DescribeAddresses(ctx, &ec2.DescribeAddressesInput{})
@@ -171,6 +246,5 @@ func AuditEC2Cost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 		}
 	}
 
-	spinner.Finish()
 	return findings, nil
 }
