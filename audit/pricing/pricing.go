@@ -19,6 +19,7 @@ type PriceTable struct {
 	EBSSnapshotPerGB float64            `json:"ebs_snapshot_per_gb"`
 	RDSHourly        map[string]float64 `json:"rds_hourly"`
 	DMSHourly        map[string]float64 `json:"dms_hourly"`
+	RedshiftHourly   map[string]float64 `json:"redshift_hourly"`
 	GlueDPUHourly    map[string]float64 `json:"glue_dpu_hourly"`
 	FixedMonthly     map[string]float64 `json:"fixed_monthly"`
 	StoragePerGB     map[string]float64 `json:"storage_per_gb"`
@@ -90,6 +91,13 @@ func RDSMonthly(instanceClass string) float64 {
 func DMSMonthly(instanceClass string) float64 {
 	if h, ok := table.DMSHourly[instanceClass]; ok {
 		return h * table.HoursPerMonth
+	}
+	return 0
+}
+
+func RedshiftMonthly(nodeType string, numNodes int32) float64 {
+	if h, ok := table.RedshiftHourly[nodeType]; ok {
+		return h * table.HoursPerMonth * float64(numNodes)
 	}
 	return 0
 }

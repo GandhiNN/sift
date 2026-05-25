@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"sift/audit"
+	"sift/audit/pricing"
 	"sift/audit/progress"
 	"sift/audit/remediation"
 
@@ -96,7 +97,8 @@ func AuditRedshiftCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, er
 						c.nodeType,
 						c.numNodes,
 					),
-					RiskLevel: "MEDIUM",
+					RiskLevel:            "MEDIUM",
+					EstimatedMonthlyCost: pricing.RedshiftMonthly(c.nodeType, c.numNodes),
 					Remediation: remediation.Recommend(
 						"cost",
 						"redshift",
@@ -144,13 +146,15 @@ func AuditRedshiftCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, er
 			} else {
 				mu.Lock()
 				findings = append(findings, audit.Finding{
-					Service:    "redshift",
-					ResourceID: c.id,
-					Tags:       c.tags,
-					Check:      "oversized_cluster",
-					Status:     "PASS",
-					Detail:     fmt.Sprintf("node_type=%s, nodes=%d, avg CPU=%.1f%% over %d days", c.nodeType, c.numNodes, avgCPU, lookback),
-					RiskLevel:  "MINIMAL",
+					Service:              "redshift",
+					ResourceID:           c.id,
+					Tags:                 c.tags,
+					Check:                "oversized_cluster",
+					Status:               "PASS",
+					Detail:               fmt.Sprintf("node_type=%s, nodes=%d, avg CPU=%.1f%% over %d days", c.nodeType, c.numNodes, avgCPU, lookback),
+					RiskLevel:            "MINIMAL",
+					EstimatedMonthlyCost: pricing.RedshiftMonthly(c.nodeType, c.numNodes),
+					Remediation:          nil,
 				})
 				mu.Unlock()
 			}

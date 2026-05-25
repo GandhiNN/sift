@@ -103,6 +103,15 @@
     "dms.r5.large": 0.155,
     "dms.r5.xlarge": 0.31
   },
+  "redshift_hourly": {
+    "dc2.large": 0.25,
+    "dc2.8xlarge": 4.80,
+    "ra3.xlplus": 1.086,
+    "ra3.4xlarge": 3.26,
+    "ra3.16xlarge": 13.04,
+    "ds2.xlarge": 0.85,
+    "ds2.8xlarge": 6.80
+  },
   "glue_dpu_hourly": {
     "Standard": 0.44,
     "G.1X": 0.44,
