@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"strings"
-	"sync"
 	"time"
 
 	"sift/audit"
@@ -43,7 +42,6 @@ func parseRDSCostInstance(db rdstypes.DBInstance) rdsCostInstance {
 func AuditRDSCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) {
 	rdsClient := rds.NewFromConfig(cfg)
 	cwClient := cloudwatch.NewFromConfig(cfg)
-	var findings []audit.Finding
 
 	var allDBs []rdstypes.DBInstance
 	paginator := rds.NewDescribeDBInstancesPaginator(rdsClient, &rds.DescribeDBInstancesInput{})
@@ -55,73 +53,58 @@ func AuditRDSCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 		allDBs = append(allDBs, page.DBInstances...)
 	}
 
-	var mu sync.Mutex
-	var wg sync.WaitGroup
-	sem := make(chan struct{}, audit.GetThresholds(ctx).Concurrency)
-
-	for _, db := range allDBs {
-		r := parseRDSCostInstance(db)
-
-		svc := "rds"
-		if strings.HasPrefix(r.engine, "docdb") {
-			svc = "docdb"
-		}
-
-		if r.status == "stopped" {
-			findings = append(findings, audit.Finding{
-				Service:    svc,
-				ResourceID: r.id,
-				Tags:       r.tags,
-				Check:      "stopped_instance",
-				Status:     "WARN",
-				Detail: fmt.Sprintf(
-					"engine=%s, storage still incurring cost",
-					r.engine,
-				),
-				RiskLevel:            "MEDIUM",
-				EstimatedMonthlyCost: pricing.RDSMonthly(r.class),
-				Remediation: remediation.Recommend(
-					"cost",
-					svc,
-					"stopped_instance",
-					r.id,
-					"instance in stopped state",
-				),
-			})
-			continue
-		}
-
-		if r.status != "available" {
-			continue
-		}
-
-		wg.Add(1)
-		go func(r rdsCostInstance, svc string) {
-			defer wg.Done()
-			sem <- struct{}{}
-			defer func() { <-sem }()
-
-			avgCPU, err := getAvgCPU(ctx, cwClient, r.id, r.engine)
-			if err != nil {
-				mu.Lock()
-				findings = append(findings, audit.ErrorFinding(svc, r.id, "check_cpu", err))
-				mu.Unlock()
-				return
+	return audit.ProcessAllMulti(
+		ctx,
+		allDBs,
+		"Auditing RDS cost",
+		func(ctx context.Context, db rdstypes.DBInstance) []audit.Finding {
+			r := parseRDSCostInstance(db)
+			svc := "rds"
+			if strings.HasPrefix(r.engine, "docdb") {
+				svc = "docdb"
 			}
-			t := audit.GetThresholds(ctx)
-			if avgCPU < audit.GetThresholds(ctx).
-				GetFloat("rds", "cpu_idle_percent", t.CPUIdlePercent) {
-				mu.Lock()
-				findings = append(findings, audit.Finding{
+			if r.status == "stopped" {
+				return []audit.Finding{{
 					Service:    svc,
 					ResourceID: r.id,
-					Tags:       r.tags, Check: "oversized_instance",
-					Status: "WARN",
+					Tags:       r.tags,
+					Check:      "stopped_instance",
+					Status:     "WARN",
+					Detail: fmt.Sprintf(
+						"engine=%s, storage still incurring cost",
+						r.engine,
+					),
+					RiskLevel:            "MEDIUM",
+					EstimatedMonthlyCost: pricing.RDSMonthly(r.class),
+					Remediation: remediation.Recommend(
+						"cost",
+						svc,
+						"stopped_instance",
+						r.id,
+						"instance in stopped state",
+					),
+				}}
+			}
+			if r.status != "available" {
+				return nil
+			}
+			avgCPU, err := getAvgCPU(ctx, cwClient, r.id, r.engine)
+			if err != nil {
+				return []audit.Finding{audit.ErrorFinding(svc, r.id, "check_cpu", err)}
+			}
+			t := audit.GetThresholds(ctx)
+			if avgCPU < t.GetFloat("rds", "cpu_idle_percent", t.CPUIdlePercent) {
+				return []audit.Finding{{
+					Service:    svc,
+					ResourceID: r.id,
+					Tags:       r.tags,
+					Check:      "oversized_instance",
+					Status:     "WARN",
 					Detail: fmt.Sprintf(
 						"class=%s, avg CPU=%.1f%% over %d days, consider downsizing",
 						r.class,
 						avgCPU,
-						audit.GetThresholds(ctx).GetInt("rds", "cpu_lookback_days", 7),
+						t.GetInt("rds", "cpu_lookback_days", 7),
 					),
 					RiskLevel:            "HIGH",
 					EstimatedMonthlyCost: pricing.RDSMonthly(r.class),
@@ -132,32 +115,25 @@ func AuditRDSCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 						r.id,
 						fmt.Sprintf("avg CPU %.1f%%", avgCPU),
 					),
-				})
-				mu.Unlock()
-			} else {
-				mu.Lock()
-				findings = append(findings, audit.Finding{
-					Service:    svc,
-					ResourceID: r.id,
-					Tags:       r.tags,
-					Check:      "oversized_instance",
-					Status:     "PASS",
-					Detail: fmt.Sprintf(
-						"class=%s, avg CPU=%.1f%% over %d days",
-						r.class,
-						avgCPU,
-						audit.GetThresholds(ctx).GetInt("rds", "cpu_lookback_days", 7),
-					),
-					RiskLevel:            "MINIMAL",
-					EstimatedMonthlyCost: pricing.RDSMonthly(r.class),
-					Remediation:          nil,
-				})
-				mu.Unlock()
+				}}
 			}
-		}(r, svc)
-	}
-	wg.Wait()
-	return findings, nil
+			return []audit.Finding{{
+				Service:    svc,
+				ResourceID: r.id,
+				Tags:       r.tags,
+				Check:      "oversized_instance",
+				Status:     "PASS",
+				Detail: fmt.Sprintf(
+					"class=%s, avg CPU=%.1f%% over %d days",
+					r.class,
+					avgCPU,
+					t.GetInt("rds", "cpu_lookback_days", 7),
+				),
+				RiskLevel:            "MINIMAL",
+				EstimatedMonthlyCost: pricing.RDSMonthly(r.class),
+			}}
+		},
+	), nil
 }
 
 func getAvgCPU(

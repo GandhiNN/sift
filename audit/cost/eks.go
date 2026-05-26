@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"strings"
-	"sync"
 
 	"sift/audit"
 	"sift/audit/pricing"
@@ -53,19 +52,11 @@ func AuditEKSCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 		clusterInput.NextToken = resp.NextToken
 	}
 
-	var mu sync.Mutex
-	var findings []audit.Finding
-	var wg sync.WaitGroup
-	sem := make(chan struct{}, audit.GetThresholds(ctx).Concurrency)
-
-	for _, name := range allClusters {
-		wg.Add(1)
-		go func(name string) {
-			defer wg.Done()
-			sem <- struct{}{}
-			defer func() { <-sem }()
-
-			// Get cluster tags
+	return audit.ProcessAllMulti(
+		ctx,
+		allClusters,
+		"Auditing EKS cost",
+		func(ctx context.Context, name string) []audit.Finding {
 			desc, err := client.DescribeCluster(ctx, &eks.DescribeClusterInput{Name: &name})
 			var clusterTags map[string]string
 			if err == nil {
@@ -77,17 +68,7 @@ func AuditEKSCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 			for {
 				ngResp, err := client.ListNodegroups(ctx, ngInput)
 				if err != nil {
-					mu.Lock()
-					findings = append(
-						findings,
-						audit.ErrorFinding("eks", name, "list_nodegroups", err),
-					)
-					mu.Unlock()
-					break
-				}
-				allNodegroups = append(allNodegroups, ngResp.Nodegroups...)
-				if ngResp.NextToken == nil {
-					break
+					return []audit.Finding{audit.ErrorFinding("eks", name, "list_nodegroups", err)}
 				}
 				allNodegroups = append(allNodegroups, ngResp.Nodegroups...)
 				if ngResp.NextToken == nil {
@@ -95,10 +76,8 @@ func AuditEKSCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 				}
 				ngInput.NextToken = ngResp.NextToken
 			}
-
 			if len(allNodegroups) == 0 {
-				mu.Lock()
-				findings = append(findings, audit.Finding{
+				return []audit.Finding{{
 					Service:              "eks",
 					ResourceID:           name,
 					Tags:                 clusterTags,
@@ -114,114 +93,94 @@ func AuditEKSCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 						name,
 						"no node groups attached",
 					),
-				})
-				mu.Unlock()
-				return
+				}}
 			}
-
-			var ngWg sync.WaitGroup
+			var results []audit.Finding
 			for _, ngName := range allNodegroups {
-				ngWg.Add(1)
-				go func(ngName string) {
-					defer ngWg.Done()
-					ngResp, err := client.DescribeNodegroup(ctx, &eks.DescribeNodegroupInput{
-						ClusterName:   &name,
-						NodegroupName: &ngName,
-					})
-					if err != nil {
-						mu.Lock()
-						findings = append(
-							findings,
-							audit.ErrorFinding(
-								"eks_nodegroup",
-								fmt.Sprintf("%s/%s", name, ngName),
-								"describe_nodegroup",
-								err,
-							),
-						)
-						mu.Unlock()
-						return
-					}
-
-					n := parseEKSCostNodegroup(name, ngResp.Nodegroup)
-					var nodeCost float64
-					if len(n.instanceTypes) > 0 {
-						nodeCost = pricing.EC2Monthly(n.instanceTypes[0])
-					}
-					var ngFindings []audit.Finding
-
-					for _, iType := range n.instanceTypes {
-						for _, prefix := range PrevGenPrefixes {
-							if strings.HasPrefix(iType, prefix) {
-								ngFindings = append(ngFindings, audit.Finding{
-									Service:    "eks_nodegroup",
-									ResourceID: fmt.Sprintf("%s/%s", n.cluster, n.name),
-									Tags:       n.tags,
-									Check:      "previous_gen_node",
-									Status:     "WARN",
-									Detail: fmt.Sprintf(
-										"type=%s, consider upgrading",
-										iType,
-									),
-									RiskLevel:            "LOW",
-									EstimatedMonthlyCost: nodeCost,
-									Remediation: remediation.Recommend(
-										"cost",
-										"eks",
-										"previous_gen_node",
-										fmt.Sprintf("%s/%s", n.cluster, n.name),
-										fmt.Sprintf("type=%s", iType),
-									),
-								})
-								break
-							}
+				ngResp, err := client.DescribeNodegroup(ctx, &eks.DescribeNodegroupInput{
+					ClusterName:   &name,
+					NodegroupName: &ngName,
+				})
+				if err != nil {
+					results = append(
+						results,
+						audit.ErrorFinding(
+							"eks_nodegroup",
+							fmt.Sprintf("%s/%s", name, ngName),
+							"describe_nodegroup",
+							err,
+						),
+					)
+					continue
+				}
+				n := parseEKSCostNodegroup(name, ngResp.Nodegroup)
+				var nodeCost float64
+				if len(n.instanceTypes) > 0 {
+					nodeCost = pricing.EC2Monthly(n.instanceTypes[0])
+				}
+				var ngFindings []audit.Finding
+				for _, iType := range n.instanceTypes {
+					for _, prefix := range dmsPrevGenPrefixes {
+						if strings.HasPrefix(iType, prefix) {
+							ngFindings = append(ngFindings, audit.Finding{
+								Service:    "eks_nodegroup",
+								ResourceID: fmt.Sprintf("%s/%s", n.cluster, n.name),
+								Tags:       n.tags,
+								Check:      "previous_gen_node",
+								Status:     "WARN",
+								Detail: fmt.Sprintf(
+									"type=%s, consider upgrading",
+									iType,
+								),
+								RiskLevel:            "LOW",
+								EstimatedMonthlyCost: nodeCost,
+								Remediation: remediation.Recommend(
+									"cost",
+									"eks",
+									"previous_gen_node",
+									fmt.Sprintf("%s/%s", n.cluster, n.name),
+									fmt.Sprintf("type=%s", iType),
+								),
+							})
+							break
 						}
 					}
-
-					if n.desiredSize == 0 {
-						ngFindings = append(ngFindings, audit.Finding{
-							Service:              "eks_nodegroup",
-							ResourceID:           fmt.Sprintf("%s/%s", n.cluster, n.name),
-							Tags:                 n.tags,
-							Check:                "empty_nodegroup",
-							Status:               "WARN",
-							Detail:               "desired size is 0, consider removing if unused",
-							RiskLevel:            "MEDIUM",
-							EstimatedMonthlyCost: nodeCost,
-							Remediation: remediation.Recommend(
-								"cost",
-								"eks",
-								"empty_nodegroup",
-								fmt.Sprintf("%s/%s", n.cluster, n.name),
-								"desired size is 0",
-							),
-						})
-					}
-
-					if len(ngFindings) > 0 {
-						mu.Lock()
-						findings = append(findings, ngFindings...)
-						mu.Unlock()
-					} else {
-						mu.Lock()
-						findings = append(findings, audit.Finding{
-							Service:              "eks_nodegroup",
-							ResourceID:           fmt.Sprintf("%s/%s", n.cluster, n.name),
-							Tags:                 n.tags,
-							Check:                "nodegroup_cost",
-							Status:               "PASS",
-							Detail:               fmt.Sprintf("desired=%d, current-gen instances", n.desiredSize),
-							RiskLevel:            "MINIMAL",
-							EstimatedMonthlyCost: nodeCost,
-							Remediation:          nil,
-						})
-						mu.Unlock()
-					}
-				}(ngName)
+				}
+				if n.desiredSize == 0 {
+					ngFindings = append(ngFindings, audit.Finding{
+						Service:              "eks_nodegroup",
+						ResourceID:           fmt.Sprintf("%s/%s", n.cluster, n.name),
+						Tags:                 n.tags,
+						Check:                "empty_nodegroup",
+						Status:               "WARN",
+						Detail:               "desired size is 0, consider removing if unused",
+						RiskLevel:            "MEDIUM",
+						EstimatedMonthlyCost: nodeCost,
+						Remediation: remediation.Recommend(
+							"cost",
+							"eks",
+							"empty_nodegroup",
+							fmt.Sprintf("%s/%s", n.cluster, n.name),
+							"desired size is 0",
+						),
+					})
+				}
+				if len(ngFindings) > 0 {
+					results = append(results, ngFindings...)
+				} else {
+					results = append(results, audit.Finding{
+						Service:              "eks_nodegroup",
+						ResourceID:           fmt.Sprintf("%s/%s", n.cluster, n.name),
+						Tags:                 n.tags,
+						Check:                "nodegroup_cost",
+						Status:               "PASS",
+						Detail:               fmt.Sprintf("desired=%d, current-gen instances", n.desiredSize),
+						RiskLevel:            "MINIMAL",
+						EstimatedMonthlyCost: nodeCost,
+					})
+				}
 			}
-			ngWg.Wait()
-		}(name)
-	}
-	wg.Wait()
-	return findings, nil
+			return results
+		},
+	), nil
 }

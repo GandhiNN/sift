@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"strings"
-	"sync"
 	"time"
 
 	"sift/audit"
@@ -153,19 +152,11 @@ func AuditEC2Cost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 	end := time.Now()
 	start := end.AddDate(0, 0, -lookback)
 
-	bar := progress.NewBar(ctx, int64(len(running)), "Checking EC2 CPU utilization")
-	var mu sync.Mutex
-	var wg sync.WaitGroup
-	sem := make(chan struct{}, t.Concurrency)
-
-	for _, i := range running {
-		wg.Add(1)
-		go func(i ec2CostInstance) {
-			defer wg.Done()
-			sem <- struct{}{}
-			defer func() { <-sem }()
-			defer bar.Add(1)
-
+	cpuFindings := audit.ProcessAllMulti(
+		ctx,
+		running,
+		"Checking EC2 CPU utilization",
+		func(ctx context.Context, i ec2CostInstance) []audit.Finding {
 			resp, err := cwClient.GetMetricStatistics(ctx, &cloudwatch.GetMetricStatisticsInput{
 				Namespace:  aws.String("AWS/EC2"),
 				MetricName: aws.String("CPUUtilization"),
@@ -179,15 +170,13 @@ func AuditEC2Cost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 				Statistics: []cwtypes.Statistic{cwtypes.StatisticAverage},
 			})
 			if err != nil || len(resp.Datapoints) == 0 {
-				return
+				return nil
 			}
-
 			var total float64
 			for _, dp := range resp.Datapoints {
 				total += aws.ToFloat64(dp.Average)
 			}
 			avgCPU := total / float64(len(resp.Datapoints))
-
 			if avgCPU < cpuThreshold {
 				detail := fmt.Sprintf(
 					"type=%s, avg_cpu=%.1f%% over %d days",
@@ -195,8 +184,7 @@ func AuditEC2Cost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 					avgCPU,
 					lookback,
 				)
-				mu.Lock()
-				findings = append(findings, audit.Finding{
+				return []audit.Finding{{
 					Service:              "ec2",
 					ResourceID:           i.id,
 					Tags:                 i.tags,
@@ -206,15 +194,18 @@ func AuditEC2Cost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 					RiskLevel:            "HIGH",
 					EstimatedMonthlyCost: pricing.EC2Monthly(i.instanceType),
 					Remediation: remediation.Recommend(
-						"cost", "ec2", "oversized_instance", i.id,
+						"cost",
+						"ec2",
+						"oversized_instance",
+						i.id,
 						fmt.Sprintf("avg CPU %.1f%%", avgCPU),
 					),
-				})
-				mu.Unlock()
+				}}
 			}
-		}(i)
-	}
-	wg.Wait()
+			return nil
+		},
+	)
+	findings = append(findings, cpuFindings...)
 
 	// Unused Elastic IPs
 	addrs, err := client.DescribeAddresses(ctx, &ec2.DescribeAddressesInput{})

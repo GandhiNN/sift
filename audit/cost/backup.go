@@ -3,11 +3,9 @@ package cost
 import (
 	"context"
 	"fmt"
-	"sync"
 	"time"
 
 	"sift/audit"
-	"sift/audit/progress"
 	"sift/audit/remediation"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -37,24 +35,15 @@ func AuditBackupCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, erro
 		vaultInput.NextToken = vaultResp.NextToken
 	}
 
-	results := make([]audit.Finding, len(vaults))
-	bar := progress.NewBar(ctx, int64(len(vaults)), "Auditing Backup cost")
-	var wg sync.WaitGroup
-	sem := make(chan struct{}, t.Concurrency)
+	costPerGB := t.GetFloat("backup", "storage_per_gb", 0.05)
 
-	for i, v := range vaults {
-		wg.Add(1)
-		go func(i int, v backuptypes.BackupVaultListMember) {
-			defer wg.Done()
-			sem <- struct{}{}
-			defer func() { <-sem }()
-			defer bar.Add(1)
-
+	return audit.ProcessAll(
+		ctx,
+		vaults,
+		"Auditing Backup cost",
+		func(ctx context.Context, v backuptypes.BackupVaultListMember) audit.Finding {
 			vaultName := aws.ToString(v.BackupVaultName)
-
-			rpInput := &backup.ListRecoveryPointsByBackupVaultInput{
-				BackupVaultName: &vaultName,
-			}
+			rpInput := &backup.ListRecoveryPointsByBackupVaultInput{BackupVaultName: &vaultName}
 			var oldCount, totalCount int
 			var oldBytes int64
 			for {
@@ -76,10 +65,7 @@ func AuditBackupCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, erro
 				}
 				rpInput.NextToken = rpResp.NextToken
 			}
-
 			oldGB := float64(oldBytes) / (1024 * 1024 * 1024)
-			costPerGB := t.GetFloat("backup", "storage_per_gb", 0.05)
-
 			if oldCount > 0 {
 				detail := fmt.Sprintf(
 					"total=%d, older_than_%dd=%d, old_size=%.1fGB",
@@ -88,7 +74,7 @@ func AuditBackupCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, erro
 					oldCount,
 					oldGB,
 				)
-				results[i] = audit.Finding{
+				return audit.Finding{
 					Service:              "backup",
 					ResourceID:           vaultName,
 					Check:                "old_recovery_points",
@@ -104,19 +90,19 @@ func AuditBackupCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, erro
 						fmt.Sprintf("old_recovery_points=%d, size=%.1fGB", oldCount, oldGB),
 					),
 				}
-			} else {
-				results[i] = audit.Finding{
-					Service:    "backup",
-					ResourceID: vaultName,
-					Check:      "old_recovery_points",
-					Status:     "PASS",
-					Detail:     fmt.Sprintf("total=%d, all within %d day retention", totalCount, retentionDays),
-					RiskLevel:  "MINIMAL",
-				}
 			}
-		}(i, v)
-	}
-	wg.Wait()
-
-	return results, nil
+			return audit.Finding{
+				Service:    "backup",
+				ResourceID: vaultName,
+				Check:      "old_recovery_points",
+				Status:     "PASS",
+				Detail: fmt.Sprintf(
+					"total=%d, all within %d day retention",
+					totalCount,
+					retentionDays,
+				),
+				RiskLevel: "MINIMAL",
+			}
+		},
+	), nil
 }
