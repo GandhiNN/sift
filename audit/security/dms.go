@@ -4,9 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sift/audit"
-	"sift/audit/progress"
 	"sift/audit/remediation"
-	"sync"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/databasemigrationservice"
@@ -63,19 +61,11 @@ func AuditDMS(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) {
 		input.Marker = resp.Marker
 	}
 
-	results := make([]audit.Finding, len(instances))
-	bar := progress.NewBar(ctx, int64(len(instances)), "Auditing DMS security")
-
-	var wg sync.WaitGroup
-	sem := make(chan struct{}, audit.GetThresholds(ctx).Concurrency)
-
-	for i, inst := range instances {
-		wg.Add(1)
-		go func(i int, inst dmstypes.ReplicationInstance) {
-			defer wg.Done()
-			sem <- struct{}{}
-			defer func() { <-sem }()
-
+	results := audit.ProcessAll(
+		ctx,
+		instances,
+		"Auditing DMS security",
+		func(_ context.Context, inst dmstypes.ReplicationInstance) audit.Finding {
 			d := parseDMSSecurityEntry(inst)
 			risk := dmsRisk(d.publiclyAccessible, d.encrypted)
 
@@ -87,33 +77,29 @@ func AuditDMS(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) {
 					"dms_security",
 					d.id,
 					fmt.Sprintf(
-						"publicly_accessible=%t, encrypted=%t",
+						"publicly_accessible-%t, encrypted=%t",
 						d.publiclyAccessible,
 						d.encrypted,
 					),
 				)
 			}
 
-			detail := fmt.Sprintf(
-				"publicly_accessible=%t, encrypted=%t, multi_az=%t",
-				d.publiclyAccessible,
-				d.encrypted,
-				d.multiAZ,
-			)
-
-			results[i] = audit.Finding{
-				Service:     "dms",
-				ResourceID:  d.id,
-				Check:       "dms_security",
-				Status:      statusFromRisk(risk),
-				Detail:      detail,
+			return audit.Finding{
+				Service:    "dms",
+				ResourceID: d.id,
+				Check:      "dms_security",
+				Status:     statusFromRisk(risk),
+				Detail: fmt.Sprintf(
+					"publicly_accessible=%t, encrypted=%t, multi_az=%t",
+					d.publiclyAccessible,
+					d.encrypted,
+					d.multiAZ,
+				),
 				RiskLevel:   risk,
 				Remediation: rem,
 			}
-			bar.Add(1)
-		}(i, inst)
-	}
-	wg.Wait()
+		},
+	)
 
 	return results, nil
 }

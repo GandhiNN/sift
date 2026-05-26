@@ -3,10 +3,8 @@ package security
 import (
 	"context"
 	"fmt"
-	"sync"
 
 	"sift/audit"
-	"sift/audit/progress"
 	"sift/audit/remediation"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -57,21 +55,12 @@ func AuditRDS(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) {
 		instances = append(instances, page.DBInstances...)
 	}
 
-	results := make([]audit.Finding, len(instances))
-	bar := progress.NewBar(ctx, int64(len(instances)), "Auditing RDS instances")
-
-	var wg sync.WaitGroup
-	sem := make(chan struct{}, audit.GetThresholds(ctx).Concurrency)
-
-	for i, db := range instances {
-		wg.Add(1)
-		go func(i int, db rdstypes.DBInstance) {
-			defer wg.Done()
-			sem <- struct{}{}
-			defer func() { <-sem }()
-
+	return audit.ProcessAll(
+		ctx,
+		instances,
+		"Auditing RDS instances",
+		func(ctx context.Context, db rdstypes.DBInstance) audit.Finding {
 			inst := parseRDSInstance(db)
-
 			t := audit.GetThresholds(ctx)
 			risk := rdsRisk(
 				inst.public,
@@ -99,7 +88,7 @@ func AuditRDS(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) {
 				rem = remediation.Recommend("security", "rds", "rds_security", inst.id, detail)
 			}
 
-			results[i] = audit.Finding{
+			return audit.Finding{
 				Service:     "rds",
 				ResourceID:  inst.id,
 				Tags:        inst.tags,
@@ -109,12 +98,8 @@ func AuditRDS(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) {
 				RiskLevel:   risk,
 				Remediation: rem,
 			}
-			bar.Add(1)
-		}(i, db)
-	}
-
-	wg.Wait()
-	return results, nil
+		},
+	), nil
 }
 
 func rdsRisk(

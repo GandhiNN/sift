@@ -4,10 +4,8 @@ import (
 	"context"
 	"fmt"
 	"strings"
-	"sync"
 
 	"sift/audit"
-	"sift/audit/progress"
 	"sift/audit/remediation"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -75,29 +73,14 @@ func AuditEKS(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) {
 		input.NextToken = resp.NextToken
 	}
 
-	results := make([]audit.Finding, 0, len(allClusters))
-	bar := progress.NewBar(ctx, int64(len(allClusters)), "Auditing EKS clusters")
-
-	var mu sync.Mutex
-	var wg sync.WaitGroup
-	sem := make(chan struct{}, audit.GetThresholds(ctx).Concurrency)
-
-	for _, name := range allClusters {
-		wg.Add(1)
-		go func(name string) {
-			defer wg.Done()
-			sem <- struct{}{}
-			defer func() { <-sem }()
-			defer bar.Add(1)
-
-			desc, err := client.DescribeCluster(ctx, &eks.DescribeClusterInput{
-				Name: &name,
-			})
+	results := audit.ProcessAll(
+		ctx,
+		allClusters,
+		"Auditing EKS clusters",
+		func(ctx context.Context, name string) audit.Finding {
+			desc, err := client.DescribeCluster(ctx, &eks.DescribeClusterInput{Name: &name})
 			if err != nil {
-				mu.Lock()
-				results = append(results, audit.ErrorFinding("eks", name, "cluster_security", err))
-				mu.Unlock()
-				return
+				return audit.ErrorFinding("eks", name, "cluster_security", err)
 			}
 
 			c := parseEKSCluster(desc.Cluster)
@@ -116,8 +99,7 @@ func AuditEKS(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) {
 				rem = remediation.Recommend("security", "eks", "eks_security", c.name, detail)
 			}
 
-			mu.Lock()
-			results = append(results, audit.Finding{
+			return audit.Finding{
 				Service:     "eks",
 				ResourceID:  c.name,
 				Tags:        c.tags,
@@ -126,11 +108,10 @@ func AuditEKS(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) {
 				Detail:      detail,
 				RiskLevel:   risk,
 				Remediation: rem,
-			})
-			mu.Unlock()
-		}(name)
-	}
-	wg.Wait()
+			}
+		},
+	)
+
 	return results, nil
 }
 

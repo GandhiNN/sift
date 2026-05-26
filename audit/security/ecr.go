@@ -4,9 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sift/audit"
-	"sift/audit/progress"
 	"sift/audit/remediation"
-	"sync"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/ecr"
@@ -72,19 +70,11 @@ func AuditECR(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) {
 		allRepos = append(allRepos, page.Repositories...)
 	}
 
-	results := make([]audit.Finding, len(allRepos))
-	bar := progress.NewBar(ctx, int64(len(allRepos)), "Auditing ECR security")
-
-	var wg sync.WaitGroup
-	sem := make(chan struct{}, audit.GetThresholds(ctx).Concurrency)
-
-	for i, repo := range allRepos {
-		wg.Add(1)
-		go func(i int, repo ecrtypes.Repository) {
-			defer wg.Done()
-			sem <- struct{}{}
-			defer func() { <-sem }()
-
+	results := audit.ProcessAll(
+		ctx,
+		allRepos,
+		"Auditing ECR security",
+		func(ctx context.Context, repo ecrtypes.Repository) audit.Finding {
 			e := parseECRSecurityEntry(ctx, client, repo)
 			risk := ecrRisk(e.scanOnPush, e.imageTagMutable)
 
@@ -96,20 +86,10 @@ func AuditECR(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) {
 
 			var rem *audit.Remediation
 			if risk != "MINIMAL" {
-				rem = remediation.Recommend(
-					"security",
-					"ecr",
-					"ecr_security",
-					e.name,
-					fmt.Sprintf(
-						"scan_on_push=%t, image_tag_mutable=%t",
-						e.scanOnPush,
-						e.imageTagMutable,
-					),
-				)
+				rem = remediation.Recommend("security", "ecr", "ecr_security", e.name, detail)
 			}
 
-			results[i] = audit.Finding{
+			return audit.Finding{
 				Service:     "ecr",
 				ResourceID:  e.name,
 				Tags:        e.tags,
@@ -119,10 +99,7 @@ func AuditECR(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) {
 				RiskLevel:   risk,
 				Remediation: rem,
 			}
-			bar.Add(1)
-		}(i, repo)
-	}
-	wg.Wait()
-
+		},
+	)
 	return results, nil
 }

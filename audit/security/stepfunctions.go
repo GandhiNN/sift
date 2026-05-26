@@ -3,10 +3,8 @@ package security
 import (
 	"context"
 	"fmt"
-	"sync"
 
 	"sift/audit"
-	"sift/audit/progress"
 	"sift/audit/remediation"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -42,19 +40,11 @@ func AuditStepFunctions(ctx context.Context, cfg aws.Config) ([]audit.Finding, e
 		input.NextToken = resp.NextToken
 	}
 
-	results := make([]audit.Finding, len(machines))
-	bar := progress.NewBar(ctx, int64(len(machines)), "Auditing Step Functions security")
-	var wg sync.WaitGroup
-	sem := make(chan struct{}, audit.GetThresholds(ctx).Concurrency)
-
-	for i, sm := range machines {
-		wg.Add(1)
-		go func(i int, sm sfntypes.StateMachineListItem) {
-			defer wg.Done()
-			sem <- struct{}{}
-			defer func() { <-sem }()
-			defer bar.Add(1)
-
+	results := audit.ProcessAll(
+		ctx,
+		machines,
+		"Auditing Step Functions security",
+		func(ctx context.Context, sm sfntypes.StateMachineListItem) audit.Finding {
 			arn := aws.ToString(sm.StateMachineArn)
 			name := aws.ToString(sm.Name)
 
@@ -62,8 +52,7 @@ func AuditStepFunctions(ctx context.Context, cfg aws.Config) ([]audit.Finding, e
 				StateMachineArn: &arn,
 			})
 			if err != nil {
-				results[i] = audit.ErrorFinding("stepfunctions", name, "describe", err)
-				return
+				return audit.ErrorFinding("stepfunctions", name, "describe", err)
 			}
 
 			loggingEnabled := desc.LoggingConfiguration != nil &&
@@ -90,7 +79,7 @@ func AuditStepFunctions(ctx context.Context, cfg aws.Config) ([]audit.Finding, e
 				)
 			}
 
-			results[i] = audit.Finding{
+			return audit.Finding{
 				Service:     "stepfunctions",
 				ResourceID:  name,
 				Check:       "stepfunctions_security",
@@ -99,15 +88,8 @@ func AuditStepFunctions(ctx context.Context, cfg aws.Config) ([]audit.Finding, e
 				RiskLevel:   risk,
 				Remediation: rem,
 			}
-		}(i, sm)
-	}
-	wg.Wait()
+		},
+	)
 
-	out := results[:0]
-	for _, f := range results {
-		if f.ResourceID != "" {
-			out = append(out, f)
-		}
-	}
-	return out, nil
+	return results, nil
 }

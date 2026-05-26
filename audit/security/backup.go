@@ -5,7 +5,6 @@ import (
 	"fmt"
 
 	"sift/audit"
-	"sift/audit/progress"
 	"sift/audit/remediation"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -52,33 +51,39 @@ func AuditBackup(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) {
 	}
 
 	// Check vaults
-	results := make([]audit.Finding, len(vaults))
-	bar := progress.NewBar(ctx, int64(len(vaults)), "Auditing Backup vaults")
+	return audit.ProcessAll(
+		ctx,
+		vaults,
+		"Auditing Backup vaults",
+		func(_ context.Context, v backuptypes.BackupVaultListMember) audit.Finding {
+			entry := parseBackupVaultEntry(v)
+			risk := backupRisk(entry.encrypted)
+			detail := fmt.Sprintf(
+				"encrypted=%t, recovery_points=%d",
+				entry.encrypted,
+				entry.recoveryPoints,
+			)
 
-	for i, v := range vaults {
-		entry := parseBackupVaultEntry(v)
-		risk := backupRisk(entry.encrypted)
-		detail := fmt.Sprintf(
-			"encrypted=%t, recovery_points=%d",
-			entry.encrypted,
-			entry.recoveryPoints,
-		)
+			var rem *audit.Remediation
+			if risk != "MINIMAL" {
+				rem = remediation.Recommend(
+					"security",
+					"backup",
+					"vault_security",
+					entry.name,
+					detail,
+				)
+			}
 
-		var rem *audit.Remediation
-		if risk != "MINIMAL" {
-			rem = remediation.Recommend("security", "backup", "vault_security", entry.name, detail)
-		}
-
-		results[i] = audit.Finding{
-			Service:     "backup",
-			ResourceID:  entry.name,
-			Check:       "vault_security",
-			Status:      statusFromRisk(risk),
-			Detail:      detail,
-			RiskLevel:   risk,
-			Remediation: rem,
-		}
-		bar.Add(1)
-	}
-	return results, nil
+			return audit.Finding{
+				Service:     "backup",
+				ResourceID:  entry.name,
+				Check:       "vault_security",
+				Status:      statusFromRisk(risk),
+				Detail:      detail,
+				RiskLevel:   risk,
+				Remediation: rem,
+			}
+		},
+	), nil
 }

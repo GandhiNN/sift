@@ -3,10 +3,8 @@ package security
 import (
 	"context"
 	"fmt"
-	"sync"
 
 	"sift/audit"
-	"sift/audit/progress"
 	"sift/audit/remediation"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -105,26 +103,19 @@ func AuditS3(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) {
 		return nil, fmt.Errorf("list buckets: %w", err)
 	}
 
-	buckets := listResp.Buckets
-	results := make([]audit.Finding, len(buckets))
-	bar := progress.NewBar(ctx, int64(len(buckets)), "Auditing S3 buckets")
-
-	var wg sync.WaitGroup
-	sem := make(chan struct{}, audit.GetThresholds(ctx).Concurrency)
-
+	var names []string
+	for _, b := range listResp.Buckets {
+		if b.Name != nil {
+			names = append(names, *b.Name)
+		}
+	}
 	dataEventsEnabled := hasS3DataEvents(ctx, cfg)
 
-	for i, b := range buckets {
-		if b.Name == nil {
-			bar.Add(1)
-			continue
-		}
-		wg.Add(1)
-		go func(i int, name string) {
-			defer wg.Done()
-			sem <- struct{}{}
-			defer func() { <-sem }()
-
+	return audit.ProcessAll(
+		ctx,
+		names,
+		"Auditing S3 buckets",
+		func(ctx context.Context, name string) audit.Finding {
 			bucket := parseS3Bucket(ctx, client, name)
 			risk := s3Risk(
 				bucket.publicBlocked,
@@ -141,7 +132,6 @@ func AuditS3(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) {
 				bucket.logging,
 				dataEventsEnabled,
 			)
-
 			var rem *audit.Remediation
 			if risk != "MINIMAL" {
 				rem = remediation.Recommend(
@@ -153,7 +143,7 @@ func AuditS3(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) {
 				)
 			}
 
-			results[i] = audit.Finding{
+			return audit.Finding{
 				Service:     "s3",
 				ResourceID:  bucket.name,
 				Tags:        bucket.tags,
@@ -163,19 +153,8 @@ func AuditS3(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) {
 				RiskLevel:   risk,
 				Remediation: rem,
 			}
-			bar.Add(1)
-		}(i, *b.Name)
-	}
-
-	wg.Wait()
-
-	var filtered []audit.Finding
-	for _, f := range results {
-		if f.ResourceID != "" {
-			filtered = append(filtered, f)
-		}
-	}
-	return filtered, nil
+		},
+	), nil
 }
 
 func s3Risk(publicBlocked, encrypted, versioning, logging bool) string {

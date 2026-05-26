@@ -3,10 +3,8 @@ package security
 import (
 	"context"
 	"fmt"
-	"sync"
 
 	"sift/audit"
-	"sift/audit/progress"
 	"sift/audit/remediation"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -95,30 +93,22 @@ func AuditDynamoDB(ctx context.Context, cfg aws.Config) ([]audit.Finding, error)
 		tableNames = append(tableNames, page.TableNames...)
 	}
 
-	results := make([]audit.Finding, len(tableNames))
-	bar := progress.NewBar(ctx, int64(len(tableNames)), "Auditing DynamoDB tables")
-
-	var wg sync.WaitGroup
-	sem := make(chan struct{}, audit.GetThresholds(ctx).Concurrency)
-
-	for i, name := range tableNames {
-		wg.Add(1)
-		go func(i int, name string) {
-			defer wg.Done()
-			sem <- struct{}{}
-			defer func() { <-sem }()
-
+	results := audit.ProcessAll(
+		ctx,
+		tableNames,
+		"Auditing DynamoDB tables",
+		func(ctx context.Context, name string) audit.Finding {
 			t, err := parseDynamoDBTable(ctx, client, name)
 			if err != nil {
-				results[i] = audit.ErrorFinding("dynamodb", name, "table_posture", err)
-				bar.Add(1)
-				return
+				return audit.ErrorFinding("dynamodb", name, "table_posture", err)
 			}
 
 			risk := dynamoDBRisk(t.encrypted, t.pitr, t.deletionProtection)
 			detail := fmt.Sprintf(
 				"encrypted=%t, pitr=%t, deletion_protection=%t",
-				t.encrypted, t.pitr, t.deletionProtection,
+				t.encrypted,
+				t.pitr,
+				t.deletionProtection,
 			)
 
 			var rem *audit.Remediation
@@ -132,7 +122,7 @@ func AuditDynamoDB(ctx context.Context, cfg aws.Config) ([]audit.Finding, error)
 				)
 			}
 
-			results[i] = audit.Finding{
+			return audit.Finding{
 				Service:     "dynamodb",
 				ResourceID:  t.name,
 				Tags:        t.tags,
@@ -142,16 +132,8 @@ func AuditDynamoDB(ctx context.Context, cfg aws.Config) ([]audit.Finding, error)
 				RiskLevel:   risk,
 				Remediation: rem,
 			}
-			bar.Add(1)
-		}(i, name)
-	}
-	wg.Wait()
+		},
+	)
 
-	var findings []audit.Finding
-	for _, f := range results {
-		if f.ResourceID != "" {
-			findings = append(findings, f)
-		}
-	}
-	return findings, nil
+	return results, nil
 }

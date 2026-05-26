@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"sift/audit"
-	"sift/audit/progress"
 	"sift/audit/remediation"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -39,7 +38,6 @@ func parseSecretEntry(secret smtypes.SecretListEntry) secretEntry {
 
 func AuditSecrets(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) {
 	client := secretsmanager.NewFromConfig(cfg)
-	var findings []audit.Finding
 
 	var allSecrets []smtypes.SecretListEntry
 	paginator := secretsmanager.NewListSecretsPaginator(client, &secretsmanager.ListSecretsInput{})
@@ -51,50 +49,53 @@ func AuditSecrets(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 		allSecrets = append(allSecrets, page.SecretList...)
 	}
 
-	bar := progress.NewBar(ctx, int64(len(allSecrets)), "Auditing secrets")
 	t := audit.GetThresholds(ctx)
 
-	for _, secret := range allSecrets {
-		s := parseSecretEntry(secret)
+	results := audit.ProcessAll(
+		ctx,
+		allSecrets,
+		"Auditing secrets",
+		func(_ context.Context, secret smtypes.SecretListEntry) audit.Finding {
+			s := parseSecretEntry(secret)
 
-		rotationOverdue := s.daysSinceRotated > t.GetInt(
-			"secrets",
-			"rotation_max_days",
-			t.RotationMaxDays,
-		)
-		risk := secretsRisk(s.rotationEnabled, rotationOverdue, s.daysSinceRotated)
-
-		detail := fmt.Sprintf("rotation_enabled=%t", s.rotationEnabled)
-		if s.daysSinceRotated >= 0 {
-			detail += fmt.Sprintf(", days_since_rotated=%d", s.daysSinceRotated)
-		} else {
-			detail += ", never_rotated=true"
-		}
-
-		var rem *audit.Remediation
-		if risk != "MINIMAL" {
-			rem = remediation.Recommend(
-				"security",
-				"secrets_manager",
-				"secret_rotation",
-				s.name,
-				detail,
+			rotationOverdue := s.daysSinceRotated > t.GetInt(
+				"secrets",
+				"rotation_max_days",
+				t.RotationMaxDays,
 			)
-		}
+			risk := secretsRisk(s.rotationEnabled, rotationOverdue, s.daysSinceRotated)
 
-		findings = append(findings, audit.Finding{
-			Service:     "secrets_manager",
-			ResourceID:  s.name,
-			Tags:        s.tags,
-			Check:       "secret_rotation",
-			Status:      statusFromRisk(risk),
-			Detail:      detail,
-			RiskLevel:   risk,
-			Remediation: rem,
-		})
-		bar.Add(1)
-	}
-	return findings, nil
+			detail := fmt.Sprintf("rotation_enabled=%t", s.rotationEnabled)
+			if s.daysSinceRotated >= 0 {
+				detail += fmt.Sprintf(", days_since_rotated=%d", s.daysSinceRotated)
+			} else {
+				detail += ", never_rotated=true"
+			}
+
+			var rem *audit.Remediation
+			if risk != "MINIMAL" {
+				rem = remediation.Recommend(
+					"security",
+					"secrets_manager",
+					"secret_rotation",
+					s.name,
+					detail,
+				)
+			}
+
+			return audit.Finding{
+				Service:     "secrets_manager",
+				ResourceID:  s.name,
+				Tags:        s.tags,
+				Check:       "secret_rotation",
+				Status:      statusFromRisk(risk),
+				Detail:      detail,
+				RiskLevel:   risk,
+				Remediation: rem,
+			}
+		},
+	)
+	return results, nil
 }
 
 func secretsRisk(rotationEnabled, rotationOverdue bool, daysSinceRotated int) string {
