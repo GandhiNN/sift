@@ -9,10 +9,16 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/glue"
 )
 
+const Module = "ops"
+
 var glueChecks = map[string]func(context.Context, *glue.Client, aws.Config) ([]audit.Finding, error){
 	"table_versions": auditTableVersions,
 	"crawlers":       auditCrawlerCount,
 	"job_versions":   auditJobVersions,
+}
+
+func init() {
+	audit.Register(Module, audit.Checker{Name: "glue", Fn: AuditGlueOps})
 }
 
 func AuditGlueOps(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) {
@@ -39,4 +45,8 @@ func AuditGlueOps(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 	}
 
 	return findings, nil
+}
+
+func Audit(ctx context.Context, cfg aws.Config, services []string) ([]audit.Finding, error) {
+	return audit.RunChecks(ctx, cfg, services, audit.CheckersFor(Module), "Auditing ops risks")
 }

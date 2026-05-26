@@ -2,15 +2,12 @@ package security
 
 import (
 	"context"
-	"fmt"
-	"log/slog"
-	"sync"
-
 	"sift/audit"
-	"sift/audit/progress"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 )
+
+const Module = "security"
 
 type TriageTarget struct {
 	ResourceID  string
@@ -28,95 +25,30 @@ func statusFromRisk(risk string) string {
 	return "FAIL"
 }
 
+func init() {
+	for _, c := range []audit.Checker{
+		{Name: "ec2", Fn: AuditEC2},
+		{Name: "sagemaker", Fn: AuditSagemaker},
+		{Name: "s3", Fn: AuditS3},
+		{Name: "rds", Fn: AuditRDS},
+		{Name: "eks", Fn: AuditEKS},
+		{Name: "iam", Fn: AuditIAMHygiene},
+		{Name: "secrets", Fn: AuditSecrets},
+		{Name: "glue", Fn: AuditGlue},
+		{Name: "lambda", Fn: AuditLambda},
+		{Name: "dynamodb", Fn: AuditDynamoDB},
+		{Name: "elb", Fn: AuditELB},
+		{Name: "dms", Fn: AuditDMS},
+		{Name: "ecr", Fn: AuditECR},
+		{Name: "redshift", Fn: AuditRedshift},
+		{Name: "stepfunctions", Fn: AuditStepFunctions},
+		{Name: "backup", Fn: AuditBackup},
+		{Name: "baseline", Fn: AuditBaseline},
+	} {
+		audit.Register(Module, c)
+	}
+}
+
 func Audit(ctx context.Context, cfg aws.Config, services []string) ([]audit.Finding, error) {
-	allChecks := []struct {
-		name string
-		fn   func(context.Context, aws.Config) ([]audit.Finding, error)
-	}{
-		{"ec2", AuditEC2},
-		{"sagemaker", AuditSagemaker},
-		{"s3", AuditS3},
-		{"rds", AuditRDS},
-		{"eks", AuditEKS},
-		{"iam", AuditIAMHygiene},
-		{"secrets", AuditSecrets},
-		{"glue", AuditGlue},
-		{"lambda", AuditLambda},
-		{"dynamodb", AuditDynamoDB},
-		{"elb", AuditELB},
-		{"dms", AuditDMS},
-		{"ecr", AuditECR},
-		{"redshift", AuditRedshift},
-		{"stepfunctions", AuditStepFunctions},
-		{"backup", AuditBackup},
-		{"baseline", AuditBaseline},
-	}
-
-	var checks []struct {
-		name string
-		fn   func(context.Context, aws.Config) ([]audit.Finding, error)
-	}
-	if len(services) == 0 {
-		checks = allChecks
-	} else {
-		svcSet := make(map[string]bool)
-		for _, s := range services {
-			svcSet[s] = true
-		}
-		for _, c := range allChecks {
-			if svcSet[c.name] {
-				checks = append(checks, c)
-			}
-		}
-	}
-
-	results := make([][]audit.Finding, len(checks))
-
-	if len(checks) == 1 {
-		subCtx := progress.WithSubProgress(ctx, true)
-		findings, err := checks[0].fn(subCtx, cfg)
-		if err != nil {
-			slog.Warn("cost check failed", "service", checks[0].name, "error", err)
-			results[0] = []audit.Finding{{
-				Service:   checks[0].name,
-				Check:     "service_error",
-				Status:    "ERROR",
-				Detail:    fmt.Sprintf("audit failed: %v", err),
-				RiskLevel: "UNKNOWN",
-			}}
-		} else {
-			results[0] = findings
-		}
-	} else {
-		subCtx := progress.WithSubProgress(ctx, false)
-		bar := progress.NewOrchestratorBar(ctx, int64(len(checks)), "Running security audit")
-		var wg sync.WaitGroup
-		for i, c := range checks {
-			wg.Add(1)
-			go func(i int, name string, fn func(context.Context, aws.Config) ([]audit.Finding, error)) {
-				defer wg.Done()
-				findings, err := fn(subCtx, cfg)
-				if err != nil {
-					slog.Warn("cost check failed", "service", checks[0].name, "error", err)
-					results[i] = []audit.Finding{{
-						Service:   name,
-						Check:     "service_error",
-						Status:    "ERROR",
-						Detail:    fmt.Sprintf("audit failed: %v", err),
-						RiskLevel: "UNKNOWN",
-					}}
-				} else {
-					results[i] = findings
-				}
-				bar.Done(name)
-			}(i, c.name, c.fn)
-		}
-		wg.Wait()
-	}
-
-	var all []audit.Finding
-	for _, findings := range results {
-		all = append(all, findings...)
-	}
-	return all, nil
+	return audit.RunChecks(ctx, cfg, services, audit.CheckersFor(Module), "Running security audit")
 }

@@ -18,6 +18,8 @@ import (
 
 type auditFunc func(context.Context, aws.Config, []string) ([]audit.Finding, error)
 
+var checksCtxOverride []string
+
 func runAudit(command, serviceFlag string, validServices map[string]bool, fn auditFunc) {
 	start := time.Now()
 	ctx, configs, cancel, err := buildAWSConfigs()
@@ -29,6 +31,11 @@ func runAudit(command, serviceFlag string, validServices map[string]bool, fn aud
 
 	if quiet {
 		ctx = progress.WithQuiet(ctx, true)
+	}
+
+	if len(checksCtxOverride) > 0 {
+		ctx = audit.WithChecks(ctx, checksCtxOverride)
+		checksCtxOverride = nil
 	}
 
 	var services []string
