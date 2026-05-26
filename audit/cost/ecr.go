@@ -3,7 +3,6 @@ package cost
 import (
 	"context"
 	"fmt"
-	"sync"
 
 	"sift/audit"
 	"sift/audit/pricing"
@@ -20,24 +19,6 @@ type ecrRepo struct {
 	tags map[string]string
 }
 
-func parseECRRepo(ctx context.Context, client *ecr.Client, repo ecrtypes.Repository) ecrRepo {
-	r := ecrRepo{
-		name: aws.ToString(repo.RepositoryName),
-		arn:  aws.ToString(repo.RepositoryArn),
-	}
-	tagResp, err := client.ListTagsForResource(
-		ctx,
-		&ecr.ListTagsForResourceInput{ResourceArn: &r.arn},
-	)
-	if err == nil {
-		r.tags = make(map[string]string, len(tagResp.Tags))
-		for _, t := range tagResp.Tags {
-			r.tags[aws.ToString(t.Key)] = aws.ToString(t.Value)
-		}
-	}
-	return r
-}
-
 func AuditECRCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) {
 	client := ecr.NewFromConfig(cfg)
 
@@ -51,21 +32,12 @@ func AuditECRCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 		allRepos = append(allRepos, page.Repositories...)
 	}
 
-	var mu sync.Mutex
-	var findings []audit.Finding
-	var wg sync.WaitGroup
-	sem := make(chan struct{}, audit.GetThresholds(ctx).Concurrency)
-
-	for _, repo := range allRepos {
-
-		wg.Add(1)
-		go func(repo ecrtypes.Repository) {
-			defer wg.Done()
-			sem <- struct{}{}
-			defer func() { <-sem }()
-
+	return audit.ProcessAll(
+		ctx,
+		allRepos,
+		"Auditing ECR cost",
+		func(ctx context.Context, repo ecrtypes.Repository) audit.Finding {
 			r := parseECRRepo(ctx, client, repo)
-
 			_, err := client.GetLifecyclePolicy(
 				ctx,
 				&ecr.GetLifecyclePolicyInput{RepositoryName: &r.name},
@@ -85,8 +57,7 @@ func AuditECRCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 						}
 					}
 				}
-				mu.Lock()
-				findings = append(findings, audit.Finding{
+				return audit.Finding{
 					Service:    "ecr",
 					ResourceID: r.name,
 					Tags:       r.tags,
@@ -106,24 +77,35 @@ func AuditECRCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 						r.name,
 						"no lifecycle policy",
 					),
-				})
-				mu.Unlock()
-			} else {
-				mu.Lock()
-				findings = append(findings, audit.Finding{
-					Service:     "ecr",
-					ResourceID:  r.name,
-					Tags:        r.tags,
-					Check:       "no_lifecycle_policy",
-					Status:      "PASS",
-					Detail:      "lifecyce policy configured",
-					RiskLevel:   "MINIMAL",
-					Remediation: nil,
-				})
-				mu.Unlock()
+				}
 			}
-		}(repo)
+			return audit.Finding{
+				Service:    "ecr",
+				ResourceID: r.name,
+				Tags:       r.tags,
+				Check:      "no_lifecycle_policy",
+				Status:     "PASS",
+				Detail:     "lifecycle policy configured",
+				RiskLevel:  "MINIMAL",
+			}
+		},
+	), nil
+}
+
+func parseECRRepo(ctx context.Context, client *ecr.Client, repo ecrtypes.Repository) ecrRepo {
+	r := ecrRepo{
+		name: aws.ToString(repo.RepositoryName),
+		arn:  aws.ToString(repo.RepositoryArn),
 	}
-	wg.Wait()
-	return findings, nil
+	tagResp, err := client.ListTagsForResource(
+		ctx,
+		&ecr.ListTagsForResourceInput{ResourceArn: &r.arn},
+	)
+	if err == nil {
+		r.tags = make(map[string]string, len(tagResp.Tags))
+		for _, t := range tagResp.Tags {
+			r.tags[aws.ToString(t.Key)] = aws.ToString(t.Value)
+		}
+	}
+	return r
 }

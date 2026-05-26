@@ -3,11 +3,9 @@ package cost
 import (
 	"context"
 	"fmt"
-	"sync"
 
 	"sift/audit"
 	"sift/audit/pricing"
-	"sift/audit/progress"
 	"sift/audit/remediation"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -79,31 +77,14 @@ func AuditDynamoDBCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, er
 		tableNames = append(tableNames, page.TableNames...)
 	}
 
-	type result struct {
-		findings []audit.Finding
-	}
-	results := make([]result, len(tableNames))
-	bar := progress.NewBar(ctx, int64(len(tableNames)), "Auditing DynamoDB cost")
-
-	var wg sync.WaitGroup
-	sem := make(chan struct{}, audit.GetThresholds(ctx).Concurrency)
-
-	for i, name := range tableNames {
-		wg.Add(1)
-		go func(i int, name string) {
-			defer wg.Done()
-			sem <- struct{}{}
-			defer func() { <-sem }()
-
+	return audit.ProcessAllMulti(
+		ctx,
+		tableNames,
+		"Auditing DynamoDB cost",
+		func(ctx context.Context, name string) []audit.Finding {
 			t, err := parseDynamodDBCostTable(ctx, client, name)
 			if err != nil {
-				results[i] = result{
-					findings: []audit.Finding{
-						audit.ErrorFinding("dynamodb", name, "cost_audit", err),
-					},
-				}
-				bar.Add(1)
-				return
+				return []audit.Finding{audit.ErrorFinding("dynamodb", name, "cost_audit", err)}
 			}
 
 			var findings []audit.Finding
@@ -156,30 +137,18 @@ func AuditDynamoDBCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, er
 					})
 				}
 			}
-
 			if len(findings) == 0 {
 				findings = append(findings, audit.Finding{
-					Service:              "dynamodb",
-					ResourceID:           t.name,
-					Tags:                 t.tags,
-					Check:                "dynamodb_cost",
-					Status:               "PASS",
-					Detail:               "no cost issues detected",
-					RiskLevel:            "MINIMAL",
-					EstimatedMonthlyCost: 0,
-					Remediation:          nil,
+					Service:    "dynamodb",
+					ResourceID: t.name,
+					Tags:       t.tags,
+					Check:      "dynamodb_cost",
+					Status:     "PASS",
+					Detail:     "no cost issues detected",
+					RiskLevel:  "MINIMAL",
 				})
 			}
-
-			results[i] = result{findings: findings}
-			bar.Add(1)
-		}(i, name)
-	}
-	wg.Wait()
-
-	var findings []audit.Finding
-	for _, r := range results {
-		findings = append(findings, r.findings...)
-	}
-	return findings, nil
+			return findings
+		},
+	), nil
 }

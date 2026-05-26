@@ -5,9 +5,7 @@ import (
 	"fmt"
 	"sift/audit"
 	"sift/audit/pricing"
-	"sift/audit/progress"
 	"sift/audit/remediation"
-	"sync"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/sagemaker"
@@ -52,20 +50,11 @@ func AuditSagemakerCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, e
 		input.NextToken = resp.NextToken
 	}
 
-	bar := progress.NewBar(ctx, int64(len(names)), "Auditing SageMaker cost")
-	var findings []audit.Finding
-	var mu sync.Mutex
-	var wg sync.WaitGroup
-	sem := make(chan struct{}, audit.GetThresholds(ctx).Concurrency)
-
-	for _, name := range names {
-		wg.Add(1)
-		go func(name string) {
-			defer wg.Done()
-			sem <- struct{}{}
-			defer func() { <-sem }()
-			defer bar.Add(1)
-
+	return audit.ProcessAll(
+		ctx,
+		names,
+		"Auditing SageMaker cost",
+		func(ctx context.Context, name string) audit.Finding {
 			desc, err := client.DescribeNotebookInstance(
 				ctx,
 				&sagemaker.DescribeNotebookInstanceInput{
@@ -73,19 +62,14 @@ func AuditSagemakerCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, e
 				},
 			)
 			if err != nil {
-				mu.Lock()
-				findings = append(findings, audit.ErrorFinding("sagemaker", name, "describe", err))
-				mu.Unlock()
-				return
+				return audit.ErrorFinding("sagemaker", name, "describe", err)
 			}
-
 			e := parseSagemakerCostEntry(desc, name)
 			monthlyCost := pricing.EC2Monthly(e.instanceType)
 
-			var finding audit.Finding
 			switch smtypes.NotebookInstanceStatus(e.status) {
 			case smtypes.NotebookInstanceStatusStopped:
-				finding = audit.Finding{
+				return audit.Finding{
 					Service:    "sagemaker",
 					ResourceID: e.name,
 					Check:      "stopped_notebook",
@@ -95,7 +79,7 @@ func AuditSagemakerCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, e
 						e.instanceType,
 					),
 					RiskLevel:            "MEDIUM",
-					EstimatedMonthlyCost: monthlyCost * 0.1, // rough EBS-only estimate
+					EstimatedMonthlyCost: monthlyCost * 0.1,
 					Remediation: remediation.Recommend(
 						"cost",
 						"sagemaker",
@@ -105,7 +89,7 @@ func AuditSagemakerCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, e
 					),
 				}
 			case smtypes.NotebookInstanceStatusInService:
-				finding = audit.Finding{
+				return audit.Finding{
 					Service:              "sagemaker",
 					ResourceID:           e.name,
 					Check:                "running_notebook",
@@ -115,7 +99,7 @@ func AuditSagemakerCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, e
 					EstimatedMonthlyCost: monthlyCost,
 				}
 			default:
-				finding = audit.Finding{
+				return audit.Finding{
 					Service:    "sagemaker",
 					ResourceID: e.name,
 					Check:      "notebook_status",
@@ -129,13 +113,6 @@ func AuditSagemakerCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, e
 					EstimatedMonthlyCost: monthlyCost,
 				}
 			}
-
-			mu.Lock()
-			findings = append(findings, finding)
-			mu.Unlock()
-		}(name)
-	}
-	wg.Wait()
-
-	return findings, nil
+		},
+	), nil
 }

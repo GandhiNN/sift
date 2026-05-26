@@ -3,7 +3,6 @@ package cost
 import (
 	"context"
 	"fmt"
-	"sync"
 	"time"
 
 	"sift/audit"
@@ -58,25 +57,21 @@ func findIdleNATGateways(ctx context.Context, cfg aws.Config) ([]audit.Finding, 
 		allNATs = append(allNATs, page.NatGateways...)
 	}
 
+	var available []natGatewayEntry
+	for _, nat := range allNATs {
+		if string(nat.State) != "available" {
+			available = append(available, parseNATGateway(nat))
+		}
+	}
+
 	end := time.Now()
 	start := end.AddDate(0, 0, -7)
 
-	var mu sync.Mutex
-	var findings []audit.Finding
-	var wg sync.WaitGroup
-	sem := make(chan struct{}, audit.GetThresholds(ctx).Concurrency)
-
-	for _, nat := range allNATs {
-		if string(nat.State) != "available" {
-			continue
-		}
-		n := parseNATGateway(nat)
-		wg.Add(1)
-		go func(n natGatewayEntry) {
-			defer wg.Done()
-			sem <- struct{}{}
-			defer func() { <-sem }()
-
+	results := audit.ProcessAll(
+		ctx,
+		available,
+		"Auditing NAT Gateways",
+		func(ctx context.Context, n natGatewayEntry) audit.Finding {
 			metricResp, err := cwClient.GetMetricStatistics(
 				ctx,
 				&cloudwatch.GetMetricStatisticsInput{
@@ -93,23 +88,16 @@ func findIdleNATGateways(ctx context.Context, cfg aws.Config) ([]audit.Finding, 
 				},
 			)
 			if err != nil {
-				mu.Lock()
-				findings = append(
-					findings,
-					audit.ErrorFinding("nat_gateway", n.id, "check_traffic", err),
-				)
-				mu.Unlock()
-				return
+				return audit.ErrorFinding("nat_gateway", n.id, "check_traffic", err)
 			}
-
 			totalBytes := 0.0
+
 			for _, dp := range metricResp.Datapoints {
 				totalBytes += aws.ToFloat64(dp.Sum)
 			}
 
 			if totalBytes == 0 {
-				mu.Lock()
-				findings = append(findings, audit.Finding{
+				return audit.Finding{
 					Service:              "nat_gateway",
 					ResourceID:           n.id,
 					Tags:                 n.tags,
@@ -125,26 +113,23 @@ func findIdleNATGateways(ctx context.Context, cfg aws.Config) ([]audit.Finding, 
 						n.id,
 						"zero bytes over 7 days",
 					),
-				})
-				mu.Unlock()
-			} else {
-				mu.Lock()
-				findings = append(findings, audit.Finding{
-					Service:              "nat_gateway",
-					ResourceID:           n.id,
-					Tags:                 n.tags,
-					Check:                "idle_nat_gateway",
-					Status:               "PASS",
-					Detail:               fmt.Sprintf("%.2f GB processed in last 7 days", totalBytes/(1024*1024*1024)),
-					RiskLevel:            "MINIMAL",
-					EstimatedMonthlyCost: pricing.NATGatewayMonthly(),
-					Remediation:          nil,
-				})
-				mu.Unlock()
+				}
 			}
-		}(n)
-	}
+			return audit.Finding{
+				Service:    "nat_gateway",
+				ResourceID: n.id,
+				Tags:       n.tags,
+				Check:      "idle_nat_gateway",
+				Status:     "PASS",
+				Detail: fmt.Sprintf(
+					"%.2f GB processed in last 7 days",
+					totalBytes/(1024*1024*1024),
+				),
+				RiskLevel:            "MINIMAL",
+				EstimatedMonthlyCost: pricing.NATGatewayMonthly(),
+			}
+		},
+	)
 
-	wg.Wait()
-	return findings, nil
+	return results, nil
 }

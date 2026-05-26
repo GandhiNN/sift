@@ -3,12 +3,10 @@ package cost
 import (
 	"context"
 	"fmt"
-	"sync"
 	"time"
 
 	"sift/audit"
 	"sift/audit/pricing"
-	"sift/audit/progress"
 	"sift/audit/remediation"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -76,33 +74,28 @@ func AuditS3Cost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) {
 		return nil, fmt.Errorf("list buckets: %w", err)
 	}
 
-	var mu sync.Mutex
-	var findings []audit.Finding
-	var wg sync.WaitGroup
-	sem := make(chan struct{}, audit.GetThresholds(ctx).Concurrency)
-	bar := progress.NewBar(ctx, int64(len(resp.Buckets)), "Auditing S3 cost")
-
+	var names []string
 	for _, b := range resp.Buckets {
-		if b.Name == nil {
-			continue
+		if b.Name != nil {
+			names = append(names, *b.Name)
 		}
-		wg.Add(1)
-		go func(name string) {
-			defer wg.Done()
-			sem <- struct{}{}
-			defer func() { <-sem }()
-			defer bar.Add(1)
-
+	}
+	return audit.ProcessAllMulti(
+		ctx,
+		names,
+		"Auditing S3 cost",
+		func(ctx context.Context, name string) []audit.Finding {
 			bucket := parseS3CostBucket(ctx, client, cwClient, name)
 			monthlyCost := pricing.S3Monthly(bucket.sizeGB)
+
+			var results []audit.Finding
 
 			_, err := client.GetBucketLifecycleConfiguration(
 				ctx,
 				&s3.GetBucketLifecycleConfigurationInput{Bucket: &name},
 			)
 			if err != nil {
-				mu.Lock()
-				findings = append(findings, audit.Finding{
+				results = append(results, audit.Finding{
 					Service:    "s3",
 					ResourceID: bucket.name,
 					Tags:       bucket.tags,
@@ -122,10 +115,8 @@ func AuditS3Cost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) {
 						"no lifecycle policy configured",
 					),
 				})
-				mu.Unlock()
 			} else {
-				mu.Lock()
-				findings = append(findings, audit.Finding{
+				results = append(results, audit.Finding{
 					Service:              "s3",
 					ResourceID:           bucket.name,
 					Tags:                 bucket.tags,
@@ -135,7 +126,6 @@ func AuditS3Cost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) {
 					RiskLevel:            "MINIMAL",
 					EstimatedMonthlyCost: monthlyCost,
 				})
-				mu.Unlock()
 			}
 
 			// Check read activity via GetRequests metric
@@ -157,8 +147,7 @@ func AuditS3Cost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) {
 				},
 			)
 			if err != nil || len(metricsResp.Datapoints) == 0 {
-				mu.Lock()
-				findings = append(findings, audit.Finding{
+				results = append(results, audit.Finding{
 					Service:              "s3",
 					ResourceID:           bucket.name,
 					Tags:                 bucket.tags,
@@ -175,8 +164,7 @@ func AuditS3Cost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) {
 						"request metrics not enabled",
 					),
 				})
-				mu.Unlock()
-				return
+				return results
 			}
 
 			var totalGets float64
@@ -184,21 +172,21 @@ func AuditS3Cost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) {
 				totalGets += aws.ToFloat64(dp.Sum)
 			}
 			if totalGets == 0 {
-				mu.Lock()
-				findings = append(findings, audit.Finding{
-					Service:              "s3",
-					ResourceID:           bucket.name,
-					Tags:                 bucket.tags,
-					Check:                "read_activity",
-					Status:               "WARN",
-					Detail:               "size=%.2fGB, zero GetRequests in last 30 days - no consumers",
+				results = append(results, audit.Finding{
+					Service:    "s3",
+					ResourceID: bucket.name,
+					Tags:       bucket.tags,
+					Check:      "read_activity",
+					Status:     "WARN",
+					Detail: fmt.Sprintf(
+						"size=%.2fGB, zero GetRequests in last 30 days - no consumers",
+						bucket.sizeGB,
+					),
 					RiskLevel:            "MEDIUM",
 					EstimatedMonthlyCost: monthlyCost,
 				})
-				mu.Unlock()
 			} else {
-				mu.Lock()
-				findings = append(findings, audit.Finding{
+				results = append(results, audit.Finding{
 					Service:              "s3",
 					ResourceID:           bucket.name,
 					Tags:                 bucket.tags,
@@ -208,11 +196,9 @@ func AuditS3Cost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) {
 					RiskLevel:            "MINIMAL",
 					EstimatedMonthlyCost: monthlyCost,
 				})
-				mu.Unlock()
 			}
-		}(*b.Name)
-	}
 
-	wg.Wait()
-	return findings, nil
+			return results
+		},
+	), nil
 }
