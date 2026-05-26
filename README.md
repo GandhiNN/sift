@@ -2,7 +2,7 @@
 
 ![sift](assets/sift.png)
 
-AWS security and cost audit CLI tool. Scans your AWS resources for misconfigurations, overly permissive policies, unused resources, and network exposure risks. Includes estimated cost per resource and scan history with delta reporting.
+AWS security and cost audit CLI tool. Sift scans your AWS resources for misconfigurations, overly permissive policies, unused resources, and network exposure risks. It also includes estimated cost per resource and scan history with delta reporting.
 
 ## Install
 
@@ -40,14 +40,14 @@ Audit AWS resource security posture across services.
 
 ```bash
 # All services
-sift security --profile icloud-dev
+sift security --profile dev
 
 # Specific services
-sift security --profile icloud-dev --service ec2,s3
-sift security --profile icloud-dev --service eks
+sift security --profile dev --service ec2,s3
+sift security --profile dev --service eks
 
 # Only high and critical findings
-sift security --profile icloud-dev --risk-level HIGH
+sift security --profile dev --risk-level HIGH
 ```
 
 Available services: `ec2`, `sagemaker`, `s3`, `rds`, `eks`, `iam`, `secrets`, `glue`, `lambda`, `dynamodb`, `elb`, `dms`, `ecr`
@@ -58,17 +58,17 @@ Detect cost waste across AWS resources. Shows estimated monthly cost per resourc
 
 ```bash
 # All services
-sift cost --profile icloud-dev
+sift cost --profile dev
 
 # Specific services
-sift cost --profile icloud-dev --service ec2,s3
-sift cost --profile icloud-dev --service ebs,cloudwatch
+sift cost --profile dev --service ec2,s3
+sift cost --profile dev --service ebs,cloudwatch
 
 # Sort by highest cost first
-sift cost --profile icloud-dev --sort-by cost
+sift cost --profile dev --sort-by cost
 
 # Show what changed since last scan
-sift cost --profile icloud-dev --diff
+sift cost --profile dev --diff
 ```
 
 Available services: `ec2`, `ebs`, `rds`, `s3`, `eks`, `network`, `cloudwatch`, `ecr`, `secrets`, `glue`, `lambda`, `dynamodb`, `dms`, `elb`, `sagemaker`
@@ -79,14 +79,14 @@ Audit operational risks and service limits.
 
 ```bash
 # All services
-sift ops --profile icloud-dev
+sift ops --profile dev
 
 # Specific services
-sift ops --profile icloud-dev --service glue
+sift ops --profile dev --service glue
 
 # Specific checks within a service
-sift ops --profile icloud-dev --service glue --check table_versions
-sift ops --profile icloud-dev --service glue --check crawlers,job_versions
+sift ops --profile dev --service glue --check table_versions
+sift ops --profile dev --service glue --check crawlers,job_versions
 ```
 
 Available services: `glue`
@@ -104,11 +104,11 @@ List AWS resources with metadata for inventory and discovery.
 
 ```bash
 # List all Glue resources
-sift list glue --profile icloud-dev
+sift list glue --profile dev
 
 # List specific resource types
-sift list glue jobs --profile icloud-dev
-sift list glue crawlers --profile icloud-dev --format csv -o crawlers.csv
+sift list glue jobs --profile dev
+sift list glue crawlers --profile dev --format csv -o crawlers.csv
 ```
 
 #### Triage
@@ -117,10 +117,10 @@ Deep investigation of EC2 instances — combines security posture, IAM role anal
 
 ```bash
 # All instances
-sift triage --profile icloud-dev --log-group /vpc/flowlogs
+sift triage --profile dev --log-group /vpc/flowlogs
 
 # Single instance
-sift triage --profile icloud-dev --log-group /vpc/flowlogs --instance i-0abc123
+sift triage --profile dev --log-group /vpc/flowlogs --instance i-0abc123
 ```
 
 | Flag | Required | Description |
@@ -139,11 +139,12 @@ Pricing can be customized without rebuilding by placing a `prices.json` at `~/.s
 Every scan is automatically saved to `~/.sift/history/<profile>/`. Use `--diff` to compare against the previous scan:
 
 ```bash
-sift cost --profile icloud-dev --diff
+sift cost --profile dev --diff
 ```
 
 Output:
-```
+
+```bash
 Diff vs 2026-05-18 09:30:
   New:      2
   Resolved: 1
@@ -155,6 +156,7 @@ History is retained for the last 30 scans per profile/command. Disable saving wi
 ## Remediation recommendations
 
 Findings include actionable remediation recommendations with:
+
 - **Action**: What to do
 - **Command**: AWS CLI command to execute
 - **Evidence**: Data supporting the recommendation
@@ -162,10 +164,11 @@ Findings include actionable remediation recommendations with:
 - **Action risk**: LOW, MEDIUM, or HIGH — risk of taking the action
 
 Example (JSON output):
+
 ```json
 {
   "service": "elb",
-  "resource_id": "k8s-diiotitb-chronogr-b61a3a3daa",
+  "resource_id": "k8s-chronograph-bsdfdu8437",
   "check": "idle_lb",
   "status": "WARN",
   "risk_level": "HIGH",
