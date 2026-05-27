@@ -1,52 +1,43 @@
-package security
+package triage
 
 import (
 	"context"
 	"fmt"
 	"log/slog"
 	"strings"
-	"sync"
 
 	"sift/audit"
-	"sift/audit/progress"
+	"sift/audit/security"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs"
 )
 
-func Triage(
+type result struct {
+	target      security.TriageTarget
+	iamRisk     string
+	iamDetails  []string
+	publicConns []security.FlowEvent
+}
+
+func Run(
 	ctx context.Context,
 	cfg aws.Config,
 	logGroup string,
-	targets []TriageTarget,
+	targets []security.TriageTarget,
 ) ([]audit.Finding, error) {
 	cwClient := cloudwatchlogs.NewFromConfig(cfg)
-	roleCache := NewRoleCache()
+	roleCache := security.NewRoleCache()
 
-	type triageResult struct {
-		target      TriageTarget
-		iamRisk     string
-		iamDetails  []string
-		publicConns []FlowEvent
-	}
+	results := audit.FetchAll(
+		ctx,
+		targets,
+		"Triaging instances",
+		func(ctx context.Context, t security.TriageTarget) result {
+			r := result{target: t}
 
-	results := make([]triageResult, len(targets))
-	bar := progress.NewBar(ctx, int64(len(targets)), "Triaging instances")
-	var wg sync.WaitGroup
-	sem := make(chan struct{}, audit.GetThresholds(ctx).Concurrency)
-
-	for i, t := range targets {
-		wg.Add(1)
-		go func(i int, t TriageTarget) {
-			defer wg.Done()
-			sem <- struct{}{}
-			defer func() { <-sem }()
-
-			r := triageResult{target: t}
-
-			// IAM analysis
 			if t.RoleARN != nil {
-				finding, err := CachedAnalyzeRole(ctx, cfg, *t.RoleARN, roleCache)
+				finding, err := security.CachedAnalyzeRole(ctx, cfg, *t.RoleARN, roleCache)
 				if err != nil {
 					slog.Warn("IAM check failed", "instance", t.ResourceID, "error", err)
 				} else {
@@ -57,20 +48,17 @@ func Triage(
 				}
 			}
 
-			// Flow log analysis
 			if t.PrivateIP != nil {
-				conns, err := FindPublicConnections(ctx, cwClient, logGroup, *t.PrivateIP)
+				conns, err := security.FindPublicConnections(ctx, cwClient, logGroup, *t.PrivateIP)
 				if err != nil {
 					slog.Warn("flow log query failed", "resource", t.ResourceID, "error", err)
 				} else {
 					r.publicConns = conns
 				}
 			}
-			results[i] = r
-			bar.Add(1)
-		}(i, t)
-	}
-	wg.Wait()
+			return r
+		},
+	)
 
 	var findings []audit.Finding
 	for _, r := range results {
@@ -91,11 +79,16 @@ func Triage(
 			detail += fmt.Sprintf(", iam_findings=%s", strings.Join(r.iamDetails, ";"))
 		}
 
+		status := "FAIL"
+		if risk == "LOW" {
+			status = "PASS"
+		}
+
 		findings = append(findings, audit.Finding{
 			Service:    r.target.Service,
 			ResourceID: r.target.ResourceID,
 			Check:      "triage",
-			Status:     statusFromRisk(risk),
+			Status:     status,
 			Detail:     detail,
 			RiskLevel:  risk,
 		})
@@ -103,7 +96,7 @@ func Triage(
 	return findings, nil
 }
 
-func triageRisk(openToWorld, imdsV1 bool, iamRisk string, connCount int) string {
+func triageRisk(openToWorld, imdsv1 bool, iamRisk string, connCount int) string {
 	if connCount > 0 && openToWorld {
 		return "CRITICAL"
 	}
@@ -113,7 +106,7 @@ func triageRisk(openToWorld, imdsV1 bool, iamRisk string, connCount int) string 
 	if iamRisk == "HIGH" && openToWorld {
 		return "HIGH"
 	}
-	if openToWorld || imdsV1 {
+	if openToWorld || imdsv1 {
 		return "MEDIUM"
 	}
 	return "LOW"

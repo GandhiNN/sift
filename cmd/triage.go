@@ -10,6 +10,7 @@ import (
 	"sift/audit"
 	"sift/audit/progress"
 	"sift/audit/security"
+	"sift/audit/triage"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/spf13/cobra"
@@ -59,7 +60,7 @@ var triageCmd = &cobra.Command{
 						return
 					}
 				}
-				results, err := security.Triage(ctx, cfg, triageLogGroup, targets)
+				results, err := triage.Run(ctx, cfg, triageLogGroup, targets)
 				if err != nil {
 					fmt.Fprintf(os.Stderr, "Error in %s: %v\n", cfg.Region, err)
 					return
