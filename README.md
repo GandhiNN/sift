@@ -471,6 +471,8 @@ The crawler version limit (default 1,000,000) is fetched automatically from AWS 
 sift/
 ├── main.go                     # Entry point
 ├── Makefile                    # Build script
+├── docs/
+│   └── adding-a-service.md    # Developer guide for adding new services
 ├── cmd/                        # CLI commands (cobra)
 │   ├── root.go                 # Global flags
 │   ├── run.go                  # Shared audit runner + history save
@@ -482,6 +484,9 @@ sift/
 │   └── config.go               # AWS credential/profile loading
 └── audit/
     ├── finding.go              # Finding struct definition
+    ├── registry.go             # Service self-registration (Register/CheckersFor)
+    ├── runner.go               # Generic parallel orchestrator (RunChecks)
+    ├── process.go              # Concurrent processors (ProcessAll/ProcessAllMulti/FetchAll)
     ├── output.go               # JSON/CSV/table output formatter
     ├── thresholds.go           # Configurable thresholds
     ├── pricing/
@@ -492,8 +497,11 @@ sift/
     │   └── diff.go             # Delta computation between scans
     ├── progress/
     │   └── progress.go         # Progress bar utilities
+    ├── remediation/
+    │   ├── remediation.go      # Remediation recommendation engine
+    │   └── remediations.json   # Remediation templates
     ├── security/
-    │   ├── security.go         # Security audit orchestrator
+    │   ├── security.go         # Module registration + Audit entry point
     │   ├── sg.go               # Shared SG open-to-world helpers
     │   ├── ec2.go              # EC2 posture analysis
     │   ├── sagemaker.go        # SageMaker notebook + network exposure
@@ -505,21 +513,24 @@ sift/
     │   ├── glue.go             # Glue catalog encryption + job security
     │   ├── lambda.go           # Lambda public URLs + deprecated runtimes
     │   ├── dynamodb.go         # DynamoDB encryption + PITR
-    │   ├── elb.go              # ELB exposure analysis
+    │   ├── elb.go              # ELB exposure + DDoS readiness
     │   ├── dms.go              # DMS public access + encryption
     │   ├── ecr.go              # ECR scan-on-push + tag immutability
-    │   ├── baseline.go         # CloudTrail + GuardDuty (used by triage)
-    │   ├── network.go          # VPC flow log queries
-    │   └── triage.go           # Combined investigation
+    │   ├── redshift.go         # Redshift public access + encryption
+    │   ├── stepfunctions.go    # Step Functions logging + tracing
+    │   ├── backup.go           # Backup vault encryption
+    │   ├── baseline.go         # CloudTrail + GuardDuty
+    │   └── network.go          # VPC flow log queries
+    ├── triage/
+    │   └── triage.go           # Deep EC2 investigation (IAM + flow logs)
     ├── ops/
-    │   ├── ops.go              # Ops audit orchestrator
     │   └── glue.go             # Crawler version limit checks
     └── cost/
-        ├── cost.go             # Cost audit orchestrator
+        ├── cost.go             # Module registration + Audit entry point
         ├── ec2.go              # Stopped instances, prev-gen, unused EIPs
         ├── ebs.go              # Unattached volumes, old snapshots, GP2→GP3
         ├── rds.go              # Stopped/oversized RDS instances
-        ├── s3.go               # Missing lifecycle policies + bucket size
+        ├── s3.go               # Lifecycle policies + multipart uploads
         ├── eks.go              # Empty clusters, prev-gen nodes
         ├── network.go          # Idle NAT gateways
         ├── cloudwatch.go       # Log groups without retention
@@ -530,7 +541,12 @@ sift/
         ├── dynamodb.go         # Provisioned mode, unused GSIs
         ├── dms.go              # Idle/oversized DMS instances
         ├── elb.go              # Idle load balancers
-        └── sagemaker.go        # Stopped notebooks
+        ├── sagemaker.go        # Stopped notebooks
+        ├── redshift.go         # Oversized clusters
+        ├── stepfunctions.go    # Unused state machines
+        ├── backup.go           # Old recovery points
+        ├── kms.go              # Unrotated customer-managed keys
+        └── vpn.go              # Idle VPN connections
 ```
 
 ## Authentication
