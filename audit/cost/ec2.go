@@ -147,7 +147,7 @@ func AuditEC2Cost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 	}
 
 	// Oversized instances (low CPU)
-	cpuThreshold := t.GetFloat("ec2", "cpu_idle_percent", t.CPUIdlePercent)
+	cpuThreshold := t.GetFloat("ec2", "cpu_idle_percent", 10)
 	lookback := t.GetInt("ec2", "cpu_lookback_days", 7)
 	end := time.Now()
 	start := end.AddDate(0, 0, -lookback)

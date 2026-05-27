@@ -61,7 +61,6 @@ func AuditRDS(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) {
 		"Auditing RDS instances",
 		func(ctx context.Context, db rdstypes.DBInstance) audit.Finding {
 			inst := parseRDSInstance(db)
-			t := audit.GetThresholds(ctx)
 			risk := rdsRisk(
 				inst.public,
 				inst.encrypted,
@@ -69,7 +68,7 @@ func AuditRDS(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) {
 				inst.delProtect,
 				inst.multiAZ,
 				inst.autoUpgrade,
-				t.MinBackupDays,
+				7,
 			)
 
 			detail := fmt.Sprintf(

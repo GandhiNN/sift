@@ -93,7 +93,7 @@ func AuditRDSCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 				return []audit.Finding{audit.ErrorFinding(svc, r.id, "check_cpu", err)}
 			}
 			t := audit.GetThresholds(ctx)
-			if avgCPU < t.GetFloat("rds", "cpu_idle_percent", t.CPUIdlePercent) {
+			if avgCPU < t.GetFloat("rds", "cpu_idle_percent", 10) {
 				return []audit.Finding{{
 					Service:    svc,
 					ResourceID: r.id,

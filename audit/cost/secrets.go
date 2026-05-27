@@ -41,7 +41,7 @@ func AuditSecretsCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, err
 		"Auditing Secrets Manager cost",
 		func(_ context.Context, secret smtypes.SecretListEntry) audit.Finding {
 			s := parseSecretCostEntry(secret)
-			if s.lastAccessedDays > t.GetInt("secrets", "unused_days", t.UnusedDays) {
+			if s.lastAccessedDays > t.GetInt("secrets", "unused_days", 90) {
 				return audit.Finding{
 					Service:    "secrets_manager",
 					ResourceID: s.name,

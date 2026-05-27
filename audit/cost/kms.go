@@ -20,7 +20,7 @@ func init() {
 func AuditKMSCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) {
 	client := kms.NewFromConfig(cfg)
 	t := audit.GetThresholds(ctx)
-	unusedDays := t.GetInt("kms", "unused_days", t.UnusedDays)
+	unusedDays := t.GetInt("kms", "unused_days", 90)
 
 	var keys []kmstypes.KeyListEntry
 	paginator := kms.NewListKeysPaginator(client, &kms.ListKeysInput{})

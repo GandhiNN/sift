@@ -200,7 +200,7 @@ func AuditEKSCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 						lookback := t.GetInt("eks", "cpu_lookback_days", 7)
 						end := time.Now()
 						start := end.AddDate(0, 0, -lookback)
-						cpuThreshold := t.GetFloat("eks", "cpu_idle_percent", t.CPUIdlePercent)
+						cpuThreshold := t.GetFloat("eks", "cpu_idle_percent", 10)
 
 						var totalCPU float64
 						var datapoints int

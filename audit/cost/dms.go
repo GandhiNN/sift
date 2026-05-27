@@ -190,7 +190,7 @@ func AuditDMSCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 				})
 			}
 			avgCPU, err := getDMSAvgCPU(ctx, cwClient, d.id)
-			if err == nil && avgCPU < t.GetFloat("dms", "cpu_idle_percent", t.CPUIdlePercent) {
+			if err == nil && avgCPU < t.GetFloat("dms", "cpu_idle_percent", 10) {
 				results = append(results, audit.Finding{
 					Service:    "dms",
 					ResourceID: d.id,

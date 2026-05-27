@@ -1,11 +1,6 @@
 {
     "thresholds": {
         "global": {
-            "unused_days": 90,
-            "min_backup_days": 7,
-            "cpu_idle_percent": 10,
-            "snapshot_age_days": 90,
-            "rotation_max_days": 90,
             "concurrency": 10
         },
         "services": {

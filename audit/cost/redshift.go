@@ -54,7 +54,7 @@ func AuditRedshiftCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, er
 	lookback := t.GetInt("redshift", "cpu_lookback_days", 7)
 	end := time.Now()
 	start := end.AddDate(0, 0, -lookback)
-	cpuThreshold := t.GetFloat("redshift", "cpu_idle_percent", t.CPUIdlePercent)
+	cpuThreshold := t.GetFloat("redshift", "cpu_idle_percent", 10)
 
 	return audit.ProcessAll(
 		ctx,

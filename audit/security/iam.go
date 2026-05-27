@@ -225,7 +225,7 @@ func AuditIAMHygiene(ctx context.Context, cfg aws.Config) ([]audit.Finding, erro
 				continue
 			}
 			daysSince := int(time.Since(*role.RoleLastUsed.LastUsedDate).Hours() / 24)
-			if daysSince > audit.GetThresholds(ctx).UnusedDays {
+			if daysSince > 90 {
 				detail := fmt.Sprintf("last used %d days ago", daysSince)
 				findings = append(findings, audit.Finding{
 					Service:    "iam",
@@ -304,7 +304,7 @@ func AuditIAMHygiene(ctx context.Context, cfg aws.Config) ([]audit.Finding, erro
 					})
 				} else {
 					daysSince := int(time.Since(*lastUsed.AccessKeyLastUsed.LastUsedDate).Hours() / 24)
-					if daysSince > audit.GetThresholds(ctx).UnusedDays {
+					if daysSince > 90 {
 						detail := fmt.Sprintf("last used %d days ago", daysSince)
 						results = append(results, audit.Finding{
 							Service:     "iam",
