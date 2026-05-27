@@ -1,8 +1,6 @@
 {
     "thresholds": {
-        "global": {
-            "concurrency": 10
-        },
+        "concurrency": 10,
         "services": {
             "ec2": {
                 "cpu_idle_percent": 10,
