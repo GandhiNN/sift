@@ -257,22 +257,18 @@ func AuditIAMHygiene(ctx context.Context, cfg aws.Config) ([]audit.Finding, erro
 		allUsers = append(allUsers, page.Users...)
 	}
 
-	var mu sync.Mutex
-	var wg sync.WaitGroup
-	sem := make(chan struct{}, audit.GetThresholds(ctx).Concurrency)
-
-	for _, user := range allUsers {
-		wg.Add(1)
-		go func(user iamtypes.User) {
-			defer wg.Done()
-			sem <- struct{}{}
-			defer func() { <-sem }()
+	keyFindings := audit.ProcessAllMulti(
+		ctx,
+		allUsers,
+		"Auditing IAM access keys",
+		func(ctx context.Context, user iamtypes.User) []audit.Finding {
 			keysResp, err := client.ListAccessKeys(ctx, &iam.ListAccessKeysInput{
 				UserName: user.UserName,
 			})
 			if err != nil {
-				return
+				return nil
 			}
+			var results []audit.Finding
 			for _, key := range keysResp.AccessKeyMetadata {
 				if string(key.Status) != "Active" {
 					continue
@@ -288,11 +284,10 @@ func AuditIAMHygiene(ctx context.Context, cfg aws.Config) ([]audit.Finding, erro
 					aws.ToString(user.UserName),
 					aws.ToString(key.AccessKeyId),
 				)
-				var finding *audit.Finding
 				if lastUsed.AccessKeyLastUsed == nil ||
 					lastUsed.AccessKeyLastUsed.LastUsedDate == nil {
 					detail := "active access key has never been used"
-					finding = &audit.Finding{
+					results = append(results, audit.Finding{
 						Service:    "iam",
 						ResourceID: keyName,
 						Check:      "unused_access_key",
@@ -306,12 +301,12 @@ func AuditIAMHygiene(ctx context.Context, cfg aws.Config) ([]audit.Finding, erro
 							keyName,
 							detail,
 						),
-					}
+					})
 				} else {
 					daysSince := int(time.Since(*lastUsed.AccessKeyLastUsed.LastUsedDate).Hours() / 24)
 					if daysSince > audit.GetThresholds(ctx).UnusedDays {
 						detail := fmt.Sprintf("last used %d days ago", daysSince)
-						finding = &audit.Finding{
+						results = append(results, audit.Finding{
 							Service:     "iam",
 							ResourceID:  keyName,
 							Check:       "unused_access_key",
@@ -319,19 +314,14 @@ func AuditIAMHygiene(ctx context.Context, cfg aws.Config) ([]audit.Finding, erro
 							Detail:      detail,
 							RiskLevel:   "HIGH",
 							Remediation: remediation.Recommend("security", "iam", "unused_access_key", keyName, detail),
-						}
+						})
 					}
 				}
-				if finding != nil {
-					mu.Lock()
-					findings = append(findings, *finding)
-					mu.Unlock()
-
-				}
 			}
-		}(user)
-	}
-	wg.Wait()
+			return results
+		},
+	)
+	findings = append(findings, keyFindings...)
 
 	return findings, nil
 }
