@@ -4,12 +4,16 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"sift/audit"
 	"sift/audit/pricing"
 	"sift/audit/remediation"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/service/autoscaling"
+	"github.com/aws/aws-sdk-go-v2/service/cloudwatch"
+	cwtypes "github.com/aws/aws-sdk-go-v2/service/cloudwatch/types"
 	"github.com/aws/aws-sdk-go-v2/service/eks"
 	ekstypes "github.com/aws/aws-sdk-go-v2/service/eks/types"
 )
@@ -37,6 +41,9 @@ func parseEKSCostNodegroup(cluster string, ng *ekstypes.Nodegroup) eksCostNodegr
 
 func AuditEKSCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) {
 	client := eks.NewFromConfig(cfg)
+	cwClient := cloudwatch.NewFromConfig(cfg)
+	asgClient := autoscaling.NewFromConfig(cfg)
+	t := audit.GetThresholds(ctx)
 
 	var allClusters []string
 	clusterInput := &eks.ListClustersInput{}
@@ -164,6 +171,91 @@ func AuditEKSCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 							"desired size is 0",
 						),
 					})
+				}
+				// Check if nodegroup is oversized (low CPU)
+				if n.desiredSize > 0 && ngResp.Nodegroup.Resources != nil {
+					for _, asg := range ngResp.Nodegroup.Resources.AutoScalingGroups {
+						if asg.Name == nil {
+							continue
+						}
+						asgResp, err := asgClient.DescribeAutoScalingGroups(
+							ctx,
+							&autoscaling.DescribeAutoScalingGroupsInput{
+								AutoScalingGroupNames: []string{*asg.Name},
+							},
+						)
+						if err != nil || len(asgResp.AutoScalingGroups) == 0 {
+							continue
+						}
+						var instanceIDs []string
+						for _, inst := range asgResp.AutoScalingGroups[0].Instances {
+							if inst.InstanceId != nil {
+								instanceIDs = append(instanceIDs, *inst.InstanceId)
+							}
+						}
+						if len(instanceIDs) == 0 {
+							continue
+						}
+
+						lookback := t.GetInt("eks", "cpu_lookback_days", 7)
+						end := time.Now()
+						start := end.AddDate(0, 0, -lookback)
+						cpuThreshold := t.GetFloat("eks", "cpu_idle_percent", t.CPUIdlePercent)
+
+						var totalCPU float64
+						var datapoints int
+						for _, id := range instanceIDs {
+							resp, err := cwClient.GetMetricStatistics(
+								ctx,
+								&cloudwatch.GetMetricStatisticsInput{
+									Namespace:  aws.String("AWS/EC2"),
+									MetricName: aws.String("CPUUtilization"),
+									Dimensions: []cwtypes.Dimension{{
+										Name:  aws.String("InstanceId"),
+										Value: aws.String(id),
+									}},
+									StartTime:  &start,
+									EndTime:    &end,
+									Period:     aws.Int32(86400),
+									Statistics: []cwtypes.Statistic{cwtypes.StatisticAverage},
+								},
+							)
+							if err != nil {
+								continue
+							}
+							for _, dp := range resp.Datapoints {
+								totalCPU += aws.ToFloat64(dp.Average)
+								datapoints++
+							}
+						}
+						if datapoints > 0 {
+							avgCPU := totalCPU / float64(datapoints)
+							if avgCPU < cpuThreshold {
+								ngFindings = append(ngFindings, audit.Finding{
+									Service:    "eks_nodegroup",
+									ResourceID: fmt.Sprintf("%s/%s", n.cluster, n.name),
+									Tags:       n.tags,
+									Check:      "oversized_nodegroup",
+									Status:     "WARN",
+									Detail: fmt.Sprintf(
+										"instances=%d, avg CPU=%.1f%% over %d days, consider smaller instance type",
+										len(instanceIDs),
+										avgCPU,
+										lookback,
+									),
+									RiskLevel:            "HIGH",
+									EstimatedMonthlyCost: nodeCost * float64(n.desiredSize),
+									Remediation: remediation.Recommend(
+										"cost",
+										"eks",
+										"oversized_nodegroup",
+										fmt.Sprintf("%s/%s", n.cluster, n.name),
+										fmt.Sprintf("avg CPU %.1f%%", avgCPU),
+									),
+								})
+							}
+						}
+					}
 				}
 				if len(ngFindings) > 0 {
 					results = append(results, ngFindings...)
