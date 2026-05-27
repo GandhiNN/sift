@@ -4,7 +4,7 @@ This guide explains how to add a new audit service to sift.
 
 ## Architecture
 
-```
+```bash
 audit/registry.go   — Self-registration of checkers per module (security, cost, ops)
 audit/runner.go     — Generic parallel orchestrator (RunChecks)
 audit/process.go    — Concurrent item processor (ProcessAll, ProcessAllMulti, FetchAll)
@@ -14,7 +14,7 @@ Each module (`security`, `cost`, `ops`) has a registry. Services register themse
 
 ### Package layout
 
-```
+```bash
 audit/
 ├── runner.go          # RunChecks — generic orchestrator
 ├── registry.go        # Register/CheckersFor/ValidServices
@@ -125,7 +125,7 @@ All three handle concurrency (semaphore), progress bars, and respect `--concurre
 
 Use `FetchAll` → domain objects when you have a multi-phase pipeline:
 
-```
+```bash
 1. Fetch      — describe N resources in parallel → domain objects (FetchAll)
 2. Enrich     — batch-fetch shared data (SGs, route tables) using info from step 1
 3. Assess     — compute risk per item using enriched context → findings (ProcessAll)
