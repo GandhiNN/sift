@@ -12,6 +12,24 @@ import (
 	dbtypes "github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
 )
 
+type dynamoDBAPI interface {
+	DescribeTable(
+		ctx context.Context,
+		params *dynamodb.DescribeTableInput,
+		optFns ...func(*dynamodb.Options),
+	) (*dynamodb.DescribeTableOutput, error)
+	DescribeContinuousBackups(
+		ctx context.Context,
+		params *dynamodb.DescribeContinuousBackupsInput,
+		optFns ...func(*dynamodb.Options),
+	) (*dynamodb.DescribeContinuousBackupsOutput, error)
+	ListTagsOfResource(
+		ctx context.Context,
+		params *dynamodb.ListTagsOfResourceInput,
+		optFns ...func(*dynamodb.Options),
+	) (*dynamodb.ListTagsOfResourceOutput, error)
+}
+
 type dynamoDBTable struct {
 	name               string
 	encrypted          bool
@@ -35,7 +53,7 @@ func dynamoDBRisk(encrypted, pitr, deletionProtection bool) string {
 
 func parseDynamoDBTable(
 	ctx context.Context,
-	client *dynamodb.Client,
+	client dynamoDBAPI,
 	name string,
 ) (*dynamoDBTable, error) {
 	desc, err := client.DescribeTable(
