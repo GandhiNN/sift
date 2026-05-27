@@ -164,6 +164,40 @@ func AuditS3Cost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) {
 						"request metrics not enabled",
 					),
 				})
+				// Check incomplete multipart uploads
+				mpResp, err := client.ListMultipartUploads(
+					ctx,
+					&s3.ListMultipartUploadsInput{Bucket: &name},
+				)
+				if err == nil && len(mpResp.Uploads) > 0 {
+					oldCount := 0
+					for _, u := range mpResp.Uploads {
+						if u.Initiated != nil && time.Since(*u.Initiated).Hours() > 24*7 {
+							oldCount++
+						}
+					}
+					if oldCount > 0 {
+						results = append(results, audit.Finding{
+							Service:    "s3",
+							ResourceID: bucket.name,
+							Tags:       bucket.tags,
+							Check:      "incomplete_multipart_uploads",
+							Status:     "WARN",
+							Detail: fmt.Sprintf(
+								"%d incomplete multipart uploads older than 7 days",
+								oldCount,
+							),
+							RiskLevel: "LOW",
+							Remediation: remediation.Recommend(
+								"cost",
+								"s3",
+								"incomplete_multipart_uploads",
+								bucket.name,
+								fmt.Sprintf("%d stale uploads", oldCount),
+							),
+						})
+					}
+				}
 				return results
 			}
 
