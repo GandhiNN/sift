@@ -29,6 +29,19 @@ var deprecatedRuntimes = map[string]bool{
 	"provided":      true,
 }
 
+type lambdaAPI interface {
+	ListTags(
+		ctx context.Context,
+		params *lambda.ListTagsInput,
+		optFns ...func(*lambda.Options),
+	) (*lambda.ListTagsOutput, error)
+	GetFunctionUrlConfig(
+		ctx context.Context,
+		params *lambda.GetFunctionUrlConfigInput,
+		optFns ...func(*lambda.Options),
+	) (*lambda.GetFunctionUrlConfigOutput, error)
+}
+
 type lambdaFunction struct {
 	name    string
 	runtime string
@@ -37,7 +50,7 @@ type lambdaFunction struct {
 
 func parseLambdaFunction(
 	ctx context.Context,
-	client *lambda.Client,
+	client lambdaAPI,
 	fn lambdatypes.FunctionConfiguration,
 ) lambdaFunction {
 	f := lambdaFunction{
