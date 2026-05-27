@@ -11,6 +11,14 @@ import (
 	ecrtypes "github.com/aws/aws-sdk-go-v2/service/ecr/types"
 )
 
+type ecrAPI interface {
+	ListTagsForResource(
+		ctx context.Context,
+		params *ecr.ListTagsForResourceInput,
+		optFns ...func(*ecr.Options),
+	) (*ecr.ListTagsForResourceOutput, error)
+}
+
 type ecrSecurityEntry struct {
 	name            string
 	arn             string
@@ -21,7 +29,7 @@ type ecrSecurityEntry struct {
 
 func parseECRSecurityEntry(
 	ctx context.Context,
-	client *ecr.Client,
+	client ecrAPI,
 	repo ecrtypes.Repository,
 ) ecrSecurityEntry {
 	e := ecrSecurityEntry{
