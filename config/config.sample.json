@@ -1,0 +1,52 @@
+{
+    "thresholds": {
+        "global": {
+            "unused_days": 90,
+            "min_backup_days": 7,
+            "cpu_idle_percent": 10,
+            "snapshot_age_days": 90,
+            "rotation_max_days": 90,
+            "concurrency": 10
+        },
+        "services": {
+            "ec2": {
+                "cpu_idle_percent": 10,
+                "cpu_lookback_days": 7
+            },
+            "ebs": {
+                "snapshot_age_days": 90
+            },
+            "rds": {
+                "cpu_idle_percent": 15,
+                "cpu_lookback_days": 14
+            },
+            "redshift": {
+                "cpu_idle_percent": 10,
+                "cpu_lookback_days": 7
+            },
+            "dms": {
+                "cpu_idle_percent": 10,
+                "cpu_lookback_days": 14
+            },
+            "eks": {
+                "cpu_idle_percent": 10,
+                "cpu_lookback_days": 7
+            },
+            "backup": {
+                "retention_days": 90,
+                "storage_per_gb": 0.05
+            },
+            "secrets": {
+                "unused_days": 90,
+                "rotation_max_days": 90
+            },
+            "kms": {
+                "unused_days": 90
+            },
+            "glue": {
+                "unused_days": 90,
+                "table_version_concurrency": 50
+            }
+        }
+    }
+}
