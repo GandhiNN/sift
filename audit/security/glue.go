@@ -3,10 +3,8 @@ package security
 import (
 	"context"
 	"fmt"
-	"sync"
 
 	"sift/audit"
-	"sift/audit/progress"
 	"sift/audit/remediation"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -93,38 +91,22 @@ func AuditGlue(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) {
 		jobInput.NextToken = jobsResp.NextToken
 	}
 
-	var mu sync.Mutex
-	var wg sync.WaitGroup
-	sem := make(chan struct{}, audit.GetThresholds(ctx).Concurrency)
-	bar := progress.NewBar(ctx, int64(len(allJobs)), "Auditing Glue job security")
-
-	for _, job := range allJobs {
-		wg.Add(1)
-		go func(job gluetypes.Job) {
-			defer wg.Done()
-			sem <- struct{}{}
-			defer func() { <-sem }()
-			defer bar.Add(1)
-
+	jobFindings := audit.ProcessAll(
+		ctx,
+		allJobs,
+		"Auditing Glue job security",
+		func(ctx context.Context, job gluetypes.Job) audit.Finding {
 			g := parseGlueJob(ctx, client, job)
 			risk := "MINIMAL"
 			if !g.encrypted {
 				risk = "LOW"
 			}
-			mu.Lock()
-
-			detail := fmt.Sprintf(
-				"security_config=%t, role=%s",
-				g.encrypted,
-				g.role,
-			)
-
+			detail := fmt.Sprintf("security_config=%t, role=%s", g.encrypted, g.role)
 			var rem *audit.Remediation
 			if risk != "MINIMAL" {
 				rem = remediation.Recommend("security", "glue", "glue_security", g.name, detail)
 			}
-
-			findings = append(findings, audit.Finding{
+			return audit.Finding{
 				Service:     "glue",
 				ResourceID:  g.name,
 				Tags:        g.tags,
@@ -133,11 +115,10 @@ func AuditGlue(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) {
 				Detail:      detail,
 				RiskLevel:   risk,
 				Remediation: rem,
-			})
-			mu.Unlock()
-		}(job)
-	}
-	wg.Wait()
+			}
+		},
+	)
+	findings = append(findings, jobFindings...)
 
 	// Check for dev endpoints (deprecated but may still exist)
 	devResp, err := client.GetDevEndpoints(ctx, &glue.GetDevEndpointsInput{})

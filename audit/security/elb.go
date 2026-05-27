@@ -6,10 +6,7 @@ import (
 	"log/slog"
 
 	"sift/audit"
-	"sift/audit/progress"
 	"sift/audit/remediation"
-
-	"sync"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/ec2"
@@ -143,41 +140,25 @@ func AuditELB(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) {
 		allLBs = append(allLBs, page.LoadBalancers...)
 	}
 
-	results := make([]audit.Finding, len(allLBs))
-	bar := progress.NewBar(ctx, int64(len(allLBs)), "Auditing load balancers")
-
-	var wg sync.WaitGroup
-	sem := make(chan struct{}, audit.GetThresholds(ctx).Concurrency)
-	var mu sync.Mutex
-	var extraFindings []audit.Finding
-
-	for i, lb := range allLBs {
-		wg.Add(1)
-		go func(i int, lb elbtypes.LoadBalancer) {
-			defer wg.Done()
-			sem <- struct{}{}
-			defer func() { <-sem }()
-
+	return audit.ProcessAllMulti(
+		ctx,
+		allLBs,
+		"Auditing load balancers",
+		func(ctx context.Context, lb elbtypes.LoadBalancer) []audit.Finding {
 			e := parseELB(ctx, elbClient, ec2Client, lb)
 			risk := elbRisk(e.scheme, e.dbPortExposed, e.openToWorld)
-
 			detail := fmt.Sprintf(
 				"type=%s, scheme=%s, dns=%s, open_to_world=%t",
-				e.lbType,
-				e.scheme,
-				e.dnsName,
-				e.openToWorld,
+				e.lbType, e.scheme, e.dnsName, e.openToWorld,
 			)
 			if e.dbPortExposed {
 				detail += ", sensitive_port_exposed=true"
 			}
-
 			var rem *audit.Remediation
 			if risk != "MINIMAL" {
 				rem = remediation.Recommend("security", "elb", "lb_exposure", e.name, detail)
 			}
-
-			results[i] = audit.Finding{
+			results := []audit.Finding{{
 				Service:     "elb",
 				ResourceID:  e.name,
 				Tags:        e.tags,
@@ -186,21 +167,13 @@ func AuditELB(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) {
 				Detail:      detail,
 				RiskLevel:   risk,
 				Remediation: rem,
-			}
-
-			// DDoS readiness for internet-facing ALBs
+			}}
 			if e.scheme == "internet-facing" && e.lbType == "application" {
-				ddosFindings := checkDDoSReadiness(ctx, cfg, e.arn, e.name, e.tags)
-				mu.Lock()
-				extraFindings = append(extraFindings, ddosFindings...)
-				mu.Unlock()
+				results = append(results, checkDDoSReadiness(ctx, cfg, e.arn, e.name, e.tags)...)
 			}
-			bar.Add(1)
-		}(i, lb)
-	}
-	wg.Wait()
-
-	return append(results, extraFindings...), nil
+			return results
+		},
+	), nil
 }
 
 func checkDDoSReadiness(

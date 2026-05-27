@@ -4,10 +4,8 @@ import (
 	"context"
 	"fmt"
 	"strings"
-	"sync"
 
 	"sift/audit"
-	"sift/audit/progress"
 	"sift/audit/remediation"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -59,7 +57,6 @@ func AuditSagemaker(ctx context.Context, cfg aws.Config) ([]audit.Finding, error
 	for id := range sgSet {
 		sgIDs = append(sgIDs, id)
 	}
-
 	openSGs := FindOpenSGs(ctx, ec2Client, sgIDs)
 
 	// Batch-fetch route tables for all unique subnets
@@ -101,62 +98,54 @@ func AuditSagemaker(ctx context.Context, cfg aws.Config) ([]audit.Finding, error
 		}
 	}
 
-	results := make([]audit.Finding, len(notebooks))
-	bar := progress.NewBar(ctx, int64(len(notebooks)), "Auditing SageMaker exposure")
-
-	for i, nb := range notebooks {
-		sgOpen := false
-		for _, id := range nb.securityGroupIDs {
-			if openSGs[id] {
-				sgOpen = true
-				break
+	return audit.ProcessAll(
+		ctx,
+		notebooks,
+		"Auditing SageMaker exposure",
+		func(_ context.Context, nb sageMakerNotebook) audit.Finding {
+			sgOpen := false
+			for _, id := range nb.securityGroupIDs {
+				if openSGs[id] {
+					sgOpen = true
+					break
+				}
 			}
-		}
-		publicSubnet := nb.subnetID != nil && publicSubnets[*nb.subnetID]
-
-		risk := sagemakerRisk(nb.directInternetAccess, publicSubnet, sgOpen)
-		detail := fmt.Sprintf(
-			"status=%s, direct_internet=%t, public_subnet=%t, sg_open=%t",
-			nb.status,
-			nb.directInternetAccess,
-			publicSubnet,
-			sgOpen,
-		)
-
-		var rem *audit.Remediation
-		if risk != "MINIMAL" {
-			rem = remediation.Recommend(
-				"security",
-				"sagemaker",
-				"notebook_exposure",
-				nb.name,
-				detail,
+			publicSubnet := nb.subnetID != nil && publicSubnets[*nb.subnetID]
+			risk := sagemakerRisk(nb.directInternetAccess, publicSubnet, sgOpen)
+			detail := fmt.Sprintf(
+				"status=%s, direct_internet=%t, public_subnet=%t, sg_open=%t",
+				nb.status,
+				nb.directInternetAccess,
+				publicSubnet,
+				sgOpen,
 			)
-		}
-
-		results[i] = audit.Finding{
-			Service:     "sagemaker",
-			ResourceID:  nb.name,
-			Check:       "notebook_exposure",
-			Status:      statusFromRisk(risk),
-			Detail:      detail,
-			RiskLevel:   risk,
-			Remediation: rem,
-		}
-		bar.Add(1)
-	}
-	return results, nil
+			var rem *audit.Remediation
+			if risk != "MINIMAL" {
+				rem = remediation.Recommend(
+					"security",
+					"sagemaker",
+					"notebook_exposure",
+					nb.name,
+					detail,
+				)
+			}
+			return audit.Finding{
+				Service:     "sagemaker",
+				ResourceID:  nb.name,
+				Check:       "notebook_exposure",
+				Status:      statusFromRisk(risk),
+				Detail:      detail,
+				RiskLevel:   risk,
+				Remediation: rem,
+			}
+		},
+	), nil
 }
 
 func listNotebooks(ctx context.Context, cfg aws.Config) ([]sageMakerNotebook, error) {
 	client := sagemaker.NewFromConfig(cfg)
 
-	// Collect all notebook names first
-	type nbRef struct {
-		name string
-	}
-
-	var refs []nbRef
+	var names []string
 	input := &sagemaker.ListNotebookInstancesInput{}
 	for {
 		resp, err := client.ListNotebookInstances(ctx, input)
@@ -165,7 +154,7 @@ func listNotebooks(ctx context.Context, cfg aws.Config) ([]sageMakerNotebook, er
 		}
 		for _, nb := range resp.NotebookInstances {
 			if nb.NotebookInstanceName != nil {
-				refs = append(refs, nbRef{name: *nb.NotebookInstanceName})
+				names = append(names, *nb.NotebookInstanceName)
 			}
 		}
 		if resp.NextToken == nil {
@@ -173,19 +162,11 @@ func listNotebooks(ctx context.Context, cfg aws.Config) ([]sageMakerNotebook, er
 		}
 		input.NextToken = resp.NextToken
 	}
-
-	// Describe all notebooks concurrently
-	results := make([]sageMakerNotebook, len(refs))
-	var wg sync.WaitGroup
-	sem := make(chan struct{}, audit.GetThresholds(ctx).Concurrency)
-
-	for i, ref := range refs {
-		wg.Add(1)
-		go func(i int, name string) {
-			defer wg.Done()
-			sem <- struct{}{}
-			defer func() { <-sem }()
-
+	results := audit.FetchAll(
+		ctx,
+		names,
+		"Describing SageMaker notebooks",
+		func(ctx context.Context, name string) sageMakerNotebook {
 			desc, err := client.DescribeNotebookInstance(
 				ctx,
 				&sagemaker.DescribeNotebookInstanceInput{
@@ -193,10 +174,9 @@ func listNotebooks(ctx context.Context, cfg aws.Config) ([]sageMakerNotebook, er
 				},
 			)
 			if err != nil {
-				results[i] = sageMakerNotebook{} // stays empty, filtered out later
-				return
+				return sageMakerNotebook{}
 			}
-			results[i] = sageMakerNotebook{
+			return sageMakerNotebook{
 				name:                 name,
 				status:               string(desc.NotebookInstanceStatus),
 				directInternetAccess: string(desc.DirectInternetAccess) == "enabled",
@@ -204,16 +184,14 @@ func listNotebooks(ctx context.Context, cfg aws.Config) ([]sageMakerNotebook, er
 				securityGroupIDs:     desc.SecurityGroups,
 				roleARN:              desc.RoleArn,
 			}
-		}(i, ref.name)
-	}
-	wg.Wait()
+		},
+	)
 
-	// Filter out empty entries (failed describes)
-	var allNBs []sageMakerNotebook
+	var filtered []sageMakerNotebook
 	for _, nb := range results {
 		if nb.name != "" {
-			allNBs = append(allNBs, nb)
+			filtered = append(filtered, nb)
 		}
 	}
-	return allNBs, nil
+	return filtered, nil
 }
