@@ -174,6 +174,74 @@ Some services have multi-phase logic that doesn't map to "process each item inde
 3. Implement the `func(context.Context, aws.Config) ([]audit.Finding, error)` signature
 4. Use `ProcessAll`, `ProcessAllMulti`, or `FetchAll` for the processing loop
 5. Add remediation via `remediation.Recommend()` for non-MINIMAL findings
-6. Build and test: `go build ./... && go test ./...`
+6. Define an interface for AWS calls used in processing (for testability)
+7. Build and test: `go build ./... && go test ./...`
 
 No changes needed in `cmd/`, no service maps to update, no orchestrator edits.
+
+## Testing with Interfaces
+
+Each service defines a minimal interface for the AWS methods it calls during per-item processing. This allows unit testing with mocks — no AWS credentials or network needed.
+
+### How it works
+
+1. **Define what your function needs** — only the methods it actually calls:
+
+```go
+type dynamoDBAPI interface {
+    DescribeTable(ctx context.Context, params *dynamodb.DescribeTableInput, optFns ...func(*dynamodb.Options)) (*dynamodb.DescribeTableOutput, error)
+    DescribeContinuousBackups(ctx context.Context, params *dynamodb.DescribeContinuousBackupsInput, optFns ...func(*dynamodb.Options)) (*dynamodb.DescribeContinuousBackupsOutput, error)
+    ListTagsOfResource(ctx context.Context, params *dynamodb.ListTagsOfResourceInput, optFns ...func(*dynamodb.Options)) (*dynamodb.ListTagsOfResourceOutput, error)
+}
+```
+
+2. **Accept the interface** in your processing function instead of `*dynamodb.Client`:
+
+```go
+func parseDynamoDBTable(ctx context.Context, client dynamoDBAPI, name string) (*dynamoDBTable, error) {
+    // calls client.DescribeTable, etc. — works with real client or mock
+}
+```
+
+3. **The real client satisfies the interface automatically** — `*dynamodb.Client` already has those methods. Production code is unchanged.
+
+4. **In tests, create a fake** that returns the exact scenario you want:
+
+```go
+type mockDynamoDBClient struct {
+    table *dbtypes.TableDescription
+    pitr  dbtypes.PointInTimeRecoveryStatus
+}
+
+func (m *mockDynamoDBClient) DescribeTable(_ context.Context, _ *dynamodb.DescribeTableInput, _ ...func(*dynamodb.Options)) (*dynamodb.DescribeTableOutput, error) {
+    return &dynamodb.DescribeTableOutput{Table: m.table}, nil
+}
+// ... implement other interface methods ...
+```
+
+5. **Pass the mock and verify output:**
+
+```go
+func TestUnencryptedTable(t *testing.T) {
+    mock := &mockDynamoDBClient{
+        table: &dbtypes.TableDescription{
+            SSEDescription: &dbtypes.SSEDescription{Status: dbtypes.SSEStatusDisabled},
+        },
+    }
+    tbl, _ := parseDynamoDBTable(context.Background(), mock, "test")
+    if risk := dynamoDBRisk(tbl.encrypted, tbl.pitr, tbl.deletionProtection); risk != "HIGH" {
+        t.Errorf("got %s, want HIGH", risk)
+    }
+}
+```
+
+### Guidelines
+
+- Define interfaces in the same file as the service (`dynamodb.go`, not a separate file)
+- Only include methods the processing function actually calls
+- Pagination stays in the public `Audit*` function (needs concrete client) — the interface covers per-item secondary calls
+- Name interfaces `<service>API` (e.g., `dynamoDBAPI`, `ecrAPI`)
+- Place test files next to the code: `dynamodb_test.go` alongside `dynamodb.go`
+- Tests in the same package can access unexported functions (`parseDynamoDBTable`, `dynamoDBRisk`)
+
+See `audit/security/dynamodb.go` and `audit/security/dynamodb_test.go` for the reference implementation.
