@@ -3,7 +3,6 @@ package cost
 import (
 	"context"
 	"fmt"
-	"sync"
 	"time"
 
 	"sift/audit"
@@ -85,42 +84,28 @@ func AuditGlueCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error)
 		return findings, nil
 	}
 
-	bar := progress.NewBar(ctx, int64(len(allJobs)), "Auditing Glue jobs")
-	var mu sync.Mutex
-	var wg sync.WaitGroup
-	sem := make(chan struct{}, audit.GetThresholds(ctx).Concurrency)
-
-	for _, job := range allJobs {
-		wg.Add(1)
-		go func(job gluetypes.Job) {
-			defer wg.Done()
-			sem <- struct{}{}
-			defer func() { <-sem }()
-
+	jobFindings := audit.ProcessAllMulti(
+		ctx,
+		allJobs,
+		"Auditing Glue jobs",
+		func(ctx context.Context, job gluetypes.Job) []audit.Finding {
 			g := parseGlueCostJob(ctx, client, job)
-			jobFindings := auditGlueJob(ctx, client, job, g.tags)
-			if len(jobFindings) > 0 {
-				mu.Lock()
-				findings = append(findings, jobFindings...)
-				mu.Unlock()
-			} else {
-				mu.Lock()
-				findings = append(findings, audit.Finding{
-					Service:     "glue_job",
-					ResourceID:  g.name,
-					Tags:        g.tags,
-					Check:       "glue_job_cost",
-					Status:      "PASS",
-					Detail:      "no cost issues detected",
-					RiskLevel:   "MINIMAL",
-					Remediation: nil,
-				})
-				mu.Unlock()
+			results := auditGlueJob(ctx, client, job, g.tags)
+			if len(results) > 0 {
+				return results
 			}
-			bar.Add(1)
-		}(job)
-	}
-	wg.Wait()
+			return []audit.Finding{{
+				Service:    "glue_job",
+				ResourceID: g.name,
+				Tags:       g.tags,
+				Check:      "glue_job_cost",
+				Status:     "PASS",
+				Detail:     "no cost issues detected",
+				RiskLevel:  "MINIMAL",
+			}}
+		},
+	)
+	findings = append(findings, jobFindings...)
 
 	return findings, nil
 }

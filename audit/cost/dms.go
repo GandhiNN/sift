@@ -4,12 +4,10 @@ import (
 	"context"
 	"fmt"
 	"strings"
-	"sync"
 	"time"
 
 	"sift/audit"
 	"sift/audit/pricing"
-	"sift/audit/progress"
 	"sift/audit/remediation"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -103,26 +101,16 @@ func AuditDMSCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 		}
 	}
 
-	bar := progress.NewBar(ctx, int64(len(instances)), "Auditing DMS cost")
-	var findings []audit.Finding
-	var mu sync.Mutex
-	var wg sync.WaitGroup
-	sem := make(chan struct{}, t.Concurrency)
-
-	for _, inst := range instances {
-		wg.Add(1)
-		go func(inst dmstypes.ReplicationInstance) {
-			defer wg.Done()
-			sem <- struct{}{}
-			defer func() { <-sem }()
-			defer bar.Add(1)
-
+	return audit.ProcessAllMulti(
+		ctx,
+		instances,
+		"Auditing DMS cost",
+		func(ctx context.Context, inst dmstypes.ReplicationInstance) []audit.Finding {
 			d := parseDMSCostInstance(ctx, client, inst)
-
-			var local []audit.Finding
+			var results []audit.Finding
 
 			if taskCount[d.arn] == 0 {
-				local = append(local, audit.Finding{
+				results = append(results, audit.Finding{
 					Service:    "dms",
 					ResourceID: d.id,
 					Tags:       d.tags,
@@ -143,7 +131,7 @@ func AuditDMSCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 					),
 				})
 			} else if stoppedTasks[d.arn] == taskCount[d.arn] {
-				local = append(local, audit.Finding{
+				results = append(results, audit.Finding{
 					Service:              "dms",
 					ResourceID:           d.id,
 					Check:                "all_tasks_stopped",
@@ -151,14 +139,12 @@ func AuditDMSCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 					Detail:               fmt.Sprintf("class=%s, all %d tasks stopped but instance running", d.class, stoppedTasks[d.arn]),
 					RiskLevel:            "MEDIUM",
 					EstimatedMonthlyCost: pricing.DMSMonthly(d.class),
-					Remediation: remediation.Recommend("cost",
-						"dms", "all_tasks_stopped", d.id, fmt.Sprintf("all %d tasks stopped", stoppedTasks[d.arn])),
+					Remediation:          remediation.Recommend("cost", "dms", "all_tasks_stopped", d.id, fmt.Sprintf("all %d tasks stopped", stoppedTasks[d.arn])),
 				})
 			}
-
 			for _, prefix := range dmsPrevGenPrefixes {
 				if strings.HasPrefix(d.class, prefix) {
-					local = append(local, audit.Finding{
+					results = append(results, audit.Finding{
 						Service:    "dms",
 						ResourceID: d.id,
 						Tags:       d.tags,
@@ -175,15 +161,14 @@ func AuditDMSCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 							"dms",
 							"previous_gen_instance",
 							d.id,
-							"previou-gen instance type",
+							"previous-gen instance type",
 						),
 					})
 					break
 				}
 			}
-
 			if d.multiAZ {
-				local = append(local, audit.Finding{
+				results = append(results, audit.Finding{
 					Service:    "dms",
 					ResourceID: d.id,
 					Tags:       d.tags,
@@ -204,10 +189,9 @@ func AuditDMSCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 					),
 				})
 			}
-
 			avgCPU, err := getDMSAvgCPU(ctx, cwClient, d.id)
 			if err == nil && avgCPU < t.GetFloat("dms", "cpu_idle_percent", t.CPUIdlePercent) {
-				local = append(local, audit.Finding{
+				results = append(results, audit.Finding{
 					Service:    "dms",
 					ResourceID: d.id,
 					Tags:       d.tags,
@@ -230,14 +214,8 @@ func AuditDMSCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 					),
 				})
 			}
-
-			if len(local) > 0 {
-				mu.Lock()
-				findings = append(findings, local...)
-				mu.Unlock()
-			} else {
-				mu.Lock()
-				findings = append(findings, audit.Finding{
+			if len(results) == 0 {
+				results = append(results, audit.Finding{
 					Service:              "dms",
 					ResourceID:           d.id,
 					Tags:                 d.tags,
@@ -246,15 +224,11 @@ func AuditDMSCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 					Detail:               fmt.Sprintf("class=%s, active and right-sized", d.class),
 					RiskLevel:            "MINIMAL",
 					EstimatedMonthlyCost: pricing.DMSMonthly(d.class),
-					Remediation:          nil,
 				})
-				mu.Unlock()
 			}
-		}(inst)
-	}
-	wg.Wait()
-
-	return findings, nil
+			return results
+		},
+	), nil
 }
 
 func getDMSAvgCPU(

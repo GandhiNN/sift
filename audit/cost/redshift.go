@@ -3,12 +3,10 @@ package cost
 import (
 	"context"
 	"fmt"
-	"sync"
 	"time"
 
 	"sift/audit"
 	"sift/audit/pricing"
-	"sift/audit/progress"
 	"sift/audit/remediation"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -53,24 +51,16 @@ func AuditRedshiftCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, er
 		}
 	}
 
-	bar := progress.NewBar(ctx, int64(len(clusters)), "Auditing Redshift cost")
-	var findings []audit.Finding
-	var mu sync.Mutex
-	var wg sync.WaitGroup
-	sem := make(chan struct{}, t.Concurrency)
+	lookback := t.GetInt("redshift", "cpu_lookback_days", 7)
+	end := time.Now()
+	start := end.AddDate(0, 0, -lookback)
+	cpuThreshold := t.GetFloat("redshift", "cpu_idle_percent", t.CPUIdlePercent)
 
-	for _, c := range clusters {
-		wg.Add(1)
-		go func(c redshiftCostEntry) {
-			defer wg.Done()
-			sem <- struct{}{}
-			defer func() { <-sem }()
-			defer bar.Add(1)
-
-			lookback := t.GetInt("redshift", "cpu_lookback_days", 7)
-			end := time.Now()
-			start := end.AddDate(0, 0, -lookback)
-
+	return audit.ProcessAll(
+		ctx,
+		clusters,
+		"Auditing Redshift cost",
+		func(ctx context.Context, c redshiftCostEntry) audit.Finding {
 			resp, err := cwClient.GetMetricStatistics(ctx, &cloudwatch.GetMetricStatisticsInput{
 				Namespace:  aws.String("AWS/Redshift"),
 				MetricName: aws.String("CPUUtilization"),
@@ -83,10 +73,8 @@ func AuditRedshiftCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, er
 				Period:     aws.Int32(86400),
 				Statistics: []cwtypes.Statistic{cwtypes.StatisticAverage},
 			})
-
 			if err != nil || len(resp.Datapoints) == 0 {
-				mu.Lock()
-				findings = append(findings, audit.Finding{
+				return audit.Finding{
 					Service:    "redshift",
 					ResourceID: c.id,
 					Tags:       c.tags,
@@ -106,21 +94,16 @@ func AuditRedshiftCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, er
 						c.id,
 						"no CPU metrics available",
 					),
-				})
-				mu.Unlock()
-				return
+				}
 			}
-
 			var total float64
 			for _, dp := range resp.Datapoints {
 				total += aws.ToFloat64(dp.Average)
 			}
 			avgCPU := total / float64(len(resp.Datapoints))
 
-			cpuThreshold := t.GetFloat("redshift", "cpu_idle_percent", t.CPUIdlePercent)
 			if avgCPU < cpuThreshold {
-				mu.Lock()
-				findings = append(findings, audit.Finding{
+				return audit.Finding{
 					Service:    "redshift",
 					ResourceID: c.id,
 					Tags:       c.tags,
@@ -141,26 +124,24 @@ func AuditRedshiftCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, er
 						c.id,
 						fmt.Sprintf("avg CPU %.1f%%", avgCPU),
 					),
-				})
-				mu.Unlock()
-			} else {
-				mu.Lock()
-				findings = append(findings, audit.Finding{
-					Service:              "redshift",
-					ResourceID:           c.id,
-					Tags:                 c.tags,
-					Check:                "oversized_cluster",
-					Status:               "PASS",
-					Detail:               fmt.Sprintf("node_type=%s, nodes=%d, avg CPU=%.1f%% over %d days", c.nodeType, c.numNodes, avgCPU, lookback),
-					RiskLevel:            "MINIMAL",
-					EstimatedMonthlyCost: pricing.RedshiftMonthly(c.nodeType, c.numNodes),
-					Remediation:          nil,
-				})
-				mu.Unlock()
+				}
 			}
-		}(c)
-	}
-	wg.Wait()
-
-	return findings, nil
+			return audit.Finding{
+				Service:    "redshift",
+				ResourceID: c.id,
+				Tags:       c.tags,
+				Check:      "oversized_cluster",
+				Status:     "PASS",
+				Detail: fmt.Sprintf(
+					"node_type=%s, nodes=%d, avg CPU=%.1f%% over %d days",
+					c.nodeType,
+					c.numNodes,
+					avgCPU,
+					lookback,
+				),
+				RiskLevel:            "MINIMAL",
+				EstimatedMonthlyCost: pricing.RedshiftMonthly(c.nodeType, c.numNodes),
+			}
+		},
+	), nil
 }
