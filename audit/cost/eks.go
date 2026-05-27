@@ -192,6 +192,9 @@ func AuditEKSCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 							if inst.InstanceId != nil {
 								instanceIDs = append(instanceIDs, *inst.InstanceId)
 							}
+							if nodeCost == 0 && inst.InstanceType != nil {
+								nodeCost = pricing.EC2Monthly(*inst.InstanceType)
+							}
 						}
 						if len(instanceIDs) == 0 {
 							continue
