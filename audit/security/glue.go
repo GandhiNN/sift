@@ -12,6 +12,14 @@ import (
 	gluetypes "github.com/aws/aws-sdk-go-v2/service/glue/types"
 )
 
+type glueTagsAPI interface {
+	GetTags(
+		ctx context.Context,
+		params *glue.GetTagsInput,
+		optFns ...func(*glue.Options),
+	) (*glue.GetTagsOutput, error)
+}
+
 type glueJob struct {
 	name      string
 	role      string
@@ -19,7 +27,7 @@ type glueJob struct {
 	tags      map[string]string
 }
 
-func parseGlueJob(ctx context.Context, client *glue.Client, job gluetypes.Job) glueJob {
+func parseGlueJob(ctx context.Context, client glueTagsAPI, job gluetypes.Job) glueJob {
 	g := glueJob{
 		name: aws.ToString(job.Name),
 		role: aws.ToString(job.Role),
