@@ -1,116 +1,126 @@
 # Concurrency Patterns
 
-This project uses a consistent set of Go concurrency patterns to parallelize AWS API calls safely.
+This project uses generic helpers and consistent Go concurrency patterns to parallelize AWS API calls safely.
 
-## Semaphore-bounded fan-out
+## ProcessAll / ProcessAllMulti / FetchAll (preferred)
 
-Every audit function that processes a list of resources concurrently follows the same shape:
+Most services use the generic helpers in `audit/process.go`. These encapsulate the semaphore, WaitGroup, and progress bar:
 
 ```go
-var mu sync.Mutex
-var findings []audit.Finding
+// Single finding per item
+results := audit.ProcessAll(ctx, items, "Auditing X", func(ctx context.Context, item Item) audit.Finding {
+    return process(item)
+})
+
+// Multiple findings per item
+results := audit.ProcessAllMulti(ctx, items, "Auditing X", func(ctx context.Context, item Item) []audit.Finding {
+    return processMulti(item)
+})
+
+// Fetch domain objects (not findings) in parallel
+objects := audit.FetchAll(ctx, names, "Describing X", func(ctx context.Context, name string) MyStruct {
+    return describe(name)
+})
+```
+
+**What they handle for you:**
+- Semaphore-bounded concurrency (respects `--concurrency` flag)
+- Progress bar (respects `--quiet` flag)
+- Pre-allocated result slice (no mutex needed)
+- WaitGroup lifecycle
+
+**When to use which:**
+
+| Helper | Returns | Use case |
+|--------|---------|----------|
+| `ProcessAll[T]` | `[]Finding` | One finding per item |
+| `ProcessAllMulti[T]` | `[]Finding` | Zero or more findings per item |
+| `FetchAll[T, R]` | `[]R` | Fetch domain objects for a later assessment phase |
+
+## Manual concurrency (when helpers don't fit)
+
+Two cases still use manual patterns:
+
+### Simple fan-out (2-3 independent tasks)
+
+Used in `security/baseline.go` — runs CloudTrail and GuardDuty checks in parallel:
+
+```go
 var wg sync.WaitGroup
-sem := make(chan struct{}, audit.GetThresholds(ctx).Concurrency) // buffered channel = semaphore
-
-for _, item := range items {
-    wg.Add(1)
-    go func(item Item) {
-        defer wg.Done()
-        sem <- struct{}{} // acquire slot (blocks if 10 goroutines are already running)
-        defer func() { <-sem }() // release slot when done
-
-        result := process(item)
-
-        mu.Lock()
-        findings = append(findings, results)
-        mu.Unlock()
-    }(item)
-}
+wg.Add(2)
+go func() { defer wg.Done(); ctFindings, ctErr = auditCloudTrail(ctx, cfg) }()
+go func() { defer wg.Done(); gdFindings, gdErr = auditGuardDuty(ctx, cfg) }()
 wg.Wait()
 ```
 
-**Why each piece exists:**
+No semaphore needed — only 2 goroutines.
 
-- `sync.WaitGroup` - the caller blocks on `wg.Wait()` until every goroutine finishes. Without it, the function would return before goroutines complete.
-- `sem` (buffered channel) - limits how many goroutines run concurrently. We launch one goroutine per resource, but only 10 execute at a time. This prevents flooding the AWS API with hundreds of simultaneous requests, which would cause throttling. The buffer size (10) is the concurrency limit - writing to a full channel blocks until another goroutine reads from it.
-- `sync.Mutex` - protects the shared `findings` slice. Go slices are not safe for concurrent writes. Without the mutex, two goroutines appending simultaneously would corrupt the slice (data race). The mutex ensures only one goroutine appends at a time.
+### Multi-phase with pre-computed maps
 
-## Pre-allocated results (index-based)
-
-Some functions use a variation that avoids the mutex entirely:
+Used when processing depends on batch-fetched shared data (e.g., `cost/ec2.go`):
 
 ```go
-results := make([]audit.Finding, len(items)) // pre-allocate with known size
+// Phase 1: Fetch all items (sequential pagination)
+running := paginate(...)
 
-for i, item := range items {
-    wg.Add(1)
-    go func(i int, item Item) {
-        defer wg.Done()
-        sem <- struct{}{}
-        defer func() { <-sem }()
+// Phase 2: Pre-compute shared data
+// (e.g., previous-gen check — pure CPU, no parallelism needed)
 
-        results[i] = process(item) // each goroutine writes to its won index
-    }(i, item)
-}
-wg.Wait()
+// Phase 3: Parallel API calls using ProcessAllMulti
+cpuFindings := audit.ProcessAllMulti(ctx, running, "Checking CPU", func(ctx context.Context, i Instance) []audit.Finding {
+    // CloudWatch API call per instance
+})
 ```
-
-Since each goroutine writes to a distinct index (`results[i]`), there's no concurrent write to the same memory - no mutex needed. Used in `security.s3.go`, `security/rds.go`, and `security/triage.go`,
-
-**Trade-Off:** The result slice may contain zero-value entries if a goroutine fails silently (returns early without writing). These are filtered out after `wg.Wait()`.
 
 ## Orchestrator-level parallelism
 
-The top-level orchestrators (`security/security.go`, `cost/cost.go`) run each service check as a concurrent goroutine:
+The `audit.RunChecks` function (in `audit/runner.go`) runs each service check as a concurrent goroutine:
 
 ```go
-results := make([][]audit.Finding, len(checks))
-
+// Simplified from runner.go
+results := make([][]Finding, len(checks))
 var wg sync.WaitGroup
 for i, c := range checks {
     wg.Add(1)
-    go func(i int, name string, fn CheckFunc) {
+    go func(i int, name string, fn CheckFn) {
         defer wg.Done()
-        findings, err := fn(ctx, cfg)
-        if err != nil {
-            slog.Warn("check failed", "service", name, "error", err)
-        } else {
-            results[i] = findings
-        }
-    }(i, c.name, c.fn)
+        results[i], _ = fn(ctx, cfg)
+    }(i, c.Name, c.Fn)
 }
 wg.Wait()
 ```
 
-No semaphore here - each service check already limits its own internal concurrency. No mutex either - each goroutine writes to its own index in `results`.
+No semaphore — each service check limits its own internal concurrency. No mutex — each goroutine writes to its own index.
 
 ## Multi-region parallelism
 
-The CLI commands (`cmd/security.go`, `cmd/cost.go`, `cmd/triage.go`) run the same audit across multiple AWS regions concurrently:
+The CLI runner (`cmd/run.go`) runs the same audit across multiple AWS regions concurrently:
 
 ```go
 var mu sync.Mutex
-var allResults []audit.Finding
+var allFindings []audit.Finding
 var wg sync.WaitGroup
-
-for _, cfg := range configs { // one config per region
+for _, cfg := range configs {
     wg.Add(1)
     go func(cfg aws.Config) {
         defer wg.Done()
-        results, _ := audit(ctx, cfg, services)
+        findings, _ := fn(ctx, cfg, services)
         mu.Lock()
-        allResults = append(allResults, results...)
+        allFindings = append(allFindings, findings...)
         mu.Unlock()
     }(cfg)
 }
 wg.Wait()
 ```
 
-This is the outermost layer. Each region spawns its own orchestrator, which spawns service checks, which spawn per-resource goroutines -> three levels of concurrency, each bounded at its own level.
+Three levels of concurrency, each bounded at its own level:
+- Region level: one goroutine per region (unbounded — typically 1-20 regions)
+- Service level: one goroutine per service within `RunChecks` (unbounded — ~18 services)
+- Item level: bounded by `--concurrency` flag (default 10) via `ProcessAll`/`ProcessAllMulti`
 
 ## Common mistakes to watch for
 
-1. **Forgetting `mu.Lock()` before append** - causes data races. Go's race detector (`go test -race`) catches this.
-2. **Capturing loop variables** - always pass loop variables as function arguments (`go func(item Item) {...}(item)`), not by closure. Closures over loop variable see the final value after the loop ends.
-3. **Unlocking without locking** - calling `mu.Unlock()` without `mu.Lock()` panics at runtime.
-4. **Ignoring context cancellation** - goroutines should check `ctx.Done()` or pass `ctx` to AWS SDK calls so they stop promptly on Ctrl+C
+1. **Forgetting `mu.Lock()` before append** — causes data races. Use `go test -race` to catch.
+2. **Capturing loop variables** — always pass as function arguments. The generic helpers handle this for you.
+3. **Ignoring context cancellation** — pass `ctx` to AWS SDK calls so they stop on Ctrl+C.
+4. **Using manual patterns when helpers work** — prefer `ProcessAll`/`ProcessAllMulti`/`FetchAll`. Only use manual concurrency for fan-out or multi-phase pipelines.
