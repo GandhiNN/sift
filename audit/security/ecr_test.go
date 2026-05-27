@@ -32,7 +32,7 @@ func TestParseECRSecurityEntry(t *testing.T) {
 		RepositoryName:             aws.String("my-repo"),
 		RepositoryArn:              aws.String("arn:aws:ecr:us-east-1:123:repository/my-repo"),
 		ImageScanningConfiguration: &ecrtypes.ImageScanningConfiguration{ScanOnPush: true},
-		ImageTagMutability:         ecrtypes.ImageTagMutabilityMutable,
+		ImageTagMutability:         ecrtypes.ImageTagMutabilityImmutable,
 	}
 
 	e := parseECRSecurityEntry(context.Background(), mock, repo)
