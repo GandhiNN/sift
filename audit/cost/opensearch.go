@@ -61,16 +61,29 @@ func AuditOpenSearchCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, 
 			instanceType := string(domain.ClusterConfig.InstanceType)
 			instanceCount := aws.ToInt32(domain.ClusterConfig.InstanceCount)
 
+			// Extract account ID from DomainID (format: "123456789012/domain-name")
+			clientId := ""
+			if did := aws.ToString(domain.DomainId); strings.Contains(did, "/") {
+				clientId = did[:strings.Index(did, "/")]
+			}
+
 			var results []audit.Finding
 
 			// Check CPU
+			dims := []cwtypes.Dimension{{
+				Name:  aws.String("DomainName"),
+				Value: &name,
+			}}
+			if clientId != "" {
+				dims = append(dims, cwtypes.Dimension{
+					Name:  aws.String("ClientId"),
+					Value: &clientId,
+				})
+			}
 			cpuResp, _ := cwClient.GetMetricStatistics(ctx, &cloudwatch.GetMetricStatisticsInput{
 				Namespace:  aws.String("AWS/ES"),
 				MetricName: aws.String("CPUUtilization"),
-				Dimensions: []cwtypes.Dimension{{
-					Name:  aws.String("DomainName"),
-					Value: &name,
-				}},
+				Dimensions: dims,
 				StartTime:  &start,
 				EndTime:    &end,
 				Period:     aws.Int32(86400),
@@ -92,10 +105,7 @@ func AuditOpenSearchCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, 
 			searchResp, _ := cwClient.GetMetricStatistics(ctx, &cloudwatch.GetMetricStatisticsInput{
 				Namespace:  aws.String("AWS/ES"),
 				MetricName: aws.String("SearchRate"),
-				Dimensions: []cwtypes.Dimension{{
-					Name:  aws.String("DomainName"),
-					Value: &name,
-				}},
+				Dimensions: dims,
 				StartTime:  &start,
 				EndTime:    &end,
 				Period:     aws.Int32(86400),
