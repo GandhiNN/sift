@@ -275,6 +275,65 @@ func AuditEKSCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 					})
 				}
 			}
+			// Check Fargate profiles with no running pods
+			fpInput := &eks.ListFargateProfilesInput{ClusterName: &name}
+			for {
+				fpResp, err := client.ListFargateProfiles(ctx, fpInput)
+				if err != nil {
+					break
+				}
+				for _, fpName := range fpResp.FargateProfileNames {
+					// Check if any pods are scheduled on this profile via CloudWatch
+					podResp, _ := cwClient.GetMetricStatistics(
+						ctx,
+						&cloudwatch.GetMetricStatisticsInput{
+							Namespace:  aws.String("AWS/Usage"),
+							MetricName: aws.String("ResourceCount"),
+							Dimensions: []cwtypes.Dimension{
+								{Name: aws.String("Service"), Value: aws.String("Fargate")},
+								{Name: aws.String("Type"), Value: aws.String("Resource")},
+								{Name: aws.String("Resource"), Value: aws.String("vCPU")},
+								{Name: aws.String("Class"), Value: aws.String("None")},
+							},
+							StartTime:  aws.Time(time.Now().AddDate(0, 0, -7)),
+							EndTime:    aws.Time(time.Now()),
+							Period:     aws.Int32(86400),
+							Statistics: []cwtypes.Statistic{cwtypes.StatisticAverage},
+						},
+					)
+					hasUsage := false
+					if podResp != nil {
+						for _, dp := range podResp.Datapoints {
+							if aws.ToFloat64(dp.Average) > 0 {
+								hasUsage = true
+								break
+							}
+						}
+					}
+					if !hasUsage {
+						results = append(results, audit.Finding{
+							Service:    "eks_fargate",
+							ResourceID: fmt.Sprintf("%s/%s", name, fpName),
+							Tags:       clusterTags,
+							Check:      "unused_fargate_profile",
+							Status:     "WARN",
+							Detail:     "Fargate profile with no detected pod usage in 7 days",
+							RiskLevel:  "LOW",
+							Remediation: remediation.Recommend(
+								"cost",
+								"eks",
+								"unused_fargate_profile",
+								fmt.Sprintf("%s/%s", name, fpName),
+								"no pods scheduled",
+							),
+						})
+					}
+				}
+				if fpResp.NextToken == nil {
+					break
+				}
+				fpInput.NextToken = fpResp.NextToken
+			}
 			return results
 		},
 	), nil
