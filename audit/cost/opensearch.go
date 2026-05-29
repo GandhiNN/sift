@@ -70,9 +70,6 @@ func AuditOpenSearchCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, 
 				Dimensions: []cwtypes.Dimension{{
 					Name:  aws.String("DomainName"),
 					Value: &name,
-				}, {
-					Name:  aws.String("ClientId"),
-					Value: aws.String(aws.ToString(domain.DomainId)[:12]),
 				}},
 				StartTime:  &start,
 				EndTime:    &end,
@@ -98,9 +95,6 @@ func AuditOpenSearchCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, 
 				Dimensions: []cwtypes.Dimension{{
 					Name:  aws.String("DomainName"),
 					Value: &name,
-				}, {
-					Name:  aws.String("ClientId"),
-					Value: aws.String(aws.ToString(domain.DomainId)[:12]),
 				}},
 				StartTime:  &start,
 				EndTime:    &end,
