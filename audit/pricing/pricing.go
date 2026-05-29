@@ -23,6 +23,7 @@ type PriceTable struct {
 	DMSHourly         map[string]float64 `json:"dms_hourly"`
 	RedshiftHourly    map[string]float64 `json:"redshift_hourly"`
 	GlueDPUHourly     map[string]float64 `json:"glue_dpu_hourly"`
+	MSKHourly         map[string]float64 `json:"msk_hourly"`
 	FixedMonthly      map[string]float64 `json:"fixed_monthly"`
 	StoragePerGB      map[string]float64 `json:"storage_per_gb"`
 	DynamoDB          struct {
@@ -97,6 +98,13 @@ func OpenSearchMonthly(instanceType string, nodes int32) float64 {
 	stripped = strings.TrimSuffix(stripped, ".search")
 	if h, ok := table.EC2Hourly[stripped]; ok {
 		return h * table.HoursPerMonth * float64(nodes) * 1.15 // ~15% markup over EC2
+	}
+	return 0
+}
+
+func MSKMonthly(brokerType string, brokers int32) float64 {
+	if h, ok := table.MSKHourly[brokerType]; ok {
+		return h * table.HoursPerMonth * float64(brokers)
 	}
 	return 0
 }

@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"sift/audit"
+	"sift/audit/pricing"
 	"sift/audit/remediation"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -88,6 +89,8 @@ func AuditMSKCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 		}) []audit.Finding {
 			var results []audit.Finding
 			storageCost := float64(c.brokers) * float64(c.storageGB) * 0.10
+			brokerCost := pricing.MSKMonthly(c.brokerType, c.brokers)
+			monthlyCost := brokerCost + storageCost
 
 			// Check BytesInPerSec (idle check)
 			bytesResp, _ := cwClient.GetMetricStatistics(ctx, &cloudwatch.GetMetricStatisticsInput{
@@ -123,7 +126,7 @@ func AuditMSKCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 						lookback,
 					),
 					RiskLevel:            "HIGH",
-					EstimatedMonthlyCost: storageCost,
+					EstimatedMonthlyCost: monthlyCost,
 					Remediation: remediation.Recommend(
 						"cost",
 						"msk",
@@ -214,7 +217,7 @@ func AuditMSKCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 							avgDisk,
 						),
 						RiskLevel:            "LOW",
-						EstimatedMonthlyCost: storageCost,
+						EstimatedMonthlyCost: monthlyCost,
 						Remediation: remediation.Recommend(
 							"cost",
 							"msk",
@@ -238,7 +241,7 @@ func AuditMSKCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 						c.brokers,
 					),
 					RiskLevel:            "MINIMAL",
-					EstimatedMonthlyCost: storageCost,
+					EstimatedMonthlyCost: monthlyCost,
 				})
 			}
 			return results

@@ -197,6 +197,21 @@
     "cache.r7g.large": 0.195,
     "cache.r7g.xlarge": 0.390
   },
+  "msk_hourly": {
+    "kafka.t3.small": 0.054,
+    "kafka.m5.large": 0.21,
+    "kafka.m5.xlarge": 0.42,
+    "kafka.m5.2xlarge": 0.84,
+    "kafka.m5.4xlarge": 1.68,
+    "kafka.m5.8xlarge": 3.36,
+    "kafka.m5.12xlarge": 5.04,
+    "kafka.m5.16xlarge": 6.72,
+    "kafka.m5.24xlarge": 10.08,
+    "kafka.m7g.large": 0.189,
+    "kafka.m7g.xlarge": 0.378,
+    "kafka.m7g.2xlarge": 0.756,
+    "kafka.m7g.4xlarge": 1.512
+  },
   "rds_hourly": {
     "db.t3.micro": 0.019,
     "db.t3.small": 0.038,
