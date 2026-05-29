@@ -12,18 +12,19 @@ import (
 var embeddedPrices embed.FS
 
 type PriceTable struct {
-	Region           string             `json:"region"`
-	HoursPerMonth    float64            `json:"hours_per_month"`
-	EC2Hourly        map[string]float64 `json:"ec2_hourly"`
-	EBSPerGB         map[string]float64 `json:"ebs_per_gb"`
-	EBSSnapshotPerGB float64            `json:"ebs_snapshot_per_gb"`
-	RDSHourly        map[string]float64 `json:"rds_hourly"`
-	DMSHourly        map[string]float64 `json:"dms_hourly"`
-	RedshiftHourly   map[string]float64 `json:"redshift_hourly"`
-	GlueDPUHourly    map[string]float64 `json:"glue_dpu_hourly"`
-	FixedMonthly     map[string]float64 `json:"fixed_monthly"`
-	StoragePerGB     map[string]float64 `json:"storage_per_gb"`
-	DynamoDB         struct {
+	Region            string             `json:"region"`
+	HoursPerMonth     float64            `json:"hours_per_month"`
+	EC2Hourly         map[string]float64 `json:"ec2_hourly"`
+	EBSPerGB          map[string]float64 `json:"ebs_per_gb"`
+	EBSSnapshotPerGB  float64            `json:"ebs_snapshot_per_gb"`
+	ElastiCacheHourly map[string]float64 `json:"elasticache_hourly"`
+	RDSHourly         map[string]float64 `json:"rds_hourly"`
+	DMSHourly         map[string]float64 `json:"dms_hourly"`
+	RedshiftHourly    map[string]float64 `json:"redshift_hourly"`
+	GlueDPUHourly     map[string]float64 `json:"glue_dpu_hourly"`
+	FixedMonthly      map[string]float64 `json:"fixed_monthly"`
+	StoragePerGB      map[string]float64 `json:"storage_per_gb"`
+	DynamoDB          struct {
 		PerRCU float64 `json:"per_rcu"`
 		PerWCU float64 `json:"per_wcu"`
 	} `json:"dynamodb_monthly"`
@@ -79,6 +80,13 @@ func EBSMonthly(volumeType string, sizeGB int32) float64 {
 
 func SnapshotMonthly(sizeGB int32) float64 {
 	return table.EBSSnapshotPerGB * float64(sizeGB)
+}
+
+func ElastiCacheMonthly(nodeType string, nodes int32) float64 {
+	if h, ok := table.ElastiCacheHourly[nodeType]; ok {
+		return h * table.HoursPerMonth * float64(nodes)
+	}
+	return 0
 }
 
 func RDSMonthly(instanceClass string) float64 {

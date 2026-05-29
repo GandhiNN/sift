@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"sift/audit"
+	"sift/audit/pricing"
 	"sift/audit/remediation"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -124,6 +125,7 @@ func AuditElastiCacheCost(ctx context.Context, cfg aws.Config) ([]audit.Finding,
 			}
 
 			if avgConns <= 1 && hasMetrics && avgCPU < cpuThreshold {
+				monthlyCost := pricing.ElastiCacheMonthly(c.nodeType, c.nodes)
 				detail := fmt.Sprintf(
 					"engine=%s, type=%s, nodes=%d, avg_conns=%.0f, avg_cpu=%.1f%% over %d days",
 					c.engine,
@@ -134,12 +136,13 @@ func AuditElastiCacheCost(ctx context.Context, cfg aws.Config) ([]audit.Finding,
 					lookback,
 				)
 				results = append(results, audit.Finding{
-					Service:    "elasticache",
-					ResourceID: c.id,
-					Check:      "idle_cluster",
-					Status:     "WARN",
-					Detail:     detail,
-					RiskLevel:  "HIGH",
+					Service:              "elasticache",
+					ResourceID:           c.id,
+					Check:                "idle_cluster",
+					Status:               "WARN",
+					Detail:               detail,
+					RiskLevel:            "HIGH",
+					EstimatedMonthlyCost: monthlyCost,
 					Remediation: remediation.Recommend(
 						"cost",
 						"elasticache",
@@ -149,15 +152,17 @@ func AuditElastiCacheCost(ctx context.Context, cfg aws.Config) ([]audit.Finding,
 					),
 				})
 			} else if hasMetrics && avgCPU < cpuThreshold {
+				monthlyCost := pricing.ElastiCacheMonthly(c.nodeType, c.nodes)
 				detail := fmt.Sprintf("engine=%s, type=%s, nodes=%d, avg_cpu=%.1f%% over %d days, consider downsizing", c.engine, c.nodeType, c.nodes, avgCPU, lookback)
 				results = append(results, audit.Finding{
-					Service:     "elasticache",
-					ResourceID:  c.id,
-					Check:       "oversized_cluster",
-					Status:      "WARN",
-					Detail:      detail,
-					RiskLevel:   "MEDIUM",
-					Remediation: remediation.Recommend("cost", "elasticache", "oversized_cluster", c.id, fmt.Sprintf("avg CPU %.1f%%", avgCPU)),
+					Service:              "elasticache",
+					ResourceID:           c.id,
+					Check:                "oversized_cluster",
+					Status:               "WARN",
+					Detail:               detail,
+					RiskLevel:            "MEDIUM",
+					EstimatedMonthlyCost: monthlyCost,
+					Remediation:          remediation.Recommend("cost", "elasticache", "oversized_cluster", c.id, fmt.Sprintf("avg CPU %.1f%%", avgCPU)),
 				})
 			}
 
