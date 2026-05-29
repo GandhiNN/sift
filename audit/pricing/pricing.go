@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 //go:embed prices.json
@@ -85,6 +86,17 @@ func SnapshotMonthly(sizeGB int32) float64 {
 func ElastiCacheMonthly(nodeType string, nodes int32) float64 {
 	if h, ok := table.ElastiCacheHourly[nodeType]; ok {
 		return h * table.HoursPerMonth * float64(nodes)
+	}
+	return 0
+}
+
+func OpenSearchMonthly(instanceType string, nodes int32) float64 {
+	// OpenSearch types are like "search.m5.large", strip "search" to look up EC2 pricing
+	// (OpenSearch pricing is about 10-20% higher than EC2 but close enough for estimates)
+	stripped := strings.TrimPrefix(instanceType, "search.")
+	stripped = strings.TrimSuffix(stripped, ".search")
+	if h, ok := table.EC2Hourly[stripped]; ok {
+		return h * table.HoursPerMonth * float64(nodes) * 1.15 // ~15% markup over EC2
 	}
 	return 0
 }
