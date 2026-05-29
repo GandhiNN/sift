@@ -71,7 +71,7 @@ sift cost --profile dev --sort-by cost
 sift cost --profile dev --diff
 ```
 
-Available services: `ec2`, `ebs`, `rds`, `s3`, `eks`, `network`, `cloudwatch`, `ecr`, `secrets`, `glue`, `lambda`, `dynamodb`, `dms`, `elb`, `sagemaker`, `redshift`, `stepfunctions`, `backup`, `kms`, `vpn`
+Available services: `ec2`, `ebs`, `rds`, `s3`, `eks`, `network`, `cloudwatch`, `ecr`, `secrets`, `glue`, `lambda`, `dynamodb`, `dms`, `elb`, `sagemaker`, `redshift`, `stepfunctions`, `backup`, `kms`, `vpn`, `waf`, `kinesis`, `awsconfig`, `elasticache`, `opensearch`
 
 #### Ops
 
@@ -546,7 +546,12 @@ sift/
         ├── stepfunctions.go    # Unused state machines
         ├── backup.go           # Old recovery points
         ├── kms.go              # Unrotated customer-managed keys
-        └── vpn.go              # Idle VPN connections
+        ├── vpn.go              # Idle VPN connections
+        ├── waf.go              # Unused Web ACLs
+        ├── kinesis.go          # Idle streams
+        ├── awsconfig.go        # Over-broad recording, unused rules
+        ├── elasticache.go      # Idle/oversized clusters
+        └── opensearch.go       # Idle/oversized domains
 ```
 
 ## Authentication
