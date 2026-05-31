@@ -68,6 +68,8 @@ github.com/aws/aws-sdk-go-v2/service/lambda v1.90.0 h1:5Ik7cnQRuS078cSh1Sj66QdLP
 github.com/aws/aws-sdk-go-v2/service/lambda v1.90.0/go.mod h1:7qoh/MlWG5QCnZwq9bvdXomEAkmumayXcjEjIemIV7U=
 github.com/aws/aws-sdk-go-v2/service/opensearch v1.70.1 h1:bvmcxzp/PGDLScBLcJHG5WSoChkALP20Xhem54dUaKc=
 github.com/aws/aws-sdk-go-v2/service/opensearch v1.70.1/go.mod h1:VKcO88AHkSJsp7pQeHNr5VVcs1t/0snyD+e0ppd4oE0=
+github.com/aws/aws-sdk-go-v2/service/quicksight v1.112.0 h1:PAW0DClCeudP+lLN1z9i0TLjoqErUGwNu+DfemX4RIc=
+github.com/aws/aws-sdk-go-v2/service/quicksight v1.112.0/go.mod h1:Cqo3dKj464X8R6TZaYAOCMgPH5wLzBAdYRHT+Ido0gM=
 github.com/aws/aws-sdk-go-v2/service/rds v1.118.1 h1:cywOPYUFOSOAjrovJNxuBXd6SV3osiP3KJ5p412IEJQ=
 github.com/aws/aws-sdk-go-v2/service/rds v1.118.1/go.mod h1:BaS59j6evm68pt9EaJnb7tnTOaT0MY4rJeESKh8RKKY=
 github.com/aws/aws-sdk-go-v2/service/redshift v1.62.8 h1:5Wg38ZauCqmomDAGTCDbA/t4vR5fUqIBTEwAOAswdng=
