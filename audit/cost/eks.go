@@ -153,6 +153,36 @@ func AuditEKSCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 						}
 					}
 				}
+				// Graviton opportunity
+				for _, iType := range n.instanceTypes {
+					gravitonType, _, _, savings := pricing.GravitonSavings(iType)
+					if gravitonType != "" && savings > 0 {
+						ngFindings = append(ngFindings, audit.Finding{
+							Service:    "eks_nodegroup",
+							ResourceID: fmt.Sprintf("%s/%s", n.cluster, n.name),
+							Tags:       n.tags,
+							Check:      "graviton_opportunity",
+							Status:     "WARN",
+							Detail: fmt.Sprintf(
+								"type=%s, switch to %s, save $%.0f/mo per node (nodes=%d)",
+								iType,
+								gravitonType,
+								savings,
+								n.desiredSize,
+							),
+							RiskLevel:            "LOW",
+							EstimatedMonthlyCost: savings * float64(n.desiredSize),
+							Remediation: remediation.Recommend(
+								"cost",
+								"eks",
+								"graviton_opportunity",
+								fmt.Sprintf("%s/%s", n.cluster, n.name),
+								fmt.Sprintf("switch %s to %s", iType, gravitonType),
+							),
+						})
+						break
+					}
+				}
 				if n.desiredSize == 0 {
 					ngFindings = append(ngFindings, audit.Finding{
 						Service:              "eks_nodegroup",

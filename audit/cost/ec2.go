@@ -146,6 +146,35 @@ func AuditEC2Cost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 		}
 	}
 
+	// Graviton opportunity
+	for _, i := range running {
+		gravitonType, _, _, savings := pricing.GravitonSavings(i.instanceType)
+		if gravitonType != "" && savings > 0 {
+			findings = append(findings, audit.Finding{
+				Service:    "ec2",
+				ResourceID: i.id,
+				Tags:       i.tags,
+				Check:      "graviton_opportunity",
+				Status:     "WARN",
+				Detail: fmt.Sprintf(
+					"type=%s, switch to %s, save $%.0f/mo",
+					i.instanceType,
+					gravitonType,
+					savings,
+				),
+				RiskLevel:            "LOW",
+				EstimatedMonthlyCost: savings,
+				Remediation: remediation.Recommend(
+					"cost",
+					"ec2",
+					"graviton_opportunity",
+					i.id,
+					fmt.Sprintf("switch %s to %s", i.instanceType, gravitonType),
+				),
+			})
+		}
+	}
+
 	// Oversized instances (low CPU)
 	cpuThreshold := t.GetFloat("ec2", "cpu_idle_percent", 10)
 	lookback := t.GetInt("ec2", "cpu_lookback_days", 7)
