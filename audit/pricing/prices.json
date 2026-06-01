@@ -198,6 +198,10 @@
     "cache.r7g.xlarge": 0.390
   },
   "sagemaker_hourly": {
+    "ml.t2.medium": 0.047,
+    "ml.t2.large": 0.094,
+    "ml.t2.xlarge": 0.188,
+    "ml.t2.2xlarge": 0.376,
     "ml.t3.medium": 0.05,
     "ml.t3.large": 0.101,
     "ml.t3.xlarge": 0.201,
