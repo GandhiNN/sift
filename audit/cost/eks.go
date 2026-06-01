@@ -14,6 +14,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/autoscaling"
 	"github.com/aws/aws-sdk-go-v2/service/cloudwatch"
 	cwtypes "github.com/aws/aws-sdk-go-v2/service/cloudwatch/types"
+	"github.com/aws/aws-sdk-go-v2/service/ec2"
 	"github.com/aws/aws-sdk-go-v2/service/eks"
 	ekstypes "github.com/aws/aws-sdk-go-v2/service/eks/types"
 )
@@ -43,6 +44,7 @@ func AuditEKSCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 	client := eks.NewFromConfig(cfg)
 	cwClient := cloudwatch.NewFromConfig(cfg)
 	asgClient := autoscaling.NewFromConfig(cfg)
+	ec2Client := ec2.NewFromConfig(cfg)
 	t := audit.GetThresholds(ctx)
 
 	var allClusters []string
@@ -122,40 +124,35 @@ func AuditEKSCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 				}
 				n := parseEKSCostNodegroup(name, ngResp.Nodegroup)
 				var nodeCost float64
+				resolvedType := ""
 				if len(n.instanceTypes) > 0 {
-					nodeCost = pricing.EC2Monthly(n.instanceTypes[0])
+					resolvedType = n.instanceTypes[0]
 				}
-				var ngFindings []audit.Finding
-				for _, iType := range n.instanceTypes {
-					for _, prefix := range dmsPrevGenPrefixes {
-						if strings.HasPrefix(iType, prefix) {
-							ngFindings = append(ngFindings, audit.Finding{
-								Service:    "eks_nodegroup",
-								ResourceID: fmt.Sprintf("%s/%s", n.cluster, n.name),
-								Tags:       n.tags,
-								Check:      "previous_gen_node",
-								Status:     "WARN",
-								Detail: fmt.Sprintf(
-									"type=%s, consider upgrading",
-									iType,
-								),
-								RiskLevel:            "LOW",
-								EstimatedMonthlyCost: nodeCost,
-								Remediation: remediation.Recommend(
-									"cost",
-									"eks",
-									"previous_gen_node",
-									fmt.Sprintf("%s/%s", n.cluster, n.name),
-									fmt.Sprintf("type=%s", iType),
-								),
-							})
-							break
+				// Resolve instance type from launch template if not set directly
+				if resolvedType == "" && ngResp.Nodegroup.LaunchTemplate != nil {
+					lt := ngResp.Nodegroup.LaunchTemplate
+					ltInput := &ec2.DescribeLaunchTemplateVersionsInput{}
+					if lt.Id != nil {
+						ltInput.LaunchTemplateId = lt.Id
+					} else if lt.Name != nil {
+						ltInput.LaunchTemplateName = lt.Name
+					}
+					if ltInput.LaunchTemplateId != nil || ltInput.LaunchTemplateName != nil {
+						if lt.Version != nil {
+							ltInput.Versions = []string{*lt.Version}
+						} else {
+							ltInput.Versions = []string{"$Default"}
+						}
+						ltResp, ltErr := ec2Client.DescribeLaunchTemplateVersions(ctx, ltInput)
+						if ltErr == nil && len(ltResp.LaunchTemplateVersions) > 0 {
+							if data := ltResp.LaunchTemplateVersions[0].LaunchTemplateData; data != nil {
+								resolvedType = string(data.InstanceType)
+							}
 						}
 					}
 				}
-				// Graviton opportunity
-				instanceTypes := n.instanceTypes
-				if len(instanceTypes) == 0 && ngResp.Nodegroup.Resources != nil {
+				// Fallback: resolve from running ASG instances
+				if resolvedType == "" && ngResp.Nodegroup.Resources != nil {
 					for _, asg := range ngResp.Nodegroup.Resources.AutoScalingGroups {
 						if asg.Name == nil {
 							continue
@@ -166,19 +163,57 @@ func AuditEKSCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 								AutoScalingGroupNames: []string{*asg.Name},
 							},
 						)
-						if err == nil && len(asgResp.AutoScalingGroups) > 0 {
-							for _, inst := range asgResp.AutoScalingGroups[0].Instances {
-								if inst.InstanceType != nil {
-									instanceTypes = []string{*inst.InstanceType}
-									break
-								}
+						if err != nil || len(asgResp.AutoScalingGroups) == 0 {
+							continue
+						}
+						for _, inst := range asgResp.AutoScalingGroups[0].Instances {
+							if inst.InstanceType != nil {
+								resolvedType = *inst.InstanceType
+								break
 							}
 						}
-						break
+						if resolvedType != "" {
+							break
+						}
 					}
 				}
-				for _, iType := range n.instanceTypes {
-					gravitonType, _, _, savings := pricing.GravitonSavings(iType)
+				if resolvedType != "" {
+					nodeCost = pricing.EC2Monthly(resolvedType)
+				}
+				var ngFindings []audit.Finding
+
+				// Check previous-gen instance type using resolved type
+				if resolvedType != "" {
+					for _, prefix := range PrevGenPrefixes {
+						if strings.HasPrefix(resolvedType, prefix) {
+							ngFindings = append(ngFindings, audit.Finding{
+								Service:    "eks_nodegroup",
+								ResourceID: fmt.Sprintf("%s/%s", n.cluster, n.name),
+								Tags:       n.tags,
+								Check:      "previous_gen_node",
+								Status:     "WARN",
+								Detail: fmt.Sprintf(
+									"type=%s, consider upgrading",
+									resolvedType,
+								),
+								RiskLevel:            "LOW",
+								EstimatedMonthlyCost: nodeCost,
+								Remediation: remediation.Recommend(
+									"cost",
+									"eks",
+									"previous_gen_node",
+									fmt.Sprintf("%s/%s", n.cluster, n.name),
+									fmt.Sprintf("type=%s", resolvedType),
+								),
+							})
+							break
+						}
+					}
+				}
+
+				// Graviton opportunity
+				if resolvedType != "" {
+					gravitonType, _, _, savings := pricing.GravitonSavings(resolvedType)
 					if gravitonType != "" && savings > 0 {
 						ngFindings = append(ngFindings, audit.Finding{
 							Service:    "eks_nodegroup",
@@ -188,7 +223,7 @@ func AuditEKSCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 							Status:     "WARN",
 							Detail: fmt.Sprintf(
 								"type=%s, switch to %s, save $%.0f/mo per node (nodes=%d)",
-								iType,
+								resolvedType,
 								gravitonType,
 								savings,
 								n.desiredSize,
@@ -200,10 +235,9 @@ func AuditEKSCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 								"eks",
 								"graviton_opportunity",
 								fmt.Sprintf("%s/%s", n.cluster, n.name),
-								fmt.Sprintf("switch %s to %s", iType, gravitonType),
+								fmt.Sprintf("switch %s to %s", resolvedType, gravitonType),
 							),
 						})
-						break
 					}
 				}
 				if n.desiredSize == 0 {
