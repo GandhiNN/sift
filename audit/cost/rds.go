@@ -50,7 +50,11 @@ func AuditRDSCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 		if err != nil {
 			return nil, fmt.Errorf("describe db instances: %w", err)
 		}
-		allDBs = append(allDBs, page.DBInstances...)
+		for _, db := range page.DBInstances {
+			if !strings.HasPrefix(aws.ToString(db.Engine), "docdb") {
+				allDBs = append(allDBs, db)
+			}
+		}
 	}
 
 	return audit.ProcessAllMulti(
@@ -59,13 +63,9 @@ func AuditRDSCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 		"Auditing RDS cost",
 		func(ctx context.Context, db rdstypes.DBInstance) []audit.Finding {
 			r := parseRDSCostInstance(db)
-			svc := "rds"
-			if strings.HasPrefix(r.engine, "docdb") {
-				svc = "docdb"
-			}
 			if r.status == "stopped" {
 				return []audit.Finding{{
-					Service:    svc,
+					Service:    "rds",
 					ResourceID: r.id,
 					Tags:       r.tags,
 					Check:      "stopped_instance",
@@ -78,7 +78,7 @@ func AuditRDSCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 					EstimatedMonthlyCost: pricing.RDSMonthly(r.class),
 					Remediation: remediation.Recommend(
 						"cost",
-						svc,
+						"rds",
 						"stopped_instance",
 						r.id,
 						"instance in stopped state",
@@ -90,12 +90,12 @@ func AuditRDSCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 			}
 			avgCPU, err := getAvgCPU(ctx, cwClient, r.id, r.engine)
 			if err != nil {
-				return []audit.Finding{audit.ErrorFinding(svc, r.id, "check_cpu", err)}
+				return []audit.Finding{audit.ErrorFinding("rds", r.id, "check_cpu", err)}
 			}
 			t := audit.GetThresholds(ctx)
 			if avgCPU < t.GetFloat("rds", "cpu_idle_percent", 10) {
 				return []audit.Finding{{
-					Service:    svc,
+					Service:    "rds",
 					ResourceID: r.id,
 					Tags:       r.tags,
 					Check:      "oversized_instance",
@@ -110,7 +110,7 @@ func AuditRDSCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 					EstimatedMonthlyCost: pricing.RDSMonthly(r.class),
 					Remediation: remediation.Recommend(
 						"cost",
-						svc,
+						"rds",
 						"oversized_instance",
 						r.id,
 						fmt.Sprintf("avg CPU %.1f%%", avgCPU),
@@ -118,7 +118,7 @@ func AuditRDSCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 				}}
 			}
 			return []audit.Finding{{
-				Service:    svc,
+				Service:    "rds",
 				ResourceID: r.id,
 				Tags:       r.tags,
 				Check:      "oversized_instance",
