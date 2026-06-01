@@ -25,6 +25,7 @@ type PriceTable struct {
 	RedshiftHourly    map[string]float64 `json:"redshift_hourly"`
 	GlueDPUHourly     map[string]float64 `json:"glue_dpu_hourly"`
 	MSKHourly         map[string]float64 `json:"msk_hourly"`
+	SageMakerHourly   map[string]float64 `json:"sagemaker_hourly"`
 	FixedMonthly      map[string]float64 `json:"fixed_monthly"`
 	StoragePerGB      map[string]float64 `json:"storage_per_gb"`
 	DynamoDB          struct {
@@ -187,6 +188,13 @@ func DirectoryMonthly(dirType, size string) float64 {
 	key := strings.ToLower(dirType + "_" + size)
 	if v, ok := table.DirectoryMonthly[key]; ok {
 		return v
+	}
+	return 0
+}
+
+func SageMakerMonthly(instanceType string) float64 {
+	if h, ok := table.SageMakerHourly[instanceType]; ok {
+		return h * table.HoursPerMonth
 	}
 	return 0
 }

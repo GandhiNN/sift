@@ -65,7 +65,7 @@ func AuditSagemakerCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, e
 				return audit.ErrorFinding("sagemaker", name, "describe", err)
 			}
 			e := parseSagemakerCostEntry(desc, name)
-			monthlyCost := pricing.EC2Monthly(e.instanceType)
+			monthlyCost := pricing.SageMakerMonthly(e.instanceType)
 
 			switch smtypes.NotebookInstanceStatus(e.status) {
 			case smtypes.NotebookInstanceStatusStopped:
