@@ -154,6 +154,29 @@ func AuditEKSCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 					}
 				}
 				// Graviton opportunity
+				instanceTypes := n.instanceTypes
+				if len(instanceTypes) == 0 && ngResp.Nodegroup.Resources != nil {
+					for _, asg := range ngResp.Nodegroup.Resources.AutoScalingGroups {
+						if asg.Name == nil {
+							continue
+						}
+						asgResp, err := asgClient.DescribeAutoScalingGroups(
+							ctx,
+							&autoscaling.DescribeAutoScalingGroupsInput{
+								AutoScalingGroupNames: []string{*asg.Name},
+							},
+						)
+						if err == nil && len(asgResp.AutoScalingGroups) > 0 {
+							for _, inst := range asgResp.AutoScalingGroups[0].Instances {
+								if inst.InstanceType != nil {
+									instanceTypes = []string{*inst.InstanceType}
+									break
+								}
+							}
+						}
+						break
+					}
+				}
 				for _, iType := range n.instanceTypes {
 					gravitonType, _, _, savings := pricing.GravitonSavings(iType)
 					if gravitonType != "" && savings > 0 {
