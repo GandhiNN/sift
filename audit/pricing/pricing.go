@@ -20,6 +20,7 @@ type PriceTable struct {
 	EBSSnapshotPerGB  float64            `json:"ebs_snapshot_per_gb"`
 	ElastiCacheHourly map[string]float64 `json:"elasticache_hourly"`
 	RDSHourly         map[string]float64 `json:"rds_hourly"`
+	DirectoryMonthly  map[string]float64 `json:"directory_monthly"`
 	DMSHourly         map[string]float64 `json:"dms_hourly"`
 	RedshiftHourly    map[string]float64 `json:"redshift_hourly"`
 	GlueDPUHourly     map[string]float64 `json:"glue_dpu_hourly"`
@@ -180,4 +181,12 @@ func GlueJobHourlyCost(workerType string, workers int32) float64 {
 
 func ElasticIPMonthly() float64 {
 	return table.FixedMonthly["elastic_ip"]
+}
+
+func DirectoryMonthly(dirType, size string) float64 {
+	key := strings.ToLower(dirType + "_" + size)
+	if v, ok := table.DirectoryMonthly[key]; ok {
+		return v
+	}
+	return 0
 }

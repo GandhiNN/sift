@@ -273,6 +273,14 @@
     "secret": 0.40,
     "elastic_ip": 3.65
   },
+  "directory_monthly": {
+    "microsoft_ad_small": 109.0,
+    "microsoft_ad_large": 219.0,
+    "simple_ad_small": 36.0,
+    "simple_ad_large": 73.0,
+    "ad_connector_small": 36.0,
+    "ad_connector_large": 73.0
+  },
   "storage_per_gb": {
     "s3_standard": 0.024,
     "s3_ia": 0.0131,
