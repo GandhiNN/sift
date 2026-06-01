@@ -167,6 +167,16 @@ Some services have multi-phase logic that doesn't map to "process each item inde
 - **Simple fan-out** (e.g., baseline runs CloudTrail + GuardDuty in parallel) — use a plain `sync.WaitGroup` with 2 goroutines.
 - **Nested parallelism** (e.g., EKS clusters → nodegroups) — use `ProcessAllMulti` at the outer level and sequential loops inside.
 
+## Instance Type Resolution
+
+Some AWS resources don't expose instance types directly (e.g., EKS nodegroups using launch templates). When you need the instance type for cost calculations or prev-gen checks, follow this resolution chain:
+
+1. **Direct field** — use the resource's own `InstanceTypes` / `InstanceClass` field
+2. **Launch template** — describe the launch template version and read `LaunchTemplateData.InstanceType`
+3. **Running instances** — describe the ASG and read `InstanceType` from a running instance
+
+Only fall through to the next step if the previous one returns empty. See `audit/cost/eks.go` for the reference implementation.
+
 ## Checklist
 
 1. Create one file in the appropriate `audit/<module>/` directory

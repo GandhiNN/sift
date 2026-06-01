@@ -390,7 +390,9 @@ The crawler version limit (default 1,000,000) is fetched automatically from AWS 
 | Issue | Risk | Rationale |
 |-------|------|-----------|
 | Cluster with no node groups | HIGH | $73/mo for nothing |
+| Oversized nodegroup (low CPU) | HIGH | Continuous overspend on capacity |
 | Previous-gen nodes | LOW | Same as EC2 prev-gen |
+| Graviton opportunity | LOW | ~20% savings switching to Graviton |
 | Empty node group (desired=0) | MEDIUM | Config overhead, minor cost |
 
 #### Network
