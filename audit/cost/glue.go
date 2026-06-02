@@ -13,6 +13,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/glue"
 	gluetypes "github.com/aws/aws-sdk-go-v2/service/glue/types"
+	"github.com/aws/aws-sdk-go-v2/service/sts"
 )
 
 type glueCostJob struct {
@@ -37,6 +38,12 @@ func parseGlueCostJob(
 
 func AuditGlueCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) {
 	client := glue.NewFromConfig(cfg)
+	stsClient := sts.NewFromConfig(cfg)
+	var accountID string
+	if resp, err := stsClient.GetCallerIdentity(ctx, &sts.GetCallerIdentityInput{}); err == nil {
+		accountID = aws.ToString(resp.Account)
+	}
+	region := cfg.Region
 	var findings []audit.Finding
 
 	// Idle dev endpoints
@@ -95,7 +102,7 @@ func AuditGlueCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error)
 		allJobs,
 		"Auditing Glue jobs",
 		func(ctx context.Context, job gluetypes.Job) []audit.Finding {
-			g := parseGlueCostJob(ctx, client, job)
+			g := parseGlueCostJob(ctx, client, job, region, accountID)
 			results := auditGlueJob(ctx, client, job, g.tags)
 			if len(results) > 0 {
 				return results

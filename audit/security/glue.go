@@ -10,6 +10,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/glue"
 	gluetypes "github.com/aws/aws-sdk-go-v2/service/glue/types"
+	"github.com/aws/aws-sdk-go-v2/service/sts"
 )
 
 type glueTagsAPI interface {
@@ -27,7 +28,12 @@ type glueJob struct {
 	tags      map[string]string
 }
 
-func parseGlueJob(ctx context.Context, client glueTagsAPI, job gluetypes.Job) glueJob {
+func parseGlueJob(
+	ctx context.Context,
+	client glueTagsAPI,
+	job gluetypes.Job,
+	region, accountID string,
+) glueJob {
 	g := glueJob{
 		name: aws.ToString(job.Name),
 		role: aws.ToString(job.Role),
@@ -35,7 +41,8 @@ func parseGlueJob(ctx context.Context, client glueTagsAPI, job gluetypes.Job) gl
 	if job.SecurityConfiguration != nil && *job.SecurityConfiguration != "" {
 		g.encrypted = true
 	}
-	tagResp, err := client.GetTags(ctx, &glue.GetTagsInput{ResourceArn: job.Name})
+	arn := fmt.Sprintf("arn:aws:glue:%s:%s:job/%s", region, accountID, g.name)
+	tagResp, err := client.GetTags(ctx, &glue.GetTagsInput{ResourceArn: &arn})
 	if err == nil {
 		g.tags = tagResp.Tags
 	}
@@ -44,6 +51,12 @@ func parseGlueJob(ctx context.Context, client glueTagsAPI, job gluetypes.Job) gl
 
 func AuditGlue(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) {
 	client := glue.NewFromConfig(cfg)
+	stsClient := sts.NewFromConfig(cfg)
+	var accountID string
+	if resp, err := stsClient.GetCallerIdentity(ctx, &sts.GetCallerIdentityInput{}); err == nil {
+		accountID = aws.ToString(resp.Account)
+	}
+	region := cfg.Region
 	var findings []audit.Finding
 
 	// Check data catalog encryption
@@ -104,7 +117,7 @@ func AuditGlue(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) {
 		allJobs,
 		"Auditing Glue job security",
 		func(ctx context.Context, job gluetypes.Job) audit.Finding {
-			g := parseGlueJob(ctx, client, job)
+			g := parseGlueJob(ctx, client, job, region, accountID)
 			risk := "MINIMAL"
 			if !g.encrypted {
 				risk = "LOW"
