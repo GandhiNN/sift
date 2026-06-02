@@ -304,6 +304,12 @@
         "command": "aws glue update-job --job-name {{.ResourceID}} --job-update '{\"Command\":{\"Name\":\"pythonshell\"}}'",
         "confidence": "LOW",
         "action_risk": "MEDIUM"
+      },
+      "consider_flex": {
+        "action": "Switch to FLEX execution class for ~35% savings on non-urgent batch jobs",
+        "command": "aws glue update-job --job-name {{.ResourceID}} --job-update '{\"ExecutionClass\":\"FLEX\"}'",
+        "confidence": "MEDIUM",
+        "action_risk": "LOW"
       }
     },
     "glue_dev_endpoint": {
