@@ -267,11 +267,18 @@
     "db.m5.4xlarge": 1.6,
     "db.m6i.large": 0.2,
     "db.m6i.xlarge": 0.4,
+    "db.m7g.large": 0.168,
+    "db.m7g.xlarge": 0.336,
+    "db.m7g.2xlarge": 0.672,
+    "db.m7g.4xlarge": 1.344,
     "db.r5.large": 0.27,
     "db.r5.xlarge": 0.54,
     "db.r5.2xlarge": 1.08,
     "db.r6i.large": 0.27,
-    "db.r6i.xlarge": 0.54
+    "db.r6i.xlarge": 0.54,
+    "db.r7g.large": 0.228,
+    "db.r7g.xlarge": 0.456,
+    "db.r7g.2xlarge": 0.912
   },
   "dms_hourly": {
     "dms.t2.micro": 0.018,
