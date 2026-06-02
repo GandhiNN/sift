@@ -428,6 +428,7 @@ The crawler version limit (default 1,000,000) is fetched automatically from AWS 
 | Failed job | MEDIUM | Wasting DPU-hours on failures |
 | Unused job (>90d) | LOW | No active cost, just clutter |
 | Consider Python Shell | LOW | Optimization suggestion |
+| Consider Flex execution class | LOW | ~35% savings for non-urgent batch jobs |
 | Expensive worker type (G.2X) | MEDIUM | 2x cost if memory isn't needed |
 | Overprovisioned job | MEDIUM | Paying for unused DPUs |
 
