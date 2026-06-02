@@ -20,9 +20,15 @@ type glueCostJob struct {
 	tags map[string]string
 }
 
-func parseGlueCostJob(ctx context.Context, client *glue.Client, job gluetypes.Job) glueCostJob {
+func parseGlueCostJob(
+	ctx context.Context,
+	client *glue.Client,
+	job gluetypes.Job,
+	region, accountID string,
+) glueCostJob {
 	g := glueCostJob{name: aws.ToString(job.Name)}
-	tagResp, err := client.GetTags(ctx, &glue.GetTagsInput{ResourceArn: job.Name})
+	arn := fmt.Sprintf("arn:aws:glue:%s:%s:job/%s", region, accountID, g.name)
+	tagResp, err := client.GetTags(ctx, &glue.GetTagsInput{ResourceArn: &arn})
 	if err == nil {
 		g.tags = tagResp.Tags
 	}
