@@ -18,6 +18,12 @@
         "command": "aws dms modify-replication-instance --replication-instance-identifier {{.ResourceID}} --no-multi-az",
         "confidence": "LOW",
         "action_risk": "MEDIUM"
+      },
+      "graviton_opportunity": {
+        "action": "Switch to Graviton instance type for ~20% savings",
+        "command": "aws ec2 modify-instance-attribute --instance-id {{.ResourceID}} --instance-type <graviton-type>",
+        "confidence": "HIGH",
+        "action_risk": "MEDIUM"
       }
     },
     "eip": {
@@ -61,6 +67,12 @@
         "action": "Downsize to smaller instance class",
         "command": "aws rds modify-db-instance --db-instance-identifier {{.ResourceID}} --db-instance-class <smaller>",
         "confidence": "MEDIUM",
+        "action_risk": "MEDIUM"
+      },
+      "graviton_opportunity": {
+        "action": "Switch to Graviton instance class for ~20% savings",
+        "command": "aws rds modify-db-instance --db-instance-identifier {{.ResourceID}} --db-instance-class <graviton-class> --apply-immediately",
+        "confidence": "HIGH",
         "action_risk": "MEDIUM"
       }
     },
@@ -201,6 +213,12 @@
         "action": "Delete empty node group if unused",
         "command": "aws eks delete-nodegroup --cluster-name <cluster> --nodegroup-name {{.ResourceID}}",
         "confidence": "MEDIUM",
+        "action_risk": "MEDIUM"
+      },
+      "graviton_opportunity": {
+        "action": "Switch node group to Graviton instance type for ~20% savings",
+        "command": "aws eks update-nodegroup-config --cluster-name <cluster> --nodegroup-name {{.ResourceID}}",
+        "confidence": "HIGH",
         "action_risk": "MEDIUM"
       }
     },
