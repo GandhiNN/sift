@@ -220,6 +220,12 @@
         "command": "aws eks update-nodegroup-config --cluster-name <cluster> --nodegroup-name {{.ResourceID}}",
         "confidence": "HIGH",
         "action_risk": "MEDIUM"
+      },
+      "unused_fargate_profile": {
+        "action": "Delete unused Fargate profile",
+        "command": "aws eks delete-fargate-profile --cluster-name <cluster> --fargate-profile-name {{.ResourceID}}",
+        "confidence": "MEDIUM",
+        "action_risk": "MEDIUM"
       }
     },
     "sagemaker": {
