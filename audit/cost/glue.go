@@ -225,6 +225,39 @@ func auditGlueJob(
 		})
 	}
 
+	// Flex execution class opportunity
+	if job.Command != nil && aws.ToString(job.Command.Name) == "glueetl" &&
+		string(job.ExecutionClass) != "FLEX" && lastRun.ExecutionTime > 0 {
+		standardCost := pricing.GlueJobHourlyCost(workerType, workers)
+		flexCost := standardCost * 0.65
+		runtimeHrs := float64(lastRun.ExecutionTime) / 3600.0
+		flexSavings := (standardCost - flexCost) * runtimeHrs * 30
+
+		findings = append(findings, audit.Finding{
+			Service:    "glue_job",
+			ResourceID: name,
+			Tags:       tags,
+			Check:      "consider_flex",
+			Status:     "WARN",
+			Detail: fmt.Sprintf(
+				"STANDARD class, switch to FLEX for ~35%% savings (suitable for non-urgent batch jobs)",
+			),
+			RiskLevel:            "LOW",
+			EstimatedMonthlyCost: flexSavings,
+			Remediation: remediation.Recommend(
+				"cost",
+				"glue_job",
+				"consider_flex",
+				name,
+				fmt.Sprintf(
+					"STANDARD class, workers=%d, runtime=%ds",
+					workers,
+					lastRun.ExecutionTime,
+				),
+			),
+		})
+	}
+
 	if string(lastRun.JobRunState) == "SUCCEEDED" && lastRun.ExecutionTime > 0 {
 		allocated := aws.ToFloat64(lastRun.MaxCapacity)
 		if allocated == 0 {
