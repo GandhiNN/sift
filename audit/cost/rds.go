@@ -88,13 +88,43 @@ func AuditRDSCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 			if r.status != "available" {
 				return nil
 			}
+			var findings []audit.Finding
+
+			// Graviton opportunity
+			gravitonType, _, _, savings := pricing.RDSGravitonSavings(r.class)
+			if gravitonType != "" && savings > 0 {
+				findings = append(findings, audit.Finding{
+					Service:    "rds",
+					ResourceID: r.id,
+					Tags:       r.tags,
+					Check:      "graviton_opportunity",
+					Status:     "WARN",
+					Detail: fmt.Sprintf(
+						"class=%s, switch to %s, save $%.0f/mo",
+						r.class,
+						gravitonType,
+						savings,
+					),
+					RiskLevel:            "LOW",
+					EstimatedMonthlyCost: savings,
+					Remediation: remediation.Recommend(
+						"cost",
+						"rds",
+						"graviton_opportunity",
+						r.id,
+						fmt.Sprintf("switch %s to %s", r.class, gravitonType),
+					),
+				})
+			}
+
 			avgCPU, err := getAvgCPU(ctx, cwClient, r.id, r.engine)
 			if err != nil {
-				return []audit.Finding{audit.ErrorFinding("rds", r.id, "check_cpu", err)}
+				findings = append(findings, audit.ErrorFinding("rds", r.id, "check_cpu", err))
+				return findings
 			}
 			t := audit.GetThresholds(ctx)
 			if avgCPU < t.GetFloat("rds", "cpu_idle_percent", 10) {
-				return []audit.Finding{{
+				findings = append(findings, audit.Finding{
 					Service:    "rds",
 					ResourceID: r.id,
 					Tags:       r.tags,
@@ -115,9 +145,10 @@ func AuditRDSCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 						r.id,
 						fmt.Sprintf("avg CPU %.1f%%", avgCPU),
 					),
-				}}
+				})
+				return findings
 			}
-			return []audit.Finding{{
+			findings = append(findings, audit.Finding{
 				Service:    "rds",
 				ResourceID: r.id,
 				Tags:       r.tags,
@@ -131,7 +162,8 @@ func AuditRDSCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 				),
 				RiskLevel:            "MINIMAL",
 				EstimatedMonthlyCost: pricing.RDSMonthly(r.class),
-			}}
+			})
+			return findings
 		},
 	), nil
 }
