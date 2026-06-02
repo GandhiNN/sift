@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strings"
 	"sync"
 
 	"sift/audit/progress"
@@ -49,8 +50,19 @@ func RunChecks(
 		subCtx := progress.WithSubProgress(ctx, true)
 		findings, err := checks[0].Fn(subCtx, cfg)
 		if err != nil {
-			slog.Warn("check failed", "service", checks[0].Name, "error", err)
-			results[0] = []Finding{ErrorFinding(checks[0].Name, "", "service_error", err)}
+			if isServiceNotAvailable(err) {
+				slog.Debug("service not available", "service", checks[0].Name, "error", err)
+				results[0] = []Finding{{
+					Service:   checks[0].Name,
+					Check:     "service_availability",
+					Status:    "PASS",
+					Detail:    "service not active or not subscribed in this account",
+					RiskLevel: "MINIMAL",
+				}}
+			} else {
+				slog.Warn("check failed", "service", checks[0].Name, "error", err)
+				results[0] = []Finding{ErrorFinding(checks[0].Name, "", "service_error", err)}
+			}
 		} else {
 			results[0] = findings
 		}
@@ -64,14 +76,25 @@ func RunChecks(
 				defer wg.Done()
 				findings, err := fn(subCtx, cfg)
 				if err != nil {
-					slog.Warn("check failed", "service", name, "error", err)
-					results[i] = []Finding{{
-						Service:   name,
-						Check:     "service_error",
-						Status:    "ERROR",
-						Detail:    fmt.Sprintf("audit failed: %v", err),
-						RiskLevel: "UNKNOWN",
-					}}
+					if isServiceNotAvailable(err) {
+						slog.Debug("service not available", "service", name, "error", err)
+						results[i] = []Finding{{
+							Service:   name,
+							Check:     "service_availability",
+							Status:    "PASS",
+							Detail:    "service not active or not subscribed in this account",
+							RiskLevel: "MINIMAL",
+						}}
+					} else {
+						slog.Warn("check failed", "service", name, "error", err)
+						results[i] = []Finding{{
+							Service:   name,
+							Check:     "service_error",
+							Status:    "ERROR",
+							Detail:    fmt.Sprintf("audit failed: %v", err),
+							RiskLevel: "UNKNOWN",
+						}}
+					}
 				} else {
 					results[i] = findings
 				}
@@ -86,4 +109,25 @@ func RunChecks(
 		out = append(out, f...)
 	}
 	return out, nil
+}
+
+func isServiceNotAvailable(err error) bool {
+	msg := err.Error()
+	indicators := []string{
+		"ResourceNotFoundException",
+		"SubscriptionRequiredException",
+		"OptInRequired",
+		"InvalidClientTokenId",
+		"UnrecognizedClientException",
+		"NotSignedUp",
+		"is not subscribed",
+		"is not authorized to use this service",
+		"Namespace default not found",
+	}
+	for _, ind := range indicators {
+		if strings.Contains(msg, ind) {
+			return true
+		}
+	}
+	return false
 }

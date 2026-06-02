@@ -3,7 +3,6 @@ package cost
 import (
 	"context"
 	"fmt"
-	"strings"
 	"time"
 
 	"sift/audit"
@@ -45,17 +44,6 @@ func AuditQuickSightCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, 
 	for {
 		resp, err := client.ListUsers(ctx, input)
 		if err != nil {
-			// Checks if QuickSight is not subscribed in the account
-			if strings.Contains(err.Error(), "ResourceNotFoundException") {
-				return []audit.Finding{{
-					Service:    "quicksight",
-					ResourceID: accountID,
-					Check:      "quicksight_usage",
-					Status:     "PASS",
-					Detail:     "QuickSight not subscribed in this account",
-					RiskLevel:  "MINIMAL",
-				}}, nil
-			}
 			return nil, fmt.Errorf("list quicksight users: %w", err)
 		}
 		for _, u := range resp.UserList {
