@@ -174,8 +174,14 @@ func auditGlueJob(
 	}
 
 	workers := aws.ToInt32(job.NumberOfWorkers)
+	workerType := string(job.WorkerType)
 	if job.Command != nil && aws.ToString(job.Command.Name) == "glueetl" && workers <= 2 &&
 		lastRun.ExecutionTime < 600 {
+		sparkCost := pricing.GlueJobHourlyCost(workerType, workers)
+		shellCost := pricing.GlueJobHourlyCost("G.025X", 1)
+		runtimeHours := float64(lastRun.ExecutionTime) / 3600.0
+		monthlySavings := (sparkCost - shellCost) * runtimeHours * 30
+
 		findings = append(findings, audit.Finding{
 			Service:    "glue_job",
 			ResourceID: name,
@@ -183,11 +189,13 @@ func auditGlueJob(
 			Check:      "consider_python_shell",
 			Status:     "WARN",
 			Detail: fmt.Sprintf(
-				"workers=%d, runtime=%ds, small Spark job could be Python Shell ($0.0625 vs $0.44/DPU/hr)",
+				"workers=%d, runtime=%ds, small Spark job could be Python Shell ($0.0625 vs $%.2f/DPU/hr)",
 				workers,
 				lastRun.ExecutionTime,
+				sparkCost/float64(workers),
 			),
-			RiskLevel: "LOW",
+			RiskLevel:            "LOW",
+			EstimatedMonthlyCost: monthlySavings,
 			Remediation: remediation.Recommend(
 				"cost",
 				"glue_job",
