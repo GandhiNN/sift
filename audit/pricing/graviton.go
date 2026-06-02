@@ -61,3 +61,22 @@ func GravitonSavings(
 	savings = currentCost - gravitonCost
 	return gravitonType, currentCost, gravitonCost, savings
 }
+
+// RDSGravitonSavings calculates monthly savings for an RDS instance class (db.X.size).
+func RDSGravitonSavings(
+	instanceType string,
+) (gravitonType string, currentCost, gravitonCost, savings float64) {
+	base := strings.TrimPrefix(instanceType, "db.")
+	gravitonBare := MapToGraviton(base)
+	if gravitonBare == "" {
+		return "", 0, 0, 0
+	}
+	gravitonType = "db." + gravitonBare
+	currentCost = RDSMonthly(instanceType)
+	gravitonCost = RDSMonthly(gravitonType)
+	if currentCost == 0 || gravitonCost == 0 {
+		return "", 0, 0, 0
+	}
+	savings = currentCost - gravitonCost
+	return gravitonType, currentCost, gravitonCost, savings
+}
