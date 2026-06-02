@@ -378,6 +378,7 @@ The crawler version limit (default 1,000,000) is fetched automatically from AWS 
 |-------|------|-----------|
 | Stopped instance | MEDIUM | Storage still costs, auto-restarts after 7 days |
 | Oversized instance (<10% CPU) | HIGH | Continuous overspend |
+| Graviton opportunity | LOW | ~20% savings switching to Graviton |
 
 #### S3
 
