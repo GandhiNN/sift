@@ -355,11 +355,23 @@
       }
     },
     "redshift": {
-      "redshift_security": {
-        "action": "Disable public access and enable encryption",
-        "command": "aws redshift modify-cluster --cluster-identifier {{.ResourceID}} --no-publicly-accessible --encrypted",
+      "public_access": {
+        "action": "Disable public access",
+        "command": "aws redshift modify-cluster --cluster-identifier {{.ResourceID}} --no-publicly-accessible",
         "confidence": "HIGH",
         "action_risk": "MEDIUM"
+      },
+      "no_encryption": {
+        "action": "Enable cluster encryption",
+        "command": "aws redshift modify-cluster --cluster-identifier {{.ResourceID}} --encrypted",
+        "confidence": "HIGH",
+        "action_risk": "HIGH"
+      },
+      "no_logging": {
+        "action": "Enable audit logging",
+        "command": "aws redshift enable-logging --cluster-identifier {{.ResourceID}} --bucket-name <s3-bucket>",
+        "confidence": "HIGH",
+        "action_risk": "LOW"
       }
     },
     "dms": {
@@ -377,11 +389,17 @@
       }
     },
     "ecr": {
-      "ecr_security": {
-        "action": "Enable scan on push and set tag immutability",
+      "no_scan_on_push": {
+        "action": "Enable image scanning on push",
         "command": "aws ecr put-image-scanning-configuration --repository-name {{.ResourceID}} --image-scanning-configuration scanOnPush=true",
         "confidence": "HIGH",
         "action_risk": "LOW"
+      },
+      "mutable_tags": {
+        "action": "Set image tag immutability",
+        "command": "aws ecr put-image-tag-mutability --repository-name {{.ResourceID}} --image-tag-mutability IMMUTABLE",
+        "confidence": "HIGH",
+        "action_risk": "MEDIUM"
       }
     },
     "ec2": {
@@ -455,9 +473,21 @@
       }
     },
     "dynamodb": {
-      "dynamodb_security": {
-        "action": "Enable encryption and point-in-time recovery",
+      "no_encryption": {
+        "action": "Enable server-side encryption with KMS",
+        "command": "aws dynamodb update-table --table-name {{.ResourceID}} --sse-specification Enabled=true,SSEType=KMS",
+        "confidence": "HIGH",
+        "action_risk": "LOW"
+      },
+      "no_pitr": {
+        "action": "Enable point-in-time recovery",
         "command": "aws dynamodb update-continuous-backups --table-name {{.ResourceID}} --point-in-time-recovery-specification PointInTimeRecoveryEnabled=true",
+        "confidence": "HIGH",
+        "action_risk": "LOW"
+      },
+      "no_delete_protection": {
+        "action": "Enable deletion protection",
+        "command": "aws dynamodb update-table --table-name {{.ResourceID}} --deletion-protection-enabled",
         "confidence": "HIGH",
         "action_risk": "LOW"
       }
@@ -501,9 +531,15 @@
       }
     },
     "stepfunctions": {
-      "stepfunctions_security": {
-        "action": "Enable logging and X-Ray tracing",
-        "command": "aws stepfunctions update-state-machine --state-machine-arn <arn> --logging-configuration level=ALL,includeExecutionData=true",
+      "no_logging": {
+        "action": "Enable execution logging",
+        "command": "aws stepfunctions update-state-machine --state-machine-arn <arn> --logging-configuration level=ALL,includeExecutionData=true,destinations=[{cloudWatchLogsLogGroup:{logGroupArn:<arn>}}]",
+        "confidence": "HIGH",
+        "action_risk": "LOW"
+      },
+      "no_tracing": {
+        "action": "Enable X-Ray tracing",
+        "command": "aws stepfunctions update-state-machine --state-machine-arn <arn> --tracing-configuration enabled=true",
         "confidence": "HIGH",
         "action_risk": "LOW"
       }
@@ -557,17 +593,47 @@
       }
     },
     "elasticache": {
-      "elasticache_security": {
-        "action": "Enable in-transit and at-rest encryption",
-        "command": "aws elasticache modify-replication-group --replication-group-id {{.ResourceID}} --transit-encryption-enabled --at-rest-encryption-enabled",
+      "no_at_rest_encryption": {
+        "action": "Enable at-rest encryption (requires recreating cluster)",
+        "command": "aws elasticache create-replication-group --replication-group-id {{.ResourceID}}-encrypted --at-rest-encryption-enabled ...",
         "confidence": "HIGH",
         "action_risk": "HIGH"
+      },
+      "no_transit_encryption": {
+        "action": "Enable in-transit encryption",
+        "command": "aws elasticache modify-replication-group --replication-group-id {{.ResourceID}} --transit-encryption-enabled",
+        "confidence": "HIGH",
+        "action_risk": "HIGH"
+      },
+      "no_auth": {
+        "action": "Enable AUTH token for Redis",
+        "command": "aws elasticache modify-replication-group --replication-group-id {{.ResourceID}} --auth-token <token> --auth-token-update-strategy SET",
+        "confidence": "HIGH",
+        "action_risk": "MEDIUM"
       }
     },
     "opensearch": {
-      "opensearch_security": {
-        "action": "Enable encryption, node-to-node encryption, and fine-grained access control",
-        "command": "aws opensearch update-domain-config --domain-name {{.ResourceID}} --encrypt-at-rest-options Enabled=true --node-to-node-encryption-options Enabled=true --advanced-security-options Enabled=true,InternalUserDatabaseEnabled=true,MasterUserOptions={MasterUserName=admin,MasterUserPassword=<password>}",
+      "public_access": {
+        "action": "Deploy domain into a VPC",
+        "command": "aws opensearch update-domain-config --domain-name {{.ResourceID}} --vpc-options SubnetIds=<subnet-ids>,SecurityGroupIds=<sg-ids>",
+        "confidence": "HIGH",
+        "action_risk": "HIGH"
+      },
+      "no_encryption": {
+        "action": "Enable encryption at rest",
+        "command": "aws opensearch update-domain-config --domain-name {{.ResourceID}} --encrypt-at-rest-options Enabled=true",
+        "confidence": "HIGH",
+        "action_risk": "MEDIUM"
+      },
+      "no_node_to_node": {
+        "action": "Enable node-to-node encryption",
+        "command": "aws opensearch update-domain-config --domain-name {{.ResourceID}} --node-to-node-encryption-options Enabled=true",
+        "confidence": "HIGH",
+        "action_risk": "MEDIUM"
+      },
+      "no_fine_grained_access": {
+        "action": "Enable fine-grained access control",
+        "command": "aws opensearch update-domain-config --domain-name {{.ResourceID}} --advanced-security-options Enabled=true,InternalUserDatabaseEnabled=true,MasterUserOptions={MasterUserName=admin,MasterUserPassword=<password>}",
         "confidence": "HIGH",
         "action_risk": "HIGH"
       }
