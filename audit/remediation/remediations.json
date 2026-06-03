@@ -401,11 +401,29 @@
       }
     },
     "rds": {
-      "rds_security": {
-        "action": "Disable public access and enable encryption",
-        "command": "aws rds modify-db-instance --db-instance-identifier {{.ResourceID}} --no-publicly-accessible",
+      "public_access": {
+        "action": "Disable public access",
+        "command": "aws rds modify-db-instance --db-instance-identifier {{.ResourceID}} --no-publicly-accessible --apply-immediately",
         "confidence": "HIGH",
         "action_risk": "MEDIUM"
+      },
+      "no_encryption": {
+        "action": "Enable storage encryption (requires snapshot-restore)",
+        "command": "aws rds create-db-snapshot --db-instance-identifier {{.ResourceID}} --db-snapshot-identifier {{.ResourceID}}-encrypt-snap",
+        "confidence": "HIGH",
+        "action_risk": "HIGH"
+      },
+      "weak_backup": {
+        "action": "Increase backup retention to at least 7 days",
+        "command": "aws rds modify-db-instance --db-instance-identifier {{.ResourceID}} --backup-retention-period 7 --apply-immediately",
+        "confidence": "HIGH",
+        "action_risk": "LOW"
+      },
+      "no_delete_protection": {
+        "action": "Enable deletion protection",
+        "command": "aws rds modify-db-instance --db-instance-identifier {{.ResourceID}} --deletion-protection --apply-immediately",
+        "confidence": "HIGH",
+        "action_risk": "LOW"
       }
     },
     "eks": {
