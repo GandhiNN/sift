@@ -10,54 +10,10 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/eks"
-	ekstypes "github.com/aws/aws-sdk-go-v2/service/eks/types"
 )
 
 func init() {
 	audit.Register(Module, audit.Checker{Name: "eks", Fn: AuditEKS})
-}
-
-type eksCluster struct {
-	name        string
-	version     string
-	publicEP    bool
-	privateEP   bool
-	secretsEnc  bool
-	logDisabled []string
-	tags        map[string]string
-}
-
-func parseEKSCluster(cluster *ekstypes.Cluster) eksCluster {
-	c := eksCluster{
-		name:    aws.ToString(cluster.Name),
-		version: aws.ToString(cluster.Version),
-		tags:    cluster.Tags,
-	}
-
-	if cluster.ResourcesVpcConfig != nil {
-		c.publicEP = cluster.ResourcesVpcConfig.EndpointPublicAccess
-		c.privateEP = cluster.ResourcesVpcConfig.EndpointPrivateAccess
-	}
-
-	for _, enc := range cluster.EncryptionConfig {
-		for _, res := range enc.Resources {
-			if res == "secrets" {
-				c.secretsEnc = true
-			}
-		}
-	}
-
-	if cluster.Logging != nil {
-		for _, ls := range cluster.Logging.ClusterLogging {
-			for _, lt := range ls.Types {
-				if !aws.ToBool(ls.Enabled) {
-					c.logDisabled = append(c.logDisabled, string(lt))
-				}
-			}
-		}
-	}
-
-	return c
 }
 
 func AuditEKS(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) {
@@ -77,46 +33,131 @@ func AuditEKS(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) {
 		input.NextToken = resp.NextToken
 	}
 
-	results := audit.ProcessAll(
+	return audit.ProcessAllMulti(
 		ctx,
 		allClusters,
 		"Auditing EKS clusters",
-		func(ctx context.Context, name string) audit.Finding {
+		func(ctx context.Context, name string) []audit.Finding {
 			desc, err := client.DescribeCluster(ctx, &eks.DescribeClusterInput{Name: &name})
 			if err != nil {
-				return audit.ErrorFinding("eks", name, "cluster_security", err)
+				return []audit.Finding{audit.ErrorFinding("eks", name, "describe_cluster", err)}
 			}
 
-			c := parseEKSCluster(desc.Cluster)
-			risk := eksRisk(c.publicEP, c.privateEP, c.secretsEnc, len(c.logDisabled) > 0)
+			cluster := desc.Cluster
+			tags := cluster.Tags
 
-			detail := fmt.Sprintf(
-				"version=%s, public_ep=%t, private_ep=%t, secrets_encrypted=%t",
-				c.version, c.publicEP, c.privateEP, c.secretsEnc,
-			)
-			if len(c.logDisabled) > 0 {
-				detail += fmt.Sprintf(", logging_disabled=%s", strings.Join(c.logDisabled, ";"))
+			publicEP := false
+			privateEP := false
+			if cluster.ResourcesVpcConfig != nil {
+				publicEP = cluster.ResourcesVpcConfig.EndpointPublicAccess
+				privateEP = cluster.ResourcesVpcConfig.EndpointPrivateAccess
 			}
 
-			var rem *audit.Remediation
-			if risk != "MINIMAL" {
-				rem = remediation.Recommend("security", "eks", "eks_security", c.name, detail)
+			secretsEnc := false
+			for _, enc := range cluster.EncryptionConfig {
+				for _, res := range enc.Resources {
+					if res == "secrets" {
+						secretsEnc = true
+					}
+				}
 			}
 
-			return audit.Finding{
-				Service:     "eks",
-				ResourceID:  c.name,
-				Tags:        c.tags,
-				Check:       "cluster_security",
-				Status:      statusFromRisk(risk),
-				Detail:      detail,
-				RiskLevel:   risk,
-				Remediation: rem,
+			var disabledLogs []string
+			if cluster.Logging != nil {
+				for _, ls := range cluster.Logging.ClusterLogging {
+					if !aws.ToBool(ls.Enabled) {
+						for _, lt := range ls.Types {
+							disabledLogs = append(disabledLogs, string(lt))
+						}
+					}
+				}
 			}
+
+			var results []audit.Finding
+
+			if publicEP {
+				risk := "MEDIUM"
+				if !privateEP && !secretsEnc {
+					risk = "CRITICAL"
+				} else if !privateEP {
+					risk = "HIGH"
+				}
+				detail := fmt.Sprintf("public_endpoint=true, private_endpoint=%t", privateEP)
+				results = append(results, audit.Finding{
+					Service:    "eks",
+					ResourceID: name,
+					Tags:       tags,
+					Check:      "public_endpoint",
+					Status:     statusFromRisk(risk),
+					Detail:     detail,
+					RiskLevel:  risk,
+					Remediation: remediation.Recommend(
+						"security",
+						"eks",
+						"public_endpoint",
+						name,
+						detail,
+					),
+				})
+			}
+
+			if !secretsEnc {
+				detail := "Kubernetes secrets not encrypted at rest"
+				results = append(results, audit.Finding{
+					Service:    "eks",
+					ResourceID: name,
+					Tags:       tags,
+					Check:      "no_secrets_encryption",
+					Status:     "FAIL",
+					Detail:     detail,
+					RiskLevel:  "LOW",
+					Remediation: remediation.Recommend(
+						"security",
+						"eks",
+						"no_secrets_encryption",
+						name,
+						detail,
+					),
+				})
+			}
+
+			if len(disabledLogs) > 0 {
+				detail := fmt.Sprintf("disabled_log_types=%s", strings.Join(disabledLogs, ","))
+				results = append(results, audit.Finding{
+					Service:    "eks",
+					ResourceID: name,
+					Tags:       tags,
+					Check:      "logging_disabled",
+					Status:     "FAIL",
+					Detail:     detail,
+					RiskLevel:  "LOW",
+					Remediation: remediation.Recommend(
+						"security",
+						"eks",
+						"logging_disabled",
+						name,
+						detail,
+					),
+				})
+			}
+
+			if len(results) == 0 {
+				results = append(results, audit.Finding{
+					Service:    "eks",
+					ResourceID: name,
+					Tags:       tags,
+					Check:      "eks_posture",
+					Status:     "PASS",
+					Detail: fmt.Sprintf(
+						"version=%s, private_only=true, secrets_encrypted=true, all_logging_enabled=true",
+						aws.ToString(cluster.Version),
+					),
+					RiskLevel: "MINIMAL",
+				})
+			}
+			return results
 		},
-	)
-
-	return results, nil
+	), nil
 }
 
 func eksRisk(publicEP, privateEP, secretsEnc, hasDisabledLogs bool) string {
