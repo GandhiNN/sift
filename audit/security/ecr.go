@@ -11,6 +11,10 @@ import (
 	ecrtypes "github.com/aws/aws-sdk-go-v2/service/ecr/types"
 )
 
+func init() {
+	audit.Register(Module, audit.Checker{Name: "ecr", Fn: AuditECR})
+}
+
 type ecrAPI interface {
 	ListTagsForResource(
 		ctx context.Context,

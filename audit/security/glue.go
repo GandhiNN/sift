@@ -13,6 +13,10 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/sts"
 )
 
+func init() {
+	audit.Register(Module, audit.Checker{Name: "glue", Fn: AuditGlue})
+}
+
 type glueTagsAPI interface {
 	GetTags(
 		ctx context.Context,

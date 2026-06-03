@@ -13,6 +13,10 @@ import (
 	sfntypes "github.com/aws/aws-sdk-go-v2/service/sfn/types"
 )
 
+func init() {
+	audit.Register(Module, audit.Checker{Name: "stepfunctions", Fn: AuditStepFunctionsCost})
+}
+
 func AuditStepFunctionsCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) {
 	client := sfn.NewFromConfig(cfg)
 

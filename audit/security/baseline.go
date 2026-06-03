@@ -14,6 +14,10 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/guardduty"
 )
 
+func init() {
+	audit.Register(Module, audit.Checker{Name: "baseline", Fn: AuditBaseline})
+}
+
 func baselineRisk(check string) string {
 	switch check {
 	case "no_trails", "logging_disabled", "not_enabled", "detector_disabled":

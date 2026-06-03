@@ -16,6 +16,10 @@ import (
 	lambdatypes "github.com/aws/aws-sdk-go-v2/service/lambda/types"
 )
 
+func init() {
+	audit.Register(Module, audit.Checker{Name: "lambda", Fn: AuditLambdaCost})
+}
+
 type lambdaCostFunction struct {
 	name     string
 	arn      string

@@ -13,6 +13,10 @@ import (
 	cwltypes "github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs/types"
 )
 
+func init() {
+	audit.Register(Module, audit.Checker{Name: "cloudwatch", Fn: AuditCloudwatchCost})
+}
+
 type logGroupEntry struct {
 	name          string
 	sizeGB        float64

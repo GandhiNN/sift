@@ -13,6 +13,10 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 )
 
+func init() {
+	audit.Register(Module, audit.Checker{Name: "s3", Fn: AuditS3})
+}
+
 type s3Bucket struct {
 	name          string
 	publicBlocked bool

@@ -15,6 +15,10 @@ import (
 	ec2types "github.com/aws/aws-sdk-go-v2/service/ec2/types"
 )
 
+func init() {
+	audit.Register(Module, audit.Checker{Name: "ebs", Fn: AuditEBSCost})
+}
+
 type ebsVolume struct {
 	id         string
 	size       int32

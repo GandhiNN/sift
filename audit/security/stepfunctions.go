@@ -12,6 +12,10 @@ import (
 	sfntypes "github.com/aws/aws-sdk-go-v2/service/sfn/types"
 )
 
+func init() {
+	audit.Register(Module, audit.Checker{Name: "stepfunctions", Fn: AuditStepFunctions})
+}
+
 func stepFunctionsRisk(loggingEnabled, tracingEnabled bool) string {
 	switch {
 	case !loggingEnabled && !tracingEnabled:

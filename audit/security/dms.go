@@ -11,6 +11,10 @@ import (
 	dmstypes "github.com/aws/aws-sdk-go-v2/service/databasemigrationservice/types"
 )
 
+func init() {
+	audit.Register(Module, audit.Checker{Name: "dms", Fn: AuditDMS})
+}
+
 type dmsSecurityEntry struct {
 	id                 string
 	publiclyAccessible bool

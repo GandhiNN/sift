@@ -16,6 +16,10 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/sts"
 )
 
+func init() {
+	audit.Register(Module, audit.Checker{Name: "glue", Fn: AuditGlueCost})
+}
+
 type glueCostJob struct {
 	name string
 	tags map[string]string

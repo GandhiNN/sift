@@ -12,6 +12,10 @@ import (
 	backuptypes "github.com/aws/aws-sdk-go-v2/service/backup/types"
 )
 
+func init() {
+	audit.Register(Module, audit.Checker{Name: "backup", Fn: AuditBackup})
+}
+
 type backupVaultEntry struct {
 	name           string
 	encrypted      bool

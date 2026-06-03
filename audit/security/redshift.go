@@ -11,6 +11,10 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/redshift"
 )
 
+func init() {
+	audit.Register(Module, audit.Checker{Name: "redshift", Fn: AuditRedshift})
+}
+
 type redshiftSecurityEntry struct {
 	id                 string
 	publiclyAccessible bool

@@ -12,6 +12,10 @@ import (
 	rdstypes "github.com/aws/aws-sdk-go-v2/service/rds/types"
 )
 
+func init() {
+	audit.Register(Module, audit.Checker{Name: "rds", Fn: AuditRDS})
+}
+
 type rdsInstance struct {
 	id          string
 	engine      string

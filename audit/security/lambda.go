@@ -13,6 +13,10 @@ import (
 	lambdatypes "github.com/aws/aws-sdk-go-v2/service/lambda/types"
 )
 
+func init() {
+	audit.Register(Module, audit.Checker{Name: "lambda", Fn: AuditLambda})
+}
+
 var deprecatedRuntimes = map[string]bool{
 	"python2.7":     true,
 	"python3.6":     true,

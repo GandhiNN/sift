@@ -13,6 +13,10 @@ import (
 	ekstypes "github.com/aws/aws-sdk-go-v2/service/eks/types"
 )
 
+func init() {
+	audit.Register(Module, audit.Checker{Name: "eks", Fn: AuditEKS})
+}
+
 type eksCluster struct {
 	name        string
 	version     string

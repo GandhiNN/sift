@@ -12,6 +12,10 @@ import (
 	smtypes "github.com/aws/aws-sdk-go-v2/service/sagemaker/types"
 )
 
+func init() {
+	audit.Register(Module, audit.Checker{Name: "sagemaker", Fn: AuditSagemakerCost})
+}
+
 type sagemakerCostEntry struct {
 	name         string
 	status       string

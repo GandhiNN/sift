@@ -17,6 +17,10 @@ import (
 	iamtypes "github.com/aws/aws-sdk-go-v2/service/iam/types"
 )
 
+func init() {
+	audit.Register(Module, audit.Checker{Name: "iam", Fn: AuditIAMHygiene})
+}
+
 type IAMFinding struct {
 	PolicyName string `json:"policy_name"`
 	PolicyType string `json:"policy_type"`

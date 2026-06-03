@@ -16,6 +16,10 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/wafv2"
 )
 
+func init() {
+	audit.Register(Module, audit.Checker{Name: "elb", Fn: AuditELB})
+}
+
 var sensitivePortSet = map[int32]string{
 	27017: "mongodb",
 	27018: "mongodb",

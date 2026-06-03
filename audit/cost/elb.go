@@ -17,6 +17,10 @@ import (
 	elbtypes "github.com/aws/aws-sdk-go-v2/service/elasticloadbalancingv2/types"
 )
 
+func init() {
+	audit.Register(Module, audit.Checker{Name: "elb", Fn: AuditELBCost})
+}
+
 type elbCostEntry struct {
 	name   string
 	arn    string

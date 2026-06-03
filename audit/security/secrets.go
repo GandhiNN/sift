@@ -13,6 +13,10 @@ import (
 	smtypes "github.com/aws/aws-sdk-go-v2/service/secretsmanager/types"
 )
 
+func init() {
+	audit.Register(Module, audit.Checker{Name: "secrets", Fn: AuditSecrets})
+}
+
 type secretEntry struct {
 	name             string
 	rotationEnabled  bool

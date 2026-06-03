@@ -15,6 +15,10 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 )
 
+func init() {
+	audit.Register(Module, audit.Checker{Name: "s3", Fn: AuditS3Cost})
+}
+
 type s3CostBucket struct {
 	name   string
 	sizeGB float64

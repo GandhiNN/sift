@@ -12,6 +12,10 @@ import (
 	dbtypes "github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
 )
 
+func init() {
+	audit.Register(Module, audit.Checker{Name: "dynamodb", Fn: AuditDynamoDB})
+}
+
 type dynamoDBAPI interface {
 	DescribeTable(
 		ctx context.Context,

@@ -17,6 +17,10 @@ import (
 	dmstypes "github.com/aws/aws-sdk-go-v2/service/databasemigrationservice/types"
 )
 
+func init() {
+	audit.Register(Module, audit.Checker{Name: "dms", Fn: AuditDMSCost})
+}
+
 var dmsPrevGenPrefixes = []string{
 	"dms.c4.",
 	"dms.r4.",

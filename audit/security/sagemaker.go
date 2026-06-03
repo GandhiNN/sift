@@ -14,6 +14,10 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/sagemaker"
 )
 
+func init() {
+	audit.Register(Module, audit.Checker{Name: "sagemaker", Fn: AuditSagemaker})
+}
+
 type sageMakerNotebook struct {
 	name                 string
 	status               string

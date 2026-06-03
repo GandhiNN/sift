@@ -13,6 +13,10 @@ import (
 	ecrtypes "github.com/aws/aws-sdk-go-v2/service/ecr/types"
 )
 
+func init() {
+	audit.Register(Module, audit.Checker{Name: "ecr", Fn: AuditECRCost})
+}
+
 type ecrRepo struct {
 	name string
 	arn  string

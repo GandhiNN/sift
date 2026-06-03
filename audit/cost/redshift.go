@@ -15,6 +15,10 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/redshift"
 )
 
+func init() {
+	audit.Register(Module, audit.Checker{Name: "redshift", Fn: AuditRedshiftCost})
+}
+
 type redshiftCostEntry struct {
 	id       string
 	nodeType string

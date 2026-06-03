@@ -13,6 +13,10 @@ import (
 	backuptypes "github.com/aws/aws-sdk-go-v2/service/backup/types"
 )
 
+func init() {
+	audit.Register(Module, audit.Checker{Name: "backup", Fn: AuditBackupCost})
+}
+
 func AuditBackupCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) {
 	client := backup.NewFromConfig(cfg)
 	t := audit.GetThresholds(ctx)

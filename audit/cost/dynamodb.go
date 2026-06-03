@@ -13,6 +13,10 @@ import (
 	dbtypes "github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
 )
 
+func init() {
+	audit.Register(Module, audit.Checker{Name: "dynamodb", Fn: AuditDynamoDBCost})
+}
+
 type dynamoDBCostTable struct {
 	name        string
 	readCap     int64
