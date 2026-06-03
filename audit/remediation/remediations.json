@@ -363,11 +363,17 @@
       }
     },
     "dms": {
-      "dms_security": {
-        "action": "Disable public access and enable encryption",
+      "public_access": {
+        "action": "Disable public access on replication instance",
         "command": "aws dms modify-replication-instance --replication-instance-identifier {{.ResourceID}} --no-publicly-accessible",
         "confidence": "HIGH",
         "action_risk": "MEDIUM"
+      },
+      "no_encryption": {
+        "action": "Enable encryption (requires recreating the instance with a KMS key)",
+        "command": "aws dms create-replication-instance --replication-instance-identifier {{.ResourceID}}-encrypted --kms-key-id <kms-key-arn> ...",
+        "confidence": "HIGH",
+        "action_risk": "HIGH"
       }
     },
     "ecr": {
@@ -403,11 +409,23 @@
       }
     },
     "eks": {
-      "eks_security": {
-        "action": "Disable public endpoint and enable secrets encryption",
+      "public_endpoint": {
+        "action": "Disable public endpoint access",
         "command": "aws eks update-cluster-config --name {{.ResourceID}} --resources-vpc-config endpointPublicAccess=false,endpointPrivateAccess=true",
         "confidence": "HIGH",
         "action_risk": "HIGH"
+      },
+      "no_secrets_encryption": {
+        "action": "Enable envelope encryption for Kubernetes secrets",
+        "command": "aws eks associate-encryption-config --cluster-name {{.ResourceID}} --encryption-config '[{\"resources\":[\"secrets\"],\"provider\":{\"keyArn\":\"<kms-key-arn>\"}}]'",
+        "confidence": "HIGH",
+        "action_risk": "LOW"
+      },
+      "logging_disabled": {
+        "action": "Enable control plane logging",
+        "command": "aws eks update-cluster-config --name {{.ResourceID}} --logging '{\"clusterLogging\":[{\"types\":[\"api\",\"audit\",\"authenticator\",\"controllerManager\",\"scheduler\"],\"enabled\":true}]}'",
+        "confidence": "HIGH",
+        "action_risk": "LOW"
       }
     },
     "sagemaker": {
