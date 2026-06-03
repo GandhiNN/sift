@@ -479,6 +479,62 @@
         "confidence": "HIGH",
         "action_risk": "LOW"
       }
+    },
+    "cloudtrail": {
+      "no_trails": {
+        "action": "Create a CloudTrail trail for management events",
+        "command": "aws cloudtrail create-trail --name default-trail --s3-bucket-name <bucket> --is-multi-region-trail --enable-log-file-validation",
+        "confidence": "HIGH",
+        "action_risk": "LOW"
+      },
+      "logging_disabled": {
+        "action": "Start logging on the CloudTrail trail",
+        "command": "aws cloudtrail start-logging --name {{.ResourceID}}",
+        "confidence": "HIGH",
+        "action_risk": "LOW"
+      },
+      "single_region": {
+        "action": "Enable multi-region logging",
+        "command": "aws cloudtrail update-trail --name {{.ResourceID}} --is-multi-region-trail",
+        "confidence": "HIGH",
+        "action_risk": "LOW"
+      },
+      "no_log_validation": {
+        "action": "Enable log file validation",
+        "command": "aws cloudtrail update-trail --name {{.ResourceID}} --enable-log-file-validation",
+        "confidence": "HIGH",
+        "action_risk": "LOW"
+      }
+    },
+    "guardduty": {
+      "not_enabled": {
+        "action": "Enable GuardDuty detector",
+        "command": "aws guardduty create-detector --enable",
+        "confidence": "HIGH",
+        "action_risk": "LOW"
+      },
+      "detector_disabled": {
+        "action": "Re-enable GuardDuty detector",
+        "command": "aws guardduty update-detector --detector-id {{.ResourceID}} --enable",
+        "confidence": "HIGH",
+        "action_risk": "LOW"
+      }
+    },
+    "elasticache": {
+      "elasticache_security": {
+        "action": "Enable in-transit and at-rest encryption",
+        "command": "aws elasticache modify-replication-group --replication-group-id {{.ResourceID}} --transit-encryption-enabled --at-rest-encryption-enabled",
+        "confidence": "HIGH",
+        "action_risk": "HIGH"
+      }
+    },
+    "opensearch": {
+      "opensearch_security": {
+        "action": "Enable encryption, node-to-node encryption, and fine-grained access control",
+        "command": "aws opensearch update-domain-config --domain-name {{.ResourceID}} --encrypt-at-rest-options Enabled=true --node-to-node-encryption-options Enabled=true --advanced-security-options Enabled=true,InternalUserDatabaseEnabled=true,MasterUserOptions={MasterUserName=admin,MasterUserPassword=<password>}",
+        "confidence": "HIGH",
+        "action_risk": "HIGH"
+      }
     }
   }
 }
