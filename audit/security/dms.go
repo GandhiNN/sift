@@ -15,39 +15,6 @@ func init() {
 	audit.Register(Module, audit.Checker{Name: "dms", Fn: AuditDMS})
 }
 
-type dmsSecurityEntry struct {
-	id                 string
-	publiclyAccessible bool
-	encrypted          bool
-	multiAZ            bool
-}
-
-func parseDMSSecurityEntry(inst dmstypes.ReplicationInstance) dmsSecurityEntry {
-	encrypted := false
-	if inst.KmsKeyId != nil && *inst.KmsKeyId != "" {
-		encrypted = true
-	}
-	return dmsSecurityEntry{
-		id:                 aws.ToString(inst.ReplicationInstanceIdentifier),
-		publiclyAccessible: aws.ToBool(&inst.PubliclyAccessible),
-		encrypted:          encrypted,
-		multiAZ:            inst.MultiAZ,
-	}
-}
-
-func dmsRisk(publiclyAccessible, encrypted bool) string {
-	switch {
-	case publiclyAccessible && !encrypted:
-		return "CRITICAL"
-	case publiclyAccessible:
-		return "HIGH"
-	case !encrypted:
-		return "HIGH"
-	default:
-		return "MINIMAL"
-	}
-}
-
 func AuditDMS(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) {
 	client := databasemigrationservice.NewFromConfig(cfg)
 
@@ -65,45 +32,75 @@ func AuditDMS(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) {
 		input.Marker = resp.Marker
 	}
 
-	results := audit.ProcessAll(
+	return audit.ProcessAllMulti(
 		ctx,
 		instances,
 		"Auditing DMS security",
-		func(_ context.Context, inst dmstypes.ReplicationInstance) audit.Finding {
-			d := parseDMSSecurityEntry(inst)
-			risk := dmsRisk(d.publiclyAccessible, d.encrypted)
+		func(_ context.Context, inst dmstypes.ReplicationInstance) []audit.Finding {
+			id := aws.ToString(inst.ReplicationInstanceIdentifier)
+			publiclyAccessible := aws.ToBool(&inst.PubliclyAccessible)
+			encrypted := inst.KmsKeyId != nil && *inst.KmsKeyId != ""
 
-			var rem *audit.Remediation
-			if risk != "MINIMAL" {
-				rem = remediation.Recommend(
-					"security",
-					"dms",
-					"dms_security",
-					d.id,
-					fmt.Sprintf(
-						"publicly_accessible-%t, encrypted=%t",
-						d.publiclyAccessible,
-						d.encrypted,
+			var results []audit.Finding
+
+			if publiclyAccessible {
+				risk := "HIGH"
+				if !encrypted {
+					risk = "CRITICAL"
+				}
+				detail := fmt.Sprintf("publicly_accessible=true, encrypted=%t", encrypted)
+				results = append(results, audit.Finding{
+					Service:    "dms",
+					ResourceID: id,
+					Check:      "public_access",
+					Status:     statusFromRisk(risk),
+					Detail:     detail,
+					RiskLevel:  risk,
+					Remediation: remediation.Recommend(
+						"security",
+						"dms",
+						"public_access",
+						id,
+						detail,
 					),
-				)
+				})
 			}
 
-			return audit.Finding{
-				Service:    "dms",
-				ResourceID: d.id,
-				Check:      "dms_security",
-				Status:     statusFromRisk(risk),
-				Detail: fmt.Sprintf(
-					"publicly_accessible=%t, encrypted=%t, multi_az=%t",
-					d.publiclyAccessible,
-					d.encrypted,
-					d.multiAZ,
-				),
-				RiskLevel:   risk,
-				Remediation: rem,
+			if !encrypted {
+				detail := "storage encryption disabled"
+				results = append(results, audit.Finding{
+					Service:    "dms",
+					ResourceID: id,
+					Check:      "no_encryption",
+					Status:     "FAIL",
+					Detail:     detail,
+					RiskLevel:  "HIGH",
+					Remediation: remediation.Recommend(
+						"security",
+						"dms",
+						"no_encryption",
+						id,
+						detail,
+					),
+				})
 			}
+
+			if len(results) == 0 {
+				results = append(results, audit.Finding{
+					Service:    "dms",
+					ResourceID: id,
+					Check:      "dms_posture",
+					Status:     "PASS",
+					Detail: fmt.Sprintf(
+						"publicly_accessible=%t, encrypted=%t",
+						publiclyAccessible,
+						encrypted,
+					),
+					RiskLevel: "MINIMAL",
+				})
+			}
+
+			return results
 		},
-	)
-
-	return results, nil
+	), nil
 }
