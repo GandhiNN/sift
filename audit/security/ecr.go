@@ -23,52 +23,6 @@ type ecrAPI interface {
 	) (*ecr.ListTagsForResourceOutput, error)
 }
 
-type ecrSecurityEntry struct {
-	name            string
-	arn             string
-	scanOnPush      bool
-	imageTagMutable bool
-	tags            map[string]string
-}
-
-func parseECRSecurityEntry(
-	ctx context.Context,
-	client ecrAPI,
-	repo ecrtypes.Repository,
-) ecrSecurityEntry {
-	e := ecrSecurityEntry{
-		name: aws.ToString(repo.RepositoryName),
-		arn:  aws.ToString(repo.RepositoryArn),
-		scanOnPush: repo.ImageScanningConfiguration != nil &&
-			repo.ImageScanningConfiguration.ScanOnPush,
-		imageTagMutable: repo.ImageTagMutability == ecrtypes.ImageTagMutabilityMutable,
-	}
-	tagResp, err := client.ListTagsForResource(
-		ctx,
-		&ecr.ListTagsForResourceInput{ResourceArn: &e.arn},
-	)
-	if err == nil {
-		e.tags = make(map[string]string, len(tagResp.Tags))
-		for _, t := range tagResp.Tags {
-			e.tags[aws.ToString(t.Key)] = aws.ToString(t.Value)
-		}
-	}
-	return e
-}
-
-func ecrRisk(scanOnPush, imageTagMutable bool) string {
-	switch {
-	case !scanOnPush && imageTagMutable:
-		return "HIGH"
-	case !scanOnPush:
-		return "MEDIUM"
-	case imageTagMutable:
-		return "LOW"
-	default:
-		return "MINIMAL"
-	}
-}
-
 func AuditECR(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) {
 	client := ecr.NewFromConfig(cfg)
 
@@ -82,36 +36,88 @@ func AuditECR(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) {
 		allRepos = append(allRepos, page.Repositories...)
 	}
 
-	results := audit.ProcessAll(
+	return audit.ProcessAllMulti(
 		ctx,
 		allRepos,
 		"Auditing ECR security",
-		func(ctx context.Context, repo ecrtypes.Repository) audit.Finding {
-			e := parseECRSecurityEntry(ctx, client, repo)
-			risk := ecrRisk(e.scanOnPush, e.imageTagMutable)
+		func(ctx context.Context, repo ecrtypes.Repository) []audit.Finding {
+			name := aws.ToString(repo.RepositoryName)
+			arn := aws.ToString(repo.RepositoryArn)
+			scanOnPush := repo.ImageScanningConfiguration != nil &&
+				repo.ImageScanningConfiguration.ScanOnPush
+			imageTagMutable := repo.ImageTagMutability == ecrtypes.ImageTagMutabilityMutable
 
-			detail := fmt.Sprintf(
-				"scan_on_push=%t, image_tag_mutable=%t",
-				e.scanOnPush,
-				e.imageTagMutable,
+			var tags map[string]string
+			tagResp, err := client.ListTagsForResource(
+				ctx,
+				&ecr.ListTagsForResourceInput{ResourceArn: &arn},
 			)
-
-			var rem *audit.Remediation
-			if risk != "MINIMAL" {
-				rem = remediation.Recommend("security", "ecr", "ecr_security", e.name, detail)
+			if err == nil {
+				tags = make(map[string]string, len(tagResp.Tags))
+				for _, t := range tagResp.Tags {
+					tags[aws.ToString(t.Key)] = aws.ToString(t.Value)
+				}
 			}
 
-			return audit.Finding{
-				Service:     "ecr",
-				ResourceID:  e.name,
-				Tags:        e.tags,
-				Check:       "ecr_security",
-				Status:      statusFromRisk(risk),
-				Detail:      detail,
-				RiskLevel:   risk,
-				Remediation: rem,
+			var results []audit.Finding
+
+			if !scanOnPush {
+				detail := "image scanning on push disabled"
+				results = append(results, audit.Finding{
+					Service:    "ecr",
+					ResourceID: name,
+					Tags:       tags,
+					Check:      "no_scan_on_push",
+					Status:     "FAIL",
+					Detail:     detail,
+					RiskLevel:  "MEDIUM",
+					Remediation: remediation.Recommend(
+						"security",
+						"ecr",
+						"no_scan_on_push",
+						name,
+						detail,
+					),
+				})
 			}
+
+			if imageTagMutable {
+				risk := "LOW"
+				if !scanOnPush {
+					risk = "HIGH"
+				}
+				detail := "image tags are mutable"
+				results = append(results, audit.Finding{
+					Service:    "ecr",
+					ResourceID: name,
+					Tags:       tags,
+					Check:      "mutable_tags",
+					Status:     "FAIL",
+					Detail:     detail,
+					RiskLevel:  risk,
+					Remediation: remediation.Recommend(
+						"security",
+						"ecr",
+						"mutable_tags",
+						name,
+						detail,
+					),
+				})
+			}
+
+			if len(results) == 0 {
+				results = append(results, audit.Finding{
+					Service:    "ecr",
+					ResourceID: name,
+					Tags:       tags,
+					Check:      "ecr_posture",
+					Status:     "PASS",
+					Detail:     "scan_on_push=true, immutable_tags=true",
+					RiskLevel:  "MINIMAL",
+				})
+			}
+
+			return results
 		},
-	)
-	return results, nil
+	), nil
 }
