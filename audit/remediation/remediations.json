@@ -594,6 +594,42 @@
         "action_risk": "LOW"
       }
     },
+    "ebs": {
+      "no_encryption": {
+        "action": "Create encrypted volume (encryption cannot be added to existing volumes)",
+        "command": "aws ec2 create-snapshot --volume-id {{.ResourceID}} && aws ec2 copy-snapshot --encrypted --source-snapshot-id <snap-id>",
+        "confidence": "HIGH",
+        "action_risk": "MEDIUM"
+      },
+      "public_snapshot": {
+        "action": "Remove public sharing from snapshot",
+        "command": "aws ec2 modify-snapshot-attribute --snapshot-id {{.ResourceID}} --attribute createVolumePermission --operation-type remove --group-names all",
+        "confidence": "HIGH",
+        "action_risk": "LOW"
+      }
+    },
+    "kinesis": {
+      "no_encryption": {
+        "action": "Enable server-side encryption",
+        "command": "aws kinesis start-stream-encryption --stream-name {{.ResourceID}} --encryption-type KMS --key-id alias/aws/kinesis",
+        "confidence": "HIGH",
+        "action_risk": "LOW"
+      }
+    },
+    "waf": {
+      "no_rules": {
+        "action": "Add security rules or change default action to BLOCK",
+        "command": "aws wafv2 update-web-acl --name {{.ResourceID}} --scope REGIONAL --default-action Block={} --lock-token <token>",
+        "confidence": "HIGH",
+        "action_risk": "HIGH"
+      },
+      "no_rate_limit": {
+        "action": "Add a rate-based rule to prevent DDoS",
+        "command": "aws wafv2 update-web-acl --name {{.ResourceID}} --scope REGIONAL --rules <rate-rule> --lock-token <token>",
+        "confidence": "HIGH",
+        "action_risk": "LOW"
+      }
+    },
     "backup": {
       "no_encryption": {
         "action": "Create encrypted backup vault with KMS key",
