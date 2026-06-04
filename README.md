@@ -50,7 +50,7 @@ sift security --profile dev --service eks
 sift security --profile dev --risk-level HIGH
 ```
 
-Available services: `ec2`, `sagemaker`, `s3`, `rds`, `eks`, `iam`, `secrets`, `glue`, `lambda`, `dynamodb`, `elb`, `dms`, `ecr`
+Available services: `ec2`, `sagemaker`, `s3`, `rds`, `eks`, `iam`, `secrets`, `glue`, `lambda`, `dynamodb`, `elb`, `dms`, `ecr`, `redshift`, `stepfunctions`, `backup`, `baseline`, `ebs`, `elasticache`, `opensearch`, `kms`, `kinesis`, `waf`
 
 #### Cost
 
@@ -71,7 +71,7 @@ sift cost --profile dev --sort-by cost
 sift cost --profile dev --diff
 ```
 
-Available services: `ec2`, `ebs`, `rds`, `s3`, `eks`, `network`, `cloudwatch`, `ecr`, `secrets`, `glue`, `lambda`, `dynamodb`, `dms`, `elb`, `sagemaker`, `redshift`, `stepfunctions`, `backup`, `kms`, `vpn`, `waf`, `kinesis`, `awsconfig`, `elasticache`, `opensearch`
+Available services: `ec2`, `ebs`, `rds`, `s3`, `eks`, `network`, `cloudwatch`, `ecr`, `secrets`, `glue`, `lambda`, `dynamodb`, `dms`, `elb`, `sagemaker`, `redshift`, `stepfunctions`, `backup`, `kms`, `vpn`, `waf`, `kinesis`, `awsconfig`, `elasticache`, `opensearch`, `efs`, `docdb`, `directory`, `timestream`, `quicksight`, `msk`
 
 #### Ops
 
@@ -322,6 +322,60 @@ Sensitive ports flagged: MongoDB (27017-27018), MySQL (3306), PostgreSQL (5432),
 | Job without security configuration | LOW |
 | Fully configured | MINIMAL |
 
+### EBS
+
+| Condition | Risk |
+|-----------|------|
+| Public snapshot + unencrypted | CRITICAL |
+| Public snapshot | HIGH |
+| Volume not encrypted | MEDIUM |
+| Encrypted, private | MINIMAL |
+
+### ElastiCache
+
+| Condition | Risk |
+|-----------|------|
+| No at-rest + no in-transit + no AUTH | CRITICAL |
+| No at-rest + no in-transit encryption | HIGH |
+| Missing at-rest or in-transit encryption | MEDIUM |
+| No AUTH token | LOW |
+| All encryption and auth enabled | MINIMAL |
+
+### OpenSearch
+
+| Condition | Risk |
+|-----------|------|
+| Public access + no encryption + no fine-grained access | CRITICAL |
+| Public access + no fine-grained access | HIGH |
+| Public access with fine-grained access | MEDIUM |
+| No encryption at rest or no node-to-node | MEDIUM |
+| No fine-grained access control | LOW |
+| VPC + all encryption + fine-grained access | MINIMAL |
+
+### KMS
+
+| Condition | Risk |
+|-----------|------|
+| Wildcard principal + no rotation | CRITICAL |
+| Wildcard principal in key policy | HIGH |
+| Automatic rotation disabled | MEDIUM |
+| Rotation enabled, restricted policy | MINIMAL |
+
+### Kinesis
+
+| Condition | Risk |
+|-----------|------|
+| Server-side encryption disabled | HIGH |
+| Encryption enabled | MINIMAL |
+
+### WAF
+
+| Condition | Risk |
+|-----------|------|
+| Default ALLOW with no rules | CRITICAL |
+| Default ALLOW without rate-based rule | HIGH |
+| Default BLOCK or has rate limiting | MINIMAL |
+
 ### Triage
 
 | Condition | Risk |
@@ -524,6 +578,12 @@ sift/
     │   ├── stepfunctions.go    # Step Functions logging + tracing
     │   ├── backup.go           # Backup vault encryption
     │   ├── baseline.go         # CloudTrail + GuardDuty
+    │   ├── ebs.go              # EBS volume encryption + public snapshots
+    │   ├── elasticache.go      # ElastiCache encryption + AUTH
+    │   ├── opensearch.go       # OpenSearch access control + encryption
+    │   ├── kms.go              # KMS key rotation + policy
+    │   ├── kinesis.go          # Kinesis stream encryption
+    │   ├── waf.go              # WAF rule coverage + rate limiting
     │   └── network.go          # VPC flow log queries
     ├── triage/
     │   └── triage.go           # Deep EC2 investigation (IAM + flow logs)
@@ -555,7 +615,13 @@ sift/
         ├── kinesis.go          # Idle streams
         ├── awsconfig.go        # Over-broad recording, unused rules
         ├── elasticache.go      # Idle/oversized clusters
-        └── opensearch.go       # Idle/oversized domains
+        ├── opensearch.go       # Idle/oversized domains
+        ├── efs.go              # Unused file systems
+        ├── docdb.go            # Idle DocumentDB clusters
+        ├── directory.go        # Idle directory services
+        ├── timestream.go       # Unused Timestream databases
+        ├── quicksight.go       # Unused QuickSight resources
+        └── msk.go              # Idle MSK clusters
 ```
 
 ## Authentication
