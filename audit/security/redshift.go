@@ -15,63 +15,11 @@ func init() {
 	audit.Register(Module, audit.Checker{Name: "redshift", Fn: AuditRedshift})
 }
 
-type redshiftSecurityEntry struct {
-	id                 string
-	publiclyAccessible bool
-	encrypted          bool
-	loggingEnabled     bool
-	tags               map[string]string
-}
-
-func parseRedshiftSecurityEntry(
-	ctx context.Context,
-	client *redshift.Client,
-	cluster *redshift.DescribeClustersOutput,
-) []redshiftSecurityEntry {
-	var entries []redshiftSecurityEntry
-	for _, c := range cluster.Clusters {
-		tags := make(map[string]string, len(c.Tags))
-		for _, t := range c.Tags {
-			tags[aws.ToString(t.Key)] = aws.ToString(t.Value)
-		}
-
-		loggingResp, _ := client.DescribeLoggingStatus(ctx, &redshift.DescribeLoggingStatusInput{
-			ClusterIdentifier: c.ClusterIdentifier,
-		})
-		loggingEnabled := loggingResp != nil && aws.ToBool(loggingResp.LoggingEnabled)
-
-		entries = append(entries, redshiftSecurityEntry{
-			id:                 aws.ToString(c.ClusterIdentifier),
-			publiclyAccessible: aws.ToBool(c.PubliclyAccessible),
-			encrypted:          aws.ToBool(c.Encrypted),
-			loggingEnabled:     loggingEnabled,
-			tags:               tags,
-		})
-	}
-	return entries
-}
-
-func redshiftRisk(publiclyAccessible, encrypted, loggingEnabled bool) string {
-	switch {
-	case publiclyAccessible && !encrypted:
-		return "CRITICAL"
-	case publiclyAccessible:
-		return "HIGH"
-	case !encrypted:
-		return "HIGH"
-	case !loggingEnabled:
-		return "MEDIUM"
-	default:
-		return "MINIMAL"
-	}
-}
-
 func AuditRedshift(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) {
 	client := redshift.NewFromConfig(cfg)
 
 	var findings []audit.Finding
-	input := &redshift.DescribeClustersInput{}
-	paginator := redshift.NewDescribeClustersPaginator(client, input)
+	paginator := redshift.NewDescribeClustersPaginator(client, &redshift.DescribeClustersInput{})
 
 	bar := progress.NewSpinner(ctx, "Auditing Redshift security")
 	for paginator.HasMorePages() {
@@ -80,37 +28,110 @@ func AuditRedshift(ctx context.Context, cfg aws.Config) ([]audit.Finding, error)
 			bar.Finish()
 			return nil, fmt.Errorf("describe clusters: %w", err)
 		}
-		entries := parseRedshiftSecurityEntry(ctx, client, page)
-		for _, e := range entries {
-			risk := redshiftRisk(e.publiclyAccessible, e.encrypted, e.loggingEnabled)
-			detail := fmt.Sprintf(
-				"publicly_accessible=%t, encrypted=%t, logging=%t",
-				e.publiclyAccessible, e.encrypted, e.loggingEnabled,
+		for _, c := range page.Clusters {
+			id := aws.ToString(c.ClusterIdentifier)
+			pub := aws.ToBool(c.PubliclyAccessible)
+			enc := aws.ToBool(c.Encrypted)
+			tags := make(map[string]string, len(c.Tags))
+			for _, t := range c.Tags {
+				tags[aws.ToString(t.Key)] = aws.ToString(t.Value)
+			}
+			loggingResp, _ := client.DescribeLoggingStatus(
+				ctx,
+				&redshift.DescribeLoggingStatusInput{ClusterIdentifier: c.ClusterIdentifier},
 			)
+			logging := loggingResp != nil && aws.ToBool(loggingResp.LoggingEnabled)
 
-			var rem *audit.Remediation
-			if risk != "MINIMAL" {
-				rem = remediation.Recommend(
-					"security",
-					"redshift",
-					"redshift_security",
-					e.id,
-					detail,
+			hasIssue := false
+			if pub {
+				risk := "HIGH"
+				if !enc {
+					risk = "CRITICAL"
+				}
+				d := fmt.Sprintf("publicly_accessible=true, encrypted=%t", enc)
+				findings = append(
+					findings,
+					audit.Finding{
+						Service:    "redshift",
+						ResourceID: id,
+						Tags:       tags,
+						Check:      "public_access",
+						Status:     statusFromRisk(risk),
+						Detail:     d,
+						RiskLevel:  risk,
+						Remediation: remediation.Recommend(
+							"security",
+							"redshift",
+							"public_access",
+							id,
+							d,
+						),
+					},
+				)
+				hasIssue = true
+			}
+			if !enc {
+				d := "cluster encryption disabled"
+				findings = append(
+					findings,
+					audit.Finding{
+						Service:    "redshift",
+						ResourceID: id,
+						Tags:       tags,
+						Check:      "no_encryption",
+						Status:     "FAIL",
+						Detail:     d,
+						RiskLevel:  "HIGH",
+						Remediation: remediation.Recommend(
+							"security",
+							"redshift",
+							"no_encryption",
+							id,
+							d,
+						),
+					},
+				)
+				hasIssue = true
+			}
+			if !logging {
+				d := "audit logging disabled"
+				findings = append(
+					findings,
+					audit.Finding{
+						Service:    "redshift",
+						ResourceID: id,
+						Tags:       tags,
+						Check:      "no_logging",
+						Status:     "FAIL",
+						Detail:     d,
+						RiskLevel:  "MEDIUM",
+						Remediation: remediation.Recommend(
+							"security",
+							"redshift",
+							"no_logging",
+							id,
+							d,
+						),
+					},
+				)
+				hasIssue = true
+			}
+			if !hasIssue {
+				findings = append(
+					findings,
+					audit.Finding{
+						Service:    "redshift",
+						ResourceID: id,
+						Tags:       tags,
+						Check:      "redshift_posture",
+						Status:     "PASS",
+						Detail:     "private=true, encrypted=true, logging=true",
+						RiskLevel:  "MINIMAL",
+					},
 				)
 			}
-
-			findings = append(findings, audit.Finding{
-				Service:     "redshift",
-				ResourceID:  e.id,
-				Tags:        e.tags,
-				Check:       "redshift_security",
-				Status:      statusFromRisk(risk),
-				Detail:      detail,
-				RiskLevel:   risk,
-				Remediation: rem,
-			})
 		}
-		bar.Add(len(entries))
+		bar.Add(len(page.Clusters))
 	}
 	bar.Finish()
 

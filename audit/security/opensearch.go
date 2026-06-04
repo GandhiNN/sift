@@ -14,23 +14,6 @@ func init() {
 	audit.Register(Module, audit.Checker{Name: "opensearch", Fn: AuditOpenSearch})
 }
 
-func opensearchRisk(publicAccess, encryptAtRest, nodeToNode, fineGrained bool) string {
-	switch {
-	case publicAccess && !encryptAtRest && !fineGrained:
-		return "CRITICAL"
-	case publicAccess && !fineGrained:
-		return "HIGH"
-	case publicAccess:
-		return "MEDIUM"
-	case !encryptAtRest || !nodeToNode:
-		return "MEDIUM"
-	case !fineGrained:
-		return "LOW"
-	default:
-		return "MINIMAL"
-	}
-}
-
 func AuditOpenSearch(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) {
 	client := opensearch.NewFromConfig(cfg)
 
@@ -44,17 +27,19 @@ func AuditOpenSearch(ctx context.Context, cfg aws.Config) ([]audit.Finding, erro
 		names = append(names, aws.ToString(d.DomainName))
 	}
 
-	results := audit.ProcessAll(
+	return audit.ProcessAllMulti(
 		ctx,
 		names,
 		"Auditing OpenSearch security",
-		func(ctx context.Context, name string) audit.Finding {
+		func(ctx context.Context, name string) []audit.Finding {
 			desc, err := client.DescribeDomain(
 				ctx,
 				&opensearch.DescribeDomainInput{DomainName: &name},
 			)
 			if err != nil {
-				return audit.ErrorFinding("opensearch", name, "opensearch_security", err)
+				return []audit.Finding{
+					audit.ErrorFinding("opensearch", name, "describe_domain", err),
+				}
 			}
 
 			domain := desc.DomainStatus
@@ -67,33 +52,110 @@ func AuditOpenSearch(ctx context.Context, cfg aws.Config) ([]audit.Finding, erro
 			vpcEnabled := domain.VPCOptions != nil && aws.ToString(domain.VPCOptions.VPCId) != ""
 			publicAccess := !vpcEnabled
 
-			risk := opensearchRisk(publicAccess, encryptAtRest, nodeToNode, fineGrained)
-			detail := fmt.Sprintf(
-				"public_access=%t, encrypt_at_rest=%t, node_to_node=%t, fine_grained_access=%t",
-				publicAccess, encryptAtRest, nodeToNode, fineGrained,
-			)
-
-			var rem *audit.Remediation
-			if risk != "MINIMAL" {
-				rem = remediation.Recommend(
-					"security",
-					"opensearch",
-					"opensearch_security",
-					name,
-					detail,
+			var results []audit.Finding
+			if publicAccess {
+				risk := "HIGH"
+				if !fineGrained {
+					risk = "CRITICAL"
+				}
+				d := "domain is publicly accessible (not in VPC)"
+				results = append(
+					results,
+					audit.Finding{
+						Service:    "opensearch",
+						ResourceID: name,
+						Check:      "public_access",
+						Status:     statusFromRisk(risk),
+						Detail:     d,
+						RiskLevel:  risk,
+						Remediation: remediation.Recommend(
+							"security",
+							"opensearch",
+							"public_access",
+							name,
+							d,
+						),
+					},
 				)
 			}
 
-			return audit.Finding{
-				Service:     "opensearch",
-				ResourceID:  name,
-				Check:       "opensearch_security",
-				Status:      statusFromRisk(risk),
-				Detail:      detail,
-				RiskLevel:   risk,
-				Remediation: rem,
+			if !encryptAtRest {
+				d := "encryption at rest disabled"
+				results = append(
+					results,
+					audit.Finding{
+						Service:    "opensearch",
+						ResourceID: name,
+						Check:      "no_encryption",
+						Status:     "FAIL",
+						Detail:     d,
+						RiskLevel:  "MEDIUM",
+						Remediation: remediation.Recommend(
+							"security",
+							"opensearch",
+							"no_encryption",
+							name,
+							d,
+						),
+					},
+				)
 			}
+			if !nodeToNode {
+				d := "node-to-node encryption disabled"
+				results = append(
+					results,
+					audit.Finding{
+						Service:    "opensearch",
+						ResourceID: name,
+						Check:      "no_node_to_node",
+						Status:     "FAIL",
+						Detail:     d,
+						RiskLevel:  "MEDIUM",
+						Remediation: remediation.Recommend(
+							"security",
+							"opensearch",
+							"no_node_to_node",
+							name,
+							d,
+						),
+					},
+				)
+			}
+			if !fineGrained {
+				d := "fine-grained access control not enabled"
+				results = append(
+					results,
+					audit.Finding{
+						Service:    "opensearch",
+						ResourceID: name,
+						Check:      "no_fine_grained_access",
+						Status:     "FAIL",
+						Detail:     d,
+						RiskLevel:  "LOW",
+						Remediation: remediation.Recommend(
+							"security",
+							"opensearch",
+							"no_fine_grained_access",
+							name,
+							d,
+						),
+					},
+				)
+			}
+			if len(results) == 0 {
+				results = append(
+					results,
+					audit.Finding{
+						Service:    "opensearch",
+						ResourceID: name,
+						Check:      "opensearch_posture",
+						Status:     "PASS",
+						Detail:     "vpc=true, encrypt_at_rest=true, node_to_node=true, fine_grained_access=true",
+						RiskLevel:  "MINIMAL",
+					},
+				)
+			}
+			return results
 		},
-	)
-	return results, nil
+	), nil
 }
