@@ -16,92 +16,6 @@ func init() {
 	audit.Register(Module, audit.Checker{Name: "dynamodb", Fn: AuditDynamoDB})
 }
 
-type dynamoDBAPI interface {
-	DescribeTable(
-		ctx context.Context,
-		params *dynamodb.DescribeTableInput,
-		optFns ...func(*dynamodb.Options),
-	) (*dynamodb.DescribeTableOutput, error)
-	DescribeContinuousBackups(
-		ctx context.Context,
-		params *dynamodb.DescribeContinuousBackupsInput,
-		optFns ...func(*dynamodb.Options),
-	) (*dynamodb.DescribeContinuousBackupsOutput, error)
-	ListTagsOfResource(
-		ctx context.Context,
-		params *dynamodb.ListTagsOfResourceInput,
-		optFns ...func(*dynamodb.Options),
-	) (*dynamodb.ListTagsOfResourceOutput, error)
-}
-
-type dynamoDBTable struct {
-	name               string
-	encrypted          bool
-	pitr               bool
-	deletionProtection bool
-	tags               map[string]string
-}
-
-func dynamoDBRisk(encrypted, pitr, deletionProtection bool) string {
-	switch {
-	case !encrypted:
-		return "HIGH"
-	case !pitr && !deletionProtection:
-		return "MEDIUM"
-	case pitr && deletionProtection:
-		return "MINIMAL"
-	default:
-		return "LOW"
-	}
-}
-
-func parseDynamoDBTable(
-	ctx context.Context,
-	client dynamoDBAPI,
-	name string,
-) (*dynamoDBTable, error) {
-	desc, err := client.DescribeTable(
-		ctx,
-		&dynamodb.DescribeTableInput{TableName: aws.String(name)},
-	)
-	if err != nil {
-		return nil, err
-	}
-	table := desc.Table
-
-	t := &dynamoDBTable{
-		name:               name,
-		encrypted:          true,
-		deletionProtection: aws.ToBool(table.DeletionProtectionEnabled),
-	}
-
-	if table.SSEDescription != nil && table.SSEDescription.Status == dbtypes.SSEStatusDisabled {
-		t.encrypted = false
-	}
-
-	cb, err := client.DescribeContinuousBackups(
-		ctx,
-		&dynamodb.DescribeContinuousBackupsInput{TableName: aws.String(name)},
-	)
-	if err == nil && cb.ContinuousBackupsDescription != nil &&
-		cb.ContinuousBackupsDescription.PointInTimeRecoveryDescription != nil {
-		t.pitr = cb.ContinuousBackupsDescription.PointInTimeRecoveryDescription.PointInTimeRecoveryStatus == dbtypes.PointInTimeRecoveryStatusEnabled
-	}
-
-	tagResp, err := client.ListTagsOfResource(
-		ctx,
-		&dynamodb.ListTagsOfResourceInput{ResourceArn: table.TableArn},
-	)
-	if err == nil {
-		t.tags = make(map[string]string, len(tagResp.Tags))
-		for _, tag := range tagResp.Tags {
-			t.tags[aws.ToString(tag.Key)] = aws.ToString(tag.Value)
-		}
-	}
-
-	return t, nil
-}
-
 func AuditDynamoDB(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) {
 	client := dynamodb.NewFromConfig(cfg)
 
@@ -115,47 +29,129 @@ func AuditDynamoDB(ctx context.Context, cfg aws.Config) ([]audit.Finding, error)
 		tableNames = append(tableNames, page.TableNames...)
 	}
 
-	results := audit.ProcessAll(
+	return audit.ProcessAllMulti(
 		ctx,
 		tableNames,
 		"Auditing DynamoDB tables",
-		func(ctx context.Context, name string) audit.Finding {
-			t, err := parseDynamoDBTable(ctx, client, name)
+		func(ctx context.Context, name string) []audit.Finding {
+			desc, err := client.DescribeTable(
+				ctx,
+				&dynamodb.DescribeTableInput{TableName: aws.String(name)},
+			)
 			if err != nil {
-				return audit.ErrorFinding("dynamodb", name, "table_posture", err)
+				return []audit.Finding{audit.ErrorFinding("dynamodb", name, "describe_table", err)}
+			}
+			table := desc.Table
+			encrypted := true
+			if table.SSEDescription != nil &&
+				table.SSEDescription.Status == dbtypes.SSEStatusDisabled {
+				encrypted = false
+			}
+			pitr := false
+			cb, err := client.DescribeContinuousBackups(
+				ctx,
+				&dynamodb.DescribeContinuousBackupsInput{TableName: aws.String(name)},
+			)
+			if err == nil && cb.ContinuousBackupsDescription != nil &&
+				cb.ContinuousBackupsDescription.PointInTimeRecoveryDescription != nil {
+				pitr = cb.ContinuousBackupsDescription.PointInTimeRecoveryDescription.PointInTimeRecoveryStatus == dbtypes.PointInTimeRecoveryStatusEnabled
+			}
+			delProtect := aws.ToBool(table.DeletionProtectionEnabled)
+
+			var tags map[string]string
+			tagResp, err := client.ListTagsOfResource(
+				ctx,
+				&dynamodb.ListTagsOfResourceInput{ResourceArn: table.TableArn},
+			)
+			if err == nil {
+				tags = make(map[string]string, len(tagResp.Tags))
+				for _, tag := range tagResp.Tags {
+					tags[aws.ToString(tag.Key)] = aws.ToString(tag.Value)
+				}
 			}
 
-			risk := dynamoDBRisk(t.encrypted, t.pitr, t.deletionProtection)
-			detail := fmt.Sprintf(
-				"encrypted=%t, pitr=%t, deletion_protection=%t",
-				t.encrypted,
-				t.pitr,
-				t.deletionProtection,
-			)
-
-			var rem *audit.Remediation
-			if risk != "MINIMAL" {
-				rem = remediation.Recommend(
-					"security",
-					"dynamodb",
-					"dynamodb_security",
-					t.name,
-					detail,
+			var results []audit.Finding
+			if !encrypted {
+				d := "service-side encryption disabled"
+				results = append(
+					results,
+					audit.Finding{
+						Service:    "dynamodb",
+						ResourceID: name,
+						Tags:       tags,
+						Check:      "no_encryption",
+						Status:     "FAIL",
+						Detail:     d,
+						RiskLevel:  "HIGH",
+						Remediation: remediation.Recommend(
+							"security",
+							"dynamodb",
+							"no_encryption",
+							name,
+							d,
+						),
+					},
 				)
 			}
-
-			return audit.Finding{
-				Service:     "dynamodb",
-				ResourceID:  t.name,
-				Tags:        t.tags,
-				Check:       "table_posture",
-				Status:      statusFromRisk(risk),
-				Detail:      detail,
-				RiskLevel:   risk,
-				Remediation: rem,
+			if !pitr {
+				d := "point-in-time recovery disabled"
+				results = append(
+					results,
+					audit.Finding{
+						Service:    "dynamodb",
+						ResourceID: name,
+						Tags:       tags,
+						Check:      "no_pitr",
+						Status:     "FAIL",
+						Detail:     d,
+						RiskLevel:  "MEDIUM",
+						Remediation: remediation.Recommend(
+							"security",
+							"dynamodb",
+							"no_pitr",
+							name,
+							d,
+						),
+					},
+				)
 			}
+			if !delProtect {
+				d := "deletion protection disabled"
+				results = append(
+					results,
+					audit.Finding{
+						Service:    "dynamodb",
+						ResourceID: name,
+						Tags:       tags,
+						Check:      "no_delete_protection",
+						Status:     "FAIL",
+						Detail:     d,
+						RiskLevel:  "MEDIUM",
+						Remediation: remediation.Recommend(
+							"security",
+							"dynamodb",
+							"no_delete_protection",
+							name,
+							d,
+						),
+					},
+				)
+			}
+			if len(results) == 0 {
+				results = append(
+					results,
+					audit.Finding{
+						Service:    "dynamodb",
+						ResourceID: name,
+						Tags:       tags,
+						Check:      "dynamodb_posture",
+						Status:     "PASS",
+						Detail:     "encrypted=true, pitr=true, deletion_protection=true",
+						RiskLevel:  "MINIMAL",
+					},
+				)
+			}
+			return results
 		},
-	)
-
-	return results, nil
+	), nil
 }
