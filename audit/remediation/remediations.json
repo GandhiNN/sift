@@ -411,9 +411,27 @@
       }
     },
     "s3": {
-      "bucket_security": {
-        "action": "Enable public access block and encryption",
+      "public_access": {
+        "action": "Enable public access block",
         "command": "aws s3api put-public-access-block --bucket {{.ResourceID}} --public-access-block-configuration BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true",
+        "confidence": "HIGH",
+        "action_risk": "LOW"
+      },
+      "no_encryption": {
+        "action": "Enable default server-side encryption",
+        "command": "aws s3api put-bucket-encryption --bucket {{.ResourceID}} --server-side-encryption-configuration '{\"Rules\":[{\"ApplyServerSideEncryptionByDefault\":{\"SSEAlgorithm\":\"AES256\"}}]}'",
+        "confidence": "HIGH",
+        "action_risk": "LOW"
+      },
+      "no_versioning": {
+        "action": "Enable bucket versioning",
+        "command": "aws s3api put-bucket-versioning --bucket {{.ResourceID}} --versioning-configuration Status=Enabled",
+        "confidence": "HIGH",
+        "action_risk": "LOW"
+      },
+      "no_logging": {
+        "action": "Enable server access logging",
+        "command": "aws s3api put-bucket-logging --bucket {{.ResourceID}} --bucket-logging-status '{\"LoggingEnabled\":{\"TargetBucket\":\"<log-bucket>\",\"TargetPrefix\":\"{{.ResourceID}}/\"}}'",
         "confidence": "HIGH",
         "action_risk": "LOW"
       }
@@ -501,11 +519,31 @@
       }
     },
     "lambda": {
-      "lambda_security": {
+      "public_function_url": {
         "action": "Remove public function URL or add authentication",
         "command": "aws lambda delete-function-url-config --function-name {{.ResourceID}}",
         "confidence": "HIGH",
         "action_risk": "MEDIUM"
+      },
+      "deprecated_runtime": {
+        "action": "Upgrade to a supported runtime version",
+        "command": "aws lambda update-function-configuration --function-name {{.ResourceID}} --runtime <supported-runtime>",
+        "confidence": "HIGH",
+        "action_risk": "MEDIUM"
+      }
+    },
+    "kms": {
+      "wildcard_principal": {
+        "action": "Restrict key policy to specific principals",
+        "command": "aws kms put-key-policy --key-id {{.ResourceID}} --policy-name default --policy <restricted-policy>",
+        "confidence": "HIGH",
+        "action_risk": "HIGH"
+      },
+      "no_rotation": {
+        "action": "Enable automatic key rotation",
+        "command": "aws kms enable-key-rotation --key-id {{.ResourceID}}",
+        "confidence": "HIGH",
+        "action_risk": "LOW"
       }
     },
     "iam": {
@@ -523,11 +561,23 @@
       }
     },
     "glue": {
-      "glue_security": {
-        "action": "Enable catalog encryption and security configuration",
+      "no_catalog_encryption": {
+        "action": "Enable data catalog encryption",
         "command": "aws glue put-data-catalog-encryption-settings --data-catalog-encryption-settings '{\"EncryptionAtRest\":{\"CatalogEncryptionMode\":\"SSE-KMS\"}}'",
         "confidence": "HIGH",
         "action_risk": "LOW"
+      },
+      "no_job_security_config": {
+        "action": "Attach a security configuration to the Glue job",
+        "command": "aws glue update-job --job-name {{.ResourceID}} --job-update '{\"SecurityConfiguration\":\"<config-name>\"}'",
+        "confidence": "HIGH",
+        "action_risk": "LOW"
+      },
+      "dev_endpoint": {
+        "action": "Delete deprecated dev endpoint",
+        "command": "aws glue delete-dev-endpoint --endpoint-name {{.ResourceID}}",
+        "confidence": "HIGH",
+        "action_risk": "MEDIUM"
       }
     },
     "stepfunctions": {
@@ -545,8 +595,8 @@
       }
     },
     "backup": {
-      "vault_security": {
-        "action": "Enable vault encryption with KMS",
+      "no_encryption": {
+        "action": "Create encrypted backup vault with KMS key",
         "command": "aws backup create-backup-vault --backup-vault-name {{.ResourceID}} --encryption-key-arn <kms-arn>",
         "confidence": "HIGH",
         "action_risk": "LOW"
