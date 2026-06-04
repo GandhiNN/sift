@@ -42,15 +42,15 @@ func AuditRedshift(ctx context.Context, cfg aws.Config) ([]audit.Finding, error)
 			)
 			logging := loggingResp != nil && aws.ToBool(loggingResp.LoggingEnabled)
 
-			hasIssue := false
+			var results []audit.Finding
 			if pub {
 				risk := "HIGH"
 				if !enc {
 					risk = "CRITICAL"
 				}
 				d := fmt.Sprintf("publicly_accessible=true, encrypted=%t", enc)
-				findings = append(
-					findings,
+				results = append(
+					results,
 					audit.Finding{
 						Service:    "redshift",
 						ResourceID: id,
@@ -68,12 +68,11 @@ func AuditRedshift(ctx context.Context, cfg aws.Config) ([]audit.Finding, error)
 						),
 					},
 				)
-				hasIssue = true
 			}
 			if !enc {
 				d := "cluster encryption disabled"
-				findings = append(
-					findings,
+				results = append(
+					results,
 					audit.Finding{
 						Service:    "redshift",
 						ResourceID: id,
@@ -91,12 +90,11 @@ func AuditRedshift(ctx context.Context, cfg aws.Config) ([]audit.Finding, error)
 						),
 					},
 				)
-				hasIssue = true
 			}
 			if !logging {
 				d := "audit logging disabled"
-				findings = append(
-					findings,
+				results = append(
+					results,
 					audit.Finding{
 						Service:    "redshift",
 						ResourceID: id,
@@ -114,11 +112,10 @@ func AuditRedshift(ctx context.Context, cfg aws.Config) ([]audit.Finding, error)
 						),
 					},
 				)
-				hasIssue = true
 			}
-			if !hasIssue {
-				findings = append(
-					findings,
+			if len(results) == 0 {
+				results = append(
+					results,
 					audit.Finding{
 						Service:    "redshift",
 						ResourceID: id,
@@ -130,6 +127,7 @@ func AuditRedshift(ctx context.Context, cfg aws.Config) ([]audit.Finding, error)
 					},
 				)
 			}
+			findings = append(findings, results...)
 		}
 		bar.Add(len(page.Clusters))
 	}
