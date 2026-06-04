@@ -15,14 +15,6 @@ func init() {
 	audit.Register(Module, audit.Checker{Name: "ecr", Fn: AuditECR})
 }
 
-type ecrAPI interface {
-	ListTagsForResource(
-		ctx context.Context,
-		params *ecr.ListTagsForResourceInput,
-		optFns ...func(*ecr.Options),
-	) (*ecr.ListTagsForResourceOutput, error)
-}
-
 func AuditECR(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) {
 	client := ecr.NewFromConfig(cfg)
 

@@ -33,54 +33,6 @@ var deprecatedRuntimes = map[string]bool{
 	"provided":      true,
 }
 
-type lambdaAPI interface {
-	ListTags(
-		ctx context.Context,
-		params *lambda.ListTagsInput,
-		optFns ...func(*lambda.Options),
-	) (*lambda.ListTagsOutput, error)
-	GetFunctionUrlConfig(
-		ctx context.Context,
-		params *lambda.GetFunctionUrlConfigInput,
-		optFns ...func(*lambda.Options),
-	) (*lambda.GetFunctionUrlConfigOutput, error)
-}
-
-type lambdaFunction struct {
-	name    string
-	runtime string
-	tags    map[string]string
-}
-
-func parseLambdaFunction(
-	ctx context.Context,
-	client lambdaAPI,
-	fn lambdatypes.FunctionConfiguration,
-) lambdaFunction {
-	f := lambdaFunction{
-		name:    aws.ToString(fn.FunctionName),
-		runtime: string(fn.Runtime),
-	}
-	tagResp, err := client.ListTags(ctx, &lambda.ListTagsInput{Resource: fn.FunctionArn})
-	if err == nil {
-		f.tags = tagResp.Tags
-	}
-	return f
-}
-
-func lambdaRisk(hasPublicURL bool, authType string, deprecatedRuntime bool) string {
-	switch {
-	case hasPublicURL && strings.ToUpper(authType) == "NONE":
-		return "CRITICAL"
-	case deprecatedRuntime:
-		return "HIGH"
-	case hasPublicURL:
-		return "MEDIUM"
-	default:
-		return "MINIMAL"
-	}
-}
-
 func AuditLambda(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) {
 	client := lambda.NewFromConfig(cfg)
 
@@ -99,22 +51,33 @@ func AuditLambda(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) {
 		allFunctions,
 		"Auditing Lambda functions",
 		func(ctx context.Context, fn lambdatypes.FunctionConfiguration) []audit.Finding {
-			f := parseLambdaFunction(ctx, client, fn)
+			name := aws.ToString(fn.FunctionName)
+			runtime := string(fn.Runtime)
+
+			var tags map[string]string
+			tagResp, err := client.ListTags(ctx, &lambda.ListTagsInput{Resource: fn.FunctionArn})
+			if err == nil {
+				tags = tagResp.Tags
+			}
+
 			hasPublicURL := false
 			authType := ""
 			urlResp, err := client.GetFunctionUrlConfig(ctx, &lambda.GetFunctionUrlConfigInput{
-				FunctionName: &f.name,
+				FunctionName: &name,
 			})
 			if err == nil && urlResp.FunctionUrl != nil {
 				hasPublicURL = true
 				authType = string(urlResp.AuthType)
 			}
-			deprecated := deprecatedRuntimes[f.runtime]
+			deprecated := deprecatedRuntimes[runtime]
 
 			var results []audit.Finding
 
 			if hasPublicURL {
-				risk := lambdaRisk(true, authType, false)
+				risk := "MEDIUM"
+				if strings.ToUpper(authType) == "NONE" {
+					risk = "CRITICAL"
+				}
 				detail := fmt.Sprintf(
 					"url=%s, auth=%s",
 					aws.ToString(urlResp.FunctionUrl),
@@ -122,8 +85,8 @@ func AuditLambda(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) {
 				)
 				results = append(results, audit.Finding{
 					Service:    "lambda",
-					ResourceID: f.name,
-					Tags:       f.tags,
+					ResourceID: name,
+					Tags:       tags,
 					Check:      "public_function_url",
 					Status:     statusFromRisk(risk),
 					Detail:     detail,
@@ -132,17 +95,17 @@ func AuditLambda(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) {
 						"security",
 						"lambda",
 						"public_function_url",
-						f.name,
+						name,
 						detail,
 					),
 				})
 			}
 			if deprecated {
-				detail := fmt.Sprintf("runtime=%s, no longer receives security patches", f.runtime)
+				detail := fmt.Sprintf("runtime=%s, no longer receives security patches", runtime)
 				results = append(results, audit.Finding{
 					Service:    "lambda",
-					ResourceID: f.name,
-					Tags:       f.tags,
+					ResourceID: name,
+					Tags:       tags,
 					Check:      "deprecated_runtime",
 					Status:     statusFromRisk("HIGH"),
 					Detail:     detail,
@@ -151,7 +114,7 @@ func AuditLambda(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) {
 						"security",
 						"lambda",
 						"deprecated_runtime",
-						f.name,
+						name,
 						detail,
 					),
 				})
@@ -159,13 +122,13 @@ func AuditLambda(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) {
 			if !hasPublicURL && !deprecated {
 				results = append(results, audit.Finding{
 					Service:    "lambda",
-					ResourceID: f.name,
-					Tags:       f.tags,
+					ResourceID: name,
+					Tags:       tags,
 					Check:      "deprecated_runtime",
 					Status:     "PASS",
 					Detail: fmt.Sprintf(
 						"runtime=%s, no public URL, supported runtime",
-						f.runtime,
+						runtime,
 					),
 					RiskLevel: "MINIMAL",
 				})

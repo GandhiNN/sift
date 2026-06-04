@@ -17,42 +17,6 @@ func init() {
 	audit.Register(Module, audit.Checker{Name: "glue", Fn: AuditGlue})
 }
 
-type glueTagsAPI interface {
-	GetTags(
-		ctx context.Context,
-		params *glue.GetTagsInput,
-		optFns ...func(*glue.Options),
-	) (*glue.GetTagsOutput, error)
-}
-
-type glueJob struct {
-	name      string
-	role      string
-	encrypted bool
-	tags      map[string]string
-}
-
-func parseGlueJob(
-	ctx context.Context,
-	client glueTagsAPI,
-	job gluetypes.Job,
-	region, accountID string,
-) glueJob {
-	g := glueJob{
-		name: aws.ToString(job.Name),
-		role: aws.ToString(job.Role),
-	}
-	if job.SecurityConfiguration != nil && *job.SecurityConfiguration != "" {
-		g.encrypted = true
-	}
-	arn := fmt.Sprintf("arn:aws:glue:%s:%s:job/%s", region, accountID, g.name)
-	tagResp, err := client.GetTags(ctx, &glue.GetTagsInput{ResourceArn: &arn})
-	if err == nil {
-		g.tags = tagResp.Tags
-	}
-	return g
-}
-
 func AuditGlue(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) {
 	client := glue.NewFromConfig(cfg)
 	stsClient := sts.NewFromConfig(cfg)
@@ -127,26 +91,35 @@ func AuditGlue(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) {
 		allJobs,
 		"Auditing Glue job security",
 		func(ctx context.Context, job gluetypes.Job) audit.Finding {
-			g := parseGlueJob(ctx, client, job, region, accountID)
+			name := aws.ToString(job.Name)
+			encrypted := job.SecurityConfiguration != nil && *job.SecurityConfiguration != ""
+
+			var tags map[string]string
+			arn := fmt.Sprintf("arn:aws:glue:%s:%s:job/%s", region, accountID, name)
+			tagResp, err := client.GetTags(ctx, &glue.GetTagsInput{ResourceArn: &arn})
+			if err == nil {
+				tags = tagResp.Tags
+			}
+
 			risk := "MINIMAL"
-			if !g.encrypted {
+			if !encrypted {
 				risk = "LOW"
 			}
-			detail := fmt.Sprintf("security_config=%t, role=%s", g.encrypted, g.role)
+			detail := fmt.Sprintf("security_config=%t, role=%s", encrypted, aws.ToString(job.Role))
 			var rem *audit.Remediation
 			if risk != "MINIMAL" {
 				rem = remediation.Recommend(
 					"security",
 					"glue",
 					"no_job_security_config",
-					g.name,
+					name,
 					detail,
 				)
 			}
 			return audit.Finding{
 				Service:     "glue",
-				ResourceID:  g.name,
-				Tags:        g.tags,
+				ResourceID:  name,
+				Tags:        tags,
 				Check:       "job_security",
 				Status:      statusFromRisk(risk),
 				Detail:      detail,
