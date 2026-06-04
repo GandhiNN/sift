@@ -135,7 +135,13 @@ func AuditGlue(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) {
 			detail := fmt.Sprintf("security_config=%t, role=%s", g.encrypted, g.role)
 			var rem *audit.Remediation
 			if risk != "MINIMAL" {
-				rem = remediation.Recommend("security", "glue", "glue_security", g.name, detail)
+				rem = remediation.Recommend(
+					"security",
+					"glue",
+					"no_job_security_config",
+					g.name,
+					detail,
+				)
 			}
 			return audit.Finding{
 				Service:     "glue",
@@ -170,7 +176,7 @@ func AuditGlue(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) {
 				Remediation: remediation.Recommend(
 					"security",
 					"glue",
-					"glue_security",
+					"dev_endpoint",
 					name,
 					"dev endpoints are deprecated",
 				),

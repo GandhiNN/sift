@@ -73,7 +73,7 @@ func AuditBackup(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) {
 				rem = remediation.Recommend(
 					"security",
 					"backup",
-					"vault_security",
+					"no_encryption",
 					entry.name,
 					detail,
 				)
@@ -82,7 +82,7 @@ func AuditBackup(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) {
 			return audit.Finding{
 				Service:     "backup",
 				ResourceID:  entry.name,
-				Check:       "vault_security",
+				Check:       "no_encryption",
 				Status:      statusFromRisk(risk),
 				Detail:      detail,
 				RiskLevel:   risk,
