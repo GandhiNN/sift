@@ -86,7 +86,13 @@ func AuditGlue(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) {
 
 		var rem *audit.Remediation
 		if risk != "MINIMAL" {
-			rem = remediation.Recommend("security", "glue", "glue_security", "data_catalog", detail)
+			rem = remediation.Recommend(
+				"security",
+				"glue",
+				"no_catalog_encryption",
+				"data_catalog",
+				detail,
+			)
 		}
 
 		findings = append(findings, audit.Finding{

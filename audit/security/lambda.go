@@ -131,7 +131,7 @@ func AuditLambda(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) {
 					Remediation: remediation.Recommend(
 						"security",
 						"lambda",
-						"lambda_security",
+						"public_function_url",
 						f.name,
 						detail,
 					),
@@ -150,7 +150,7 @@ func AuditLambda(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) {
 					Remediation: remediation.Recommend(
 						"security",
 						"lambda",
-						"lambda_security",
+						"deprecated_runtime",
 						f.name,
 						detail,
 					),
@@ -161,7 +161,7 @@ func AuditLambda(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) {
 					Service:    "lambda",
 					ResourceID: f.name,
 					Tags:       f.tags,
-					Check:      "lambda_security",
+					Check:      "deprecated_runtime",
 					Status:     "PASS",
 					Detail: fmt.Sprintf(
 						"runtime=%s, no public URL, supported runtime",
