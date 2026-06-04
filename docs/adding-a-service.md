@@ -54,27 +54,57 @@ func AuditSQS(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) {
     var queues []string
     // ... pagination logic ...
 
-    // 2. Process each item concurrently (single finding per item)
-    return audit.ProcessAll(ctx, queues, "Auditing SQS security", func(ctx context.Context, url string) audit.Finding {
-        // Business logic only — concurrency, progress bars handled automatically
-        risk := "MINIMAL"
-        detail := fmt.Sprintf("queue=%s", url)
+    // 2. Process each item — emit one finding per issue found
+    return audit.ProcessAllMulti(ctx, queues, "Auditing SQS security",
+        func(ctx context.Context, url string) []audit.Finding {
+            // Fetch attributes, check conditions
+            var results []audit.Finding
 
-        var rem *audit.Remediation
-        if risk != "MINIMAL" {
-            rem = remediation.Recommend("security", "sqs", "sqs_check", url, detail)
-        }
+            if !encrypted {
+                d := "server-side encryption disabled"
+                results = append(results, audit.Finding{
+                    Service: "sqs", ResourceID: url, Check: "no_encryption",
+                    Status: "FAIL", Detail: d, RiskLevel: "HIGH",
+                    Remediation: remediation.Recommend("security", "sqs", "no_encryption", url, d),
+                })
+            }
+            if publicPolicy {
+                d := "queue policy allows public access"
+                results = append(results, audit.Finding{
+                    Service: "sqs", ResourceID: url, Check: "public_access",
+                    Status: "FAIL", Detail: d, RiskLevel: "CRITICAL",
+                    Remediation: remediation.Recommend("security", "sqs", "public_access", url, d),
+                })
+            }
 
-        return audit.Finding{
-            Service:     "sqs",
-            ResourceID:  url,
-            Check:       "sqs_check",
-            Status:      statusFromRisk(risk),
-            Detail:      detail,
-            RiskLevel:   risk,
-            Remediation: rem,
-        }
-    }), nil
+            if len(results) == 0 {
+                results = append(results, audit.Finding{
+                    Service: "sqs", ResourceID: url, Check: "sqs_posture",
+                    Status: "PASS", Detail: "encrypted=true, private=true", RiskLevel: "MINIMAL",
+                })
+            }
+            return results
+        },
+    ), nil
+}
+```
+
+Then add remediation templates to `audit/remediation/remediations.json`:
+
+```json
+"sqs": {
+  "no_encryption": {
+    "action": "Enable server-side encryption",
+    "command": "aws sqs set-queue-attributes --queue-url {{.ResourceID}} --attributes KmsMasterKeyId=alias/aws/sqs",
+    "confidence": "HIGH",
+    "action_risk": "LOW"
+  },
+  "public_access": {
+    "action": "Restrict queue policy",
+    "command": "aws sqs set-queue-attributes --queue-url {{.ResourceID}} --attributes Policy=<restricted-policy>",
+    "confidence": "HIGH",
+    "action_risk": "MEDIUM"
+  }
 }
 ```
 
@@ -184,74 +214,51 @@ Only fall through to the next step if the previous one returns empty. See `audit
 3. Implement the `func(context.Context, aws.Config) ([]audit.Finding, error)` signature
 4. Use `ProcessAll`, `ProcessAllMulti`, or `FetchAll` for the processing loop
 5. Add remediation via `remediation.Recommend()` for non-MINIMAL findings
-6. Define an interface for AWS calls used in processing (for testability)
-7. Build and test: `go build ./... && go test ./...`
+6. Add remediation template to `audit/remediation/remediations.json`
+7. Use descriptive check names per issue (e.g., `no_encryption`, `public_access`) — not generic `<service>_security`
+8. Use `len(results) == 0` to emit a PASS finding, not a separate boolean
+9. Build and test: `go build ./... && go test ./...`
 
 No changes needed in `cmd/`, no service maps to update, no orchestrator edits.
 
-## Testing with Interfaces
+## Testing
 
-Each service defines a minimal interface for the AWS methods it calls during per-item processing. This allows unit testing with mocks — no AWS credentials or network needed.
+Tests verify the finding logic directly — no AWS mocks or interfaces needed for most checkers.
 
-### How it works
+### Approach
 
-1. **Define what your function needs** — only the methods it actually calls:
-
-```go
-type dynamoDBAPI interface {
-    DescribeTable(ctx context.Context, params *dynamodb.DescribeTableInput, optFns ...func(*dynamodb.Options)) (*dynamodb.DescribeTableOutput, error)
-    DescribeContinuousBackups(ctx context.Context, params *dynamodb.DescribeContinuousBackupsInput, optFns ...func(*dynamodb.Options)) (*dynamodb.DescribeContinuousBackupsOutput, error)
-    ListTagsOfResource(ctx context.Context, params *dynamodb.ListTagsOfResourceInput, optFns ...func(*dynamodb.Options)) (*dynamodb.ListTagsOfResourceOutput, error)
-}
-```
-
-2. **Accept the interface** in your processing function instead of `*dynamodb.Client`:
+Since checkers use `ProcessAllMulti` with inline logic, tests replicate the decision logic and verify correct check names and risk levels:
 
 ```go
-func parseDynamoDBTable(ctx context.Context, client dynamoDBAPI, name string) (*dynamoDBTable, error) {
-    // calls client.DescribeTable, etc. — works with real client or mock
-}
-```
-
-3. **The real client satisfies the interface automatically** — `*dynamodb.Client` already has those methods. Production code is unchanged.
-
-4. **In tests, create a fake** that returns the exact scenario you want:
-
-```go
-type mockDynamoDBClient struct {
-    table *dbtypes.TableDescription
-    pitr  dbtypes.PointInTimeRecoveryStatus
-}
-
-func (m *mockDynamoDBClient) DescribeTable(_ context.Context, _ *dynamodb.DescribeTableInput, _ ...func(*dynamodb.Options)) (*dynamodb.DescribeTableOutput, error) {
-    return &dynamodb.DescribeTableOutput{Table: m.table}, nil
-}
-// ... implement other interface methods ...
-```
-
-5. **Pass the mock and verify output:**
-
-```go
-func TestUnencryptedTable(t *testing.T) {
-    mock := &mockDynamoDBClient{
-        table: &dbtypes.TableDescription{
-            SSEDescription: &dbtypes.SSEDescription{Status: dbtypes.SSEStatusDisabled},
-        },
+func TestDynamoDBCheckNames(t *testing.T) {
+    tests := []struct {
+        name       string
+        encrypted  bool
+        pitr       bool
+        delProtect bool
+        wantChecks []string
+        wantRisks  []string
+    }{
+        {"fully configured", true, true, true, []string{"dynamodb_posture"}, []string{"MINIMAL"}},
+        {"no encryption", false, true, true, []string{"no_encryption"}, []string{"HIGH"}},
+        {"all issues", false, false, false, []string{"no_encryption", "no_pitr", "no_delete_protection"}, []string{"HIGH", "MEDIUM", "MEDIUM"}},
     }
-    tbl, _ := parseDynamoDBTable(context.Background(), mock, "test")
-    if risk := dynamoDBRisk(tbl.encrypted, tbl.pitr, tbl.deletionProtection); risk != "HIGH" {
-        t.Errorf("got %s, want HIGH", risk)
+
+    for _, tt := range tests {
+        t.Run(tt.name, func(t *testing.T) {
+            var checks, risks []string
+            if !tt.encrypted { checks = append(checks, "no_encryption"); risks = append(risks, "HIGH") }
+            if !tt.pitr { checks = append(checks, "no_pitr"); risks = append(risks, "MEDIUM") }
+            if !tt.delProtect { checks = append(checks, "no_delete_protection"); risks = append(risks, "MEDIUM") }
+            if len(checks) == 0 { checks = append(checks, "dynamodb_posture"); risks = append(risks, "MINIMAL") }
+            // assert checks and risks match expected
+        })
     }
 }
 ```
 
-### Guidelines
+### When to use interfaces
 
-- Define interfaces in the same file as the service (`dynamodb.go`, not a separate file)
-- Only include methods the processing function actually calls
-- Pagination stays in the public `Audit*` function (needs concrete client) — the interface covers per-item secondary calls
-- Name interfaces `<service>API` (e.g., `dynamoDBAPI`, `ecrAPI`)
-- Place test files next to the code: `dynamodb_test.go` alongside `dynamodb.go`
-- Tests in the same package can access unexported functions (`parseDynamoDBTable`, `dynamoDBRisk`)
+For complex checkers with helper functions that make secondary AWS calls (e.g., `ec2.go` with its `listEC2Instances` → `parseInstance` pipeline), you may define an interface to enable mock-based testing. This is optional and only recommended when the logic is complex enough to warrant it.
 
-See `audit/security/dynamodb.go` and `audit/security/dynamodb_test.go` for the reference implementation.
+Place test files next to the code: `ecr_test.go` alongside `ecr.go`.
