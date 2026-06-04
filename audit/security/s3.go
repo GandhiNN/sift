@@ -17,53 +17,6 @@ func init() {
 	audit.Register(Module, audit.Checker{Name: "s3", Fn: AuditS3})
 }
 
-type s3Bucket struct {
-	name          string
-	publicBlocked bool
-	encrypted     bool
-	versioning    bool
-	logging       bool
-	tags          map[string]string
-}
-
-func parseS3Bucket(ctx context.Context, client *s3.Client, name string) s3Bucket {
-	b := s3Bucket{name: name}
-
-	pab, err := client.GetPublicAccessBlock(ctx, &s3.GetPublicAccessBlockInput{Bucket: &name})
-	if err == nil && pab.PublicAccessBlockConfiguration != nil {
-		c := pab.PublicAccessBlockConfiguration
-		b.publicBlocked = aws.ToBool(c.BlockPublicAcls) &&
-			aws.ToBool(c.BlockPublicPolicy) &&
-			aws.ToBool(c.IgnorePublicAcls) &&
-			aws.ToBool(c.RestrictPublicBuckets)
-	}
-
-	enc, err := client.GetBucketEncryption(ctx, &s3.GetBucketEncryptionInput{Bucket: &name})
-	if err == nil && enc.ServerSideEncryptionConfiguration != nil {
-		b.encrypted = len(enc.ServerSideEncryptionConfiguration.Rules) > 0
-	}
-
-	ver, err := client.GetBucketVersioning(ctx, &s3.GetBucketVersioningInput{Bucket: &name})
-	if err == nil {
-		b.versioning = ver.Status == types.BucketVersioningStatusEnabled
-	}
-
-	log, err := client.GetBucketLogging(ctx, &s3.GetBucketLoggingInput{Bucket: &name})
-	if err == nil {
-		b.logging = log.LoggingEnabled != nil
-	}
-
-	tagResp, err := client.GetBucketTagging(ctx, &s3.GetBucketTaggingInput{Bucket: &name})
-	if err == nil {
-		b.tags = make(map[string]string, len(tagResp.TagSet))
-		for _, t := range tagResp.TagSet {
-			b.tags[aws.ToString(t.Key)] = aws.ToString(t.Value)
-		}
-	}
-
-	return b
-}
-
 func hasS3DataEvents(ctx context.Context, cfg aws.Config) bool {
 	ctClient := cloudtrail.NewFromConfig(cfg)
 	resp, err := ctClient.DescribeTrails(ctx, &cloudtrail.DescribeTrailsInput{})
@@ -113,65 +66,151 @@ func AuditS3(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) {
 			names = append(names, *b.Name)
 		}
 	}
-	dataEventsEnabled := hasS3DataEvents(ctx, cfg)
 
-	return audit.ProcessAll(
+	return audit.ProcessAllMulti(
 		ctx,
 		names,
 		"Auditing S3 buckets",
-		func(ctx context.Context, name string) audit.Finding {
-			bucket := parseS3Bucket(ctx, client, name)
-			risk := s3Risk(
-				bucket.publicBlocked,
-				bucket.encrypted,
-				bucket.versioning,
-				bucket.logging,
-			)
+		func(ctx context.Context, name string) []audit.Finding {
+			var publicBlocked, encrypted, versioning, logging bool
 
-			detail := fmt.Sprintf(
-				"public_blocked=%t, encrypted=%t, versioning=%t, logging=%t, cloudtrail_data_events=%t",
-				bucket.publicBlocked,
-				bucket.encrypted,
-				bucket.versioning,
-				bucket.logging,
-				dataEventsEnabled,
+			pab, err := client.GetPublicAccessBlock(
+				ctx,
+				&s3.GetPublicAccessBlockInput{Bucket: &name},
 			)
-			var rem *audit.Remediation
-			if risk != "MINIMAL" {
-				rem = remediation.Recommend(
-					"security",
-					"s3",
-					"bucket_security",
-					bucket.name,
-					detail,
+			if err == nil && pab.PublicAccessBlockConfiguration != nil {
+				c := pab.PublicAccessBlockConfiguration
+				publicBlocked = aws.ToBool(c.BlockPublicAcls) && aws.ToBool(c.BlockPublicPolicy) &&
+					aws.ToBool(c.IgnorePublicAcls) &&
+					aws.ToBool(c.RestrictPublicBuckets)
+			}
+
+			enc, err := client.GetBucketEncryption(ctx, &s3.GetBucketEncryptionInput{Bucket: &name})
+			if err == nil && enc.ServerSideEncryptionConfiguration != nil {
+				encrypted = len(enc.ServerSideEncryptionConfiguration.Rules) > 0
+			}
+
+			ver, err := client.GetBucketVersioning(ctx, &s3.GetBucketVersioningInput{Bucket: &name})
+			if err == nil {
+				versioning = ver.Status == types.BucketVersioningStatusEnabled
+			}
+
+			logResp, err := client.GetBucketLogging(ctx, &s3.GetBucketLoggingInput{Bucket: &name})
+			if err == nil {
+				logging = logResp.LoggingEnabled != nil
+			}
+
+			var tags map[string]string
+			tagResp, err := client.GetBucketTagging(ctx, &s3.GetBucketTaggingInput{Bucket: &name})
+			if err == nil {
+				tags = make(map[string]string, len(tagResp.TagSet))
+				for _, t := range tagResp.TagSet {
+					tags[aws.ToString(t.Key)] = aws.ToString(t.Value)
+				}
+			}
+
+			var results []audit.Finding
+			if !publicBlocked {
+				risk := "HIGH"
+				if !encrypted {
+					risk = "CRITICAL"
+				}
+				d := "public access block not fully enabled"
+				results = append(
+					results,
+					audit.Finding{
+						Service:    "s3",
+						ResourceID: name,
+						Tags:       tags,
+						Check:      "public_access",
+						Status:     statusFromRisk(risk),
+						Detail:     d,
+						RiskLevel:  risk,
+						Remediation: remediation.Recommend(
+							"security",
+							"s3",
+							"public_access",
+							name,
+							d,
+						),
+					},
 				)
 			}
-
-			return audit.Finding{
-				Service:     "s3",
-				ResourceID:  bucket.name,
-				Tags:        bucket.tags,
-				Check:       "bucket_security",
-				Status:      statusFromRisk(risk),
-				Detail:      detail,
-				RiskLevel:   risk,
-				Remediation: rem,
+			if !encrypted {
+				d := "default encryption not configured"
+				results = append(
+					results,
+					audit.Finding{
+						Service:    "s3",
+						ResourceID: name,
+						Tags:       tags,
+						Check:      "no_encryption",
+						Status:     "FAIL",
+						Detail:     d,
+						RiskLevel:  "MEDIUM",
+						Remediation: remediation.Recommend(
+							"security",
+							"s3",
+							"no_encryption",
+							name,
+							d,
+						),
+					},
+				)
 			}
+			if !versioning {
+				d := "versioning not enabled"
+				results = append(
+					results,
+					audit.Finding{
+						Service:    "s3",
+						ResourceID: name,
+						Tags:       tags,
+						Check:      "no_versioning",
+						Status:     "FAIL",
+						Detail:     d,
+						RiskLevel:  "LOW",
+						Remediation: remediation.Recommend(
+							"security",
+							"s3",
+							"no_versioning",
+							name,
+							d,
+						),
+					},
+				)
+			}
+			if !logging {
+				d := "access logging not enabled"
+				results = append(
+					results,
+					audit.Finding{
+						Service:     "s3",
+						ResourceID:  name,
+						Tags:        tags,
+						Check:       "no_logging",
+						Status:      "FAIL",
+						Detail:      d,
+						RiskLevel:   "LOW",
+						Remediation: remediation.Recommend("security", "s3", "no_logging", name, d),
+					},
+				)
+			}
+			if len(results) == 0 {
+				results = append(
+					results,
+					audit.Finding{
+						Service:    "s3",
+						ResourceID: name,
+						Tags:       tags,
+						Check:      "s3_posture",
+						Status:     "PASS",
+						Detail:     "public_blocked=true, encrypted=true, versioning=true, logging=true",
+						RiskLevel:  "MINIMAL",
+					},
+				)
+			}
+			return results
 		},
 	), nil
-}
-
-func s3Risk(publicBlocked, encrypted, versioning, logging bool) string {
-	switch {
-	case !publicBlocked && !encrypted:
-		return "CRITICAL"
-	case !publicBlocked:
-		return "HIGH"
-	case !encrypted:
-		return "MEDIUM"
-	case !versioning || !logging:
-		return "LOW"
-	default:
-		return "MINIMAL"
-	}
 }
