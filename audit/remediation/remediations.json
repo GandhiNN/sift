@@ -724,5 +724,15 @@
         "action_risk": "HIGH"
       }
     }
+  },
+  "governance": {
+    "tagging": {
+      "missing_tags": {
+        "action": "Add required tags to the resource",
+        "command": "aws resourcegroupstaggingapi tag-resources --resource-arn-list <arn> --tags team=<team>,env=<env>",
+        "confidence": "HIGH",
+        "action_risk": "LOW"
+      }
+    }
   }
 }
