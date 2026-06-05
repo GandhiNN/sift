@@ -727,9 +727,27 @@
   },
   "governance": {
     "tagging": {
-      "missing_tags": {
-        "action": "Add required tags to the resource",
-        "command": "aws resourcegroupstaggingapi tag-resources --resource-arn-list <arn> --tags team=<team>,env=<env>",
+      "missing_baseline_tags": {
+        "action": "Add mandatory baseline tags to the resource",
+        "command": "aws resourcegroupstaggingapi tag-resources --resource-arn-list <arn> --tags ProductCode=<value>,Environment=<value>",
+        "confidence": "HIGH",
+        "action_risk": "LOW"
+      },
+      "missing_iac_tags": {
+        "action": "Deploy resource via Terraform or add IaC tags manually",
+        "command": "aws resourcegroupstaggingapi tag-resources --resource-arn-list <arn> --tags stack=<value>,stack_env=<value>",
+        "confidence": "HIGH",
+        "action_risk": "LOW"
+      },
+      "missing_cost_tags": {
+        "action": "Add cost allocation tags for tracking",
+        "command": "aws resourcegroupstaggingapi tag-resources --resource-arn-list <arn> --tags Project=<value>,UseCase=<value>",
+        "confidence": "HIGH",
+        "action_risk": "LOW"
+      },
+      "missing_conditional_tag": {
+        "action": "Add required conditional tag (e.g., Backup_Plan for production)",
+        "command": "aws resourcegroupstaggingapi tag-resources --resource-arn-list <arn> --tags Backup_Plan=<value>",
         "confidence": "HIGH",
         "action_risk": "LOW"
       }
