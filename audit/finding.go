@@ -49,3 +49,16 @@ func GetChecks(ctx context.Context) []string {
 	}
 	return nil
 }
+
+type servicesKey struct{}
+
+func WithServices(ctx context.Context, services []string) context.Context {
+	return context.WithValue(ctx, servicesKey{}, services)
+}
+
+func GetServices(ctx context.Context) []string {
+	if v, ok := ctx.Value(servicesKey{}).([]string); ok {
+		return v
+	}
+	return nil
+}
