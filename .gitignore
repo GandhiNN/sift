@@ -40,3 +40,6 @@ bin/
 # Editor/IDE
 # .idea/
 # .vscode/
+
+# Pre-commit
+.pre-commit-config.yaml
