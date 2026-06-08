@@ -634,6 +634,20 @@
         "action_risk": "MEDIUM"
       }
     },
+    "route53": {
+      "dangling_cname": {
+        "action": "Remove or update the dangling CNAME record to prevent subdomain takeover",
+        "command": "aws route53 change-resource-record-sets --hosted-zone-id <zone-id> --change-batch '{\"Changes\":[{\"Action\":\"DELETE\",\"ResourceRecordSet\":{\"Name\":\"{{.ResourceID}}\",\"Type\":\"CNAME\",\"TTL\":300,\"ResourceRecords\":[{\"Value\":\"<target>\"}]}}]}'",
+        "confidence": "HIGH",
+        "action_risk": "MEDIUM"
+      },
+      "no_dnssec": {
+        "action": "Enable DNSSEC signing for the hosted zone",
+        "command": "aws route53 enable-hosted-zone-dnssec --hosted-zone-id <zone-id>",
+        "confidence": "HIGH",
+        "action_risk": "MEDIUM"
+      }
+    },
     "ebs": {
       "no_encryption": {
         "action": "Create encrypted volume (encryption cannot be added to existing volumes)",
