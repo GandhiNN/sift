@@ -47,6 +47,7 @@ type taggingConfig struct {
 	BaselineTags    []string                  `json:"baseline_tags"`
 	IaCTags         []string                  `json:"iac_tags"`
 	CostTags        []string                  `json:"cost_tags"`
+	OwnershipTags   []string                  `json:"ownership_tags"`
 	ConditionalTags map[string]conditionalTag `json:"conditional_tags"`
 }
 

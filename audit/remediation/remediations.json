@@ -745,6 +745,12 @@
         "confidence": "HIGH",
         "action_risk": "LOW"
       },
+      "missing_ownership_tags": {
+        "action": "Add technical and business owner tags",
+        "command": "aws resourcegroupstaggingapi tag-resources --resource-arn-list <arn> --tags TechnicalOwner=<value>,BusinessOwner=<value>",
+        "confidence": "HIGH",
+        "action_risk": "LOW"
+      },
       "missing_conditional_tag": {
         "action": "Add required conditional tag (e.g., Backup_Plan for production)",
         "command": "aws resourcegroupstaggingapi tag-resources --resource-arn-list <arn> --tags Backup_Plan=<value>",
