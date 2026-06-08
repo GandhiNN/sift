@@ -82,6 +82,8 @@ github.com/aws/aws-sdk-go-v2/service/redshift v1.62.8 h1:5Wg38ZauCqmomDAGTCDbA/t
 github.com/aws/aws-sdk-go-v2/service/redshift v1.62.8/go.mod h1:uLWlNO4q8278lSx2iKIJZ09zSXNJ6uQTFM1jvZIZRf4=
 github.com/aws/aws-sdk-go-v2/service/resourcegroupstaggingapi v1.33.2 h1:9/ffU7I/IZpWSy3Ht1cuMCfn9wwk2Ya6CujY4eT623s=
 github.com/aws/aws-sdk-go-v2/service/resourcegroupstaggingapi v1.33.2/go.mod h1:8mFAXvJPUSFI+Gklwx5lGEapkVjPeBTqzGeEURZ02fA=
+github.com/aws/aws-sdk-go-v2/service/route53 v1.63.2 h1:5PG11zFh4s6n+FjyhCOs00K/yo4sLtemdYGjT2hccc8=
+github.com/aws/aws-sdk-go-v2/service/route53 v1.63.2/go.mod h1:pUzWuR5MLjU1xlMmCT0qUALPqBFFxf/zdHAmusQlVuM=
 github.com/aws/aws-sdk-go-v2/service/s3 v1.100.0 h1:7G26Sae6PMKn4kMcU5JzNfrm1YrKwyOhowXPYR2WiWY=
 github.com/aws/aws-sdk-go-v2/service/s3 v1.100.0/go.mod h1:Fw9aqhJicIVee1VytBBjH+l+5ov6/PhbtIK/u3rt/ls=
 github.com/aws/aws-sdk-go-v2/service/sagemaker v1.242.0 h1:oPfr3pmwZv8UCsLDqzCNAUSAUBr71iBmwyulxPsWZQ8=
