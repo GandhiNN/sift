@@ -594,6 +594,26 @@
         "action_risk": "LOW"
       }
     },
+    "cloudfront": {
+      "no_https": {
+        "action": "Enforce HTTPS by setting viewer protocol policy to redirect-to-https",
+        "command": "aws cloudfront update-distribution --id {{.ResourceID}} --default-cache-behavior ViewerProtocolPolicy=redirect-to-https",
+        "confidence": "HIGH",
+        "action_risk": "LOW"
+      },
+      "outdated_tls": {
+        "action": "Update minimum TLS version to TLSv1.2_2021",
+        "command": "aws cloudfront update-distribution --id {{.ResourceID}} --viewer-certificate MinimumProtocolVersion=TLSv1.2_2021",
+        "confidence": "HIGH",
+        "action_risk": "LOW"
+      },
+      "no_waf": {
+        "action": "Associate a WAF web ACL with the distribution",
+        "command": "aws cloudfront update-distribution --id {{.ResourceID}} --web-acl-id <acl-arn>",
+        "confidence": "HIGH",
+        "action_risk": "LOW"
+      }
+    },
     "ebs": {
       "no_encryption": {
         "action": "Create encrypted volume (encryption cannot be added to existing volumes)",
