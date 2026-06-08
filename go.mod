@@ -5,6 +5,7 @@ go 1.25.0
 require (
 	github.com/aws/aws-sdk-go-v2 v1.41.12
 	github.com/aws/aws-sdk-go-v2/config v1.32.16
+	github.com/aws/aws-sdk-go-v2/service/acm v1.39.5
 	github.com/aws/aws-sdk-go-v2/service/autoscaling v1.66.2
 	github.com/aws/aws-sdk-go-v2/service/backup v1.56.0
 	github.com/aws/aws-sdk-go-v2/service/cloudfront v1.65.1
