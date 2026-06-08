@@ -614,6 +614,26 @@
         "action_risk": "LOW"
       }
     },
+    "acm": {
+      "expired": {
+        "action": "Request or import a new certificate to replace the expired one",
+        "command": "aws acm request-certificate --domain-name {{.ResourceID}} --validation-method DNS",
+        "confidence": "HIGH",
+        "action_risk": "MEDIUM"
+      },
+      "expiring_soon": {
+        "action": "Renew certificate or switch to DNS validation for auto-renewal",
+        "command": "aws acm renew-certificate --certificate-arn <arn>",
+        "confidence": "HIGH",
+        "action_risk": "LOW"
+      },
+      "no_auto_renewal": {
+        "action": "Switch to DNS validation to enable automatic renewal",
+        "command": "aws acm request-certificate --domain-name {{.ResourceID}} --validation-method DNS",
+        "confidence": "HIGH",
+        "action_risk": "MEDIUM"
+      }
+    },
     "ebs": {
       "no_encryption": {
         "action": "Create encrypted volume (encryption cannot be added to existing volumes)",
