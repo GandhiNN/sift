@@ -85,7 +85,50 @@ var listGlueCmd = &cobra.Command{
 	},
 }
 
+var listVpcCmd = &cobra.Command{
+	Use:   "vpc [resource]",
+	Short: "List VPC resources (subnets)",
+	Args:  cobra.MaximumNArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		start := time.Now()
+		ctx, cfg, cancel, err := buildAWSConfig()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(2)
+		}
+		defer cancel()
+
+		if quiet {
+			ctx = progress.WithQuiet(ctx, true)
+		}
+
+		var resources []audit.Resource
+
+		switch {
+		case len(args) == 0, args[0] == "subnets":
+			resources, err = list.ListVPCSubnets(ctx, cfg)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+				os.Exit(2)
+			}
+		default:
+			fmt.Fprintf(os.Stderr, "Error: unknown resource %q (available: subnets)\n", args[0])
+			os.Exit(2)
+		}
+
+		for i := range resources {
+			resources[i].Region = cfg.Region
+		}
+
+		if err := audit.OutputResources(format, resources, start, outputFile); err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(2)
+		}
+	},
+}
+
 func init() {
 	listCmd.AddCommand(listGlueCmd)
+	listCmd.AddCommand(listVpcCmd)
 	rootCmd.AddCommand(listCmd)
 }
