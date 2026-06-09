@@ -648,6 +648,48 @@
         "action_risk": "MEDIUM"
       }
     },
+    "sqs": {
+      "public_access": {
+        "action": "Restrict queue policy to specific principals",
+        "command": "aws sqs set-queue-attributes --queue-url <url> --attributes '{\"Policy\":\"<restricted-policy>\"}'",
+        "confidence": "HIGH",
+        "action_risk": "MEDIUM"
+      },
+      "no_encryption": {
+        "action": "Enable server-side encryption",
+        "command": "aws sqs set-queue-attributes --queue-url <url> --attributes '{\"SqsManagedSseEnabled\":\"true\"}'",
+        "confidence": "HIGH",
+        "action_risk": "LOW"
+      }
+    },
+    "sns": {
+      "public_access": {
+        "action": "Restrict topic policy to specific principals",
+        "command": "aws sns set-topic-attributes --topic-arn <arn> --attribute-name Policy --attribute-value <restricted-policy>",
+        "confidence": "HIGH",
+        "action_risk": "MEDIUM"
+      },
+      "no_encryption": {
+        "action": "Enable server-side encryption with KMS",
+        "command": "aws sns set-topic-attributes --topic-arn <arn> --attribute-name KmsMasterKeyId --attribute-value alias/aws/sns",
+        "confidence": "HIGH",
+        "action_risk": "LOW"
+      }
+    },
+    "eventbridge": {
+      "public_bus": {
+        "action": "Restrict event bus policy to specific principals",
+        "command": "aws events put-permission --event-bus-name {{.ResourceID}} --policy <restricted-policy>",
+        "confidence": "HIGH",
+        "action_risk": "MEDIUM"
+      },
+      "no_dlq": {
+        "action": "Configure a dead-letter queue for the rule target",
+        "command": "aws events put-targets --rule {{.ResourceID}} --targets '[{\"Id\":\"<id>\",\"Arn\":\"<arn>\",\"DeadLetterConfig\":{\"Arn\":\"<dlq-arn>\"}}]'",
+        "confidence": "HIGH",
+        "action_risk": "LOW"
+      }
+    },
     "ebs": {
       "no_encryption": {
         "action": "Create encrypted volume (encryption cannot be added to existing volumes)",
