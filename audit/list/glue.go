@@ -55,7 +55,7 @@ func ListGlueJobs(ctx context.Context, cfg aws.Config) ([]audit.Resource, error)
 
 			runsResp, err := client.GetJobRuns(ctx, &glue.GetJobRunsInput{
 				JobName:    job.Name,
-				MaxResults: aws.Int32(1),
+				MaxResults: aws.Int32(30),
 			})
 			if err == nil && len(runsResp.JobRuns) > 0 {
 				lastRun := runsResp.JobRuns[0]
@@ -63,6 +63,28 @@ func ListGlueJobs(ctx context.Context, cfg aws.Config) ([]audit.Resource, error)
 					props["last_run_time"] = lastRun.StartedOn.Format("2006-01-02")
 				}
 				props["last_run_status"] = string(lastRun.JobRunState)
+
+				// Calculate run frequency and avg DPU consumption
+				var totalDPU float64
+				runCount := 0
+				for _, run := range runsResp.JobRuns {
+					if run.JobRunState == "SUCCEEDED" || run.JobRunState == "FAILED" {
+						runCount++
+						dpu := aws.ToFloat64(run.MaxCapacity)
+						if dpu == 0 {
+							dpu = float64(aws.ToInt32(run.NumberOfWorkers))
+						}
+						var hours float64
+						if run.ExecutionTime > 0 {
+							hours = float64(run.ExecutionTime) / 3600.0
+						}
+						totalDPU += dpu * hours
+					}
+				}
+				if runCount > 0 {
+					props["runs_last_30"] = strconv.Itoa(runCount)
+					props["avg_dpu_hours"] = fmt.Sprintf("%.1f", totalDPU/float64(runCount))
+				}
 			}
 
 			r := audit.Resource{
