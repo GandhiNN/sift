@@ -24,6 +24,12 @@
         "command": "aws ec2 modify-instance-attribute --instance-id {{.ResourceID}} --instance-type <graviton-type>",
         "confidence": "HIGH",
         "action_risk": "MEDIUM"
+      },
+      "oversized_instance": {
+        "action": "Downsize to a smaller instance type",
+        "command": "aws ec2 modify-instance-attribute --instance-id {{.ResourceID}} --instance-type <smaller-type>",
+        "confidence": "MEDIUM",
+        "action_risk": "MEDIUM"
       }
     },
     "eip": {
@@ -77,15 +83,21 @@
       }
     },
     "docdb": {
-      "stopped_instance": {
-        "action": "Delete stopped cluster if unused",
+      "idle_instance": {
+        "action": "Delete idle DocumentDB instance or stop cluster",
         "command": "aws docdb delete-db-instance --db-instance-identifier {{.ResourceID}}",
         "confidence": "HIGH",
         "action_risk": "HIGH"
       },
+      "stopped_instance": {
+        "action": "Delete stopped DocumentDB cluster or restart if needed",
+        "command": "aws docdb delete-db-cluster --db-cluster-identifier {{.ResourceID}} --skip-final-snapshot",
+        "confidence": "MEDIUM",
+        "action_risk": "HIGH"
+      },
       "oversized_instance": {
-        "action": "Downsize to smaller instance class",
-        "command": "aws docdb modify-db-instance --db-instance-identifier {{.ResourceID}} --db-instance-class <smaller>",
+        "action": "Downsize to a smaller instance class",
+        "command": "aws docdb modify-db-instance --db-instance-identifier {{.ResourceID}} --db-instance-class <smaller-class>",
         "confidence": "MEDIUM",
         "action_risk": "MEDIUM"
       }
@@ -138,6 +150,12 @@
       "read_activity": {
         "action": "Enable S3 request metrics to track read activity",
         "command": "aws s3api put-bucket-metrics-configuration --bucket {{.ResourceID}} --id EntireBucket --metrics-configuration Id=EntireBucket",
+        "confidence": "HIGH",
+        "action_risk": "LOW"
+      },
+      "incomplete_multipart_uploads": {
+        "action": "Add lifecycle rule to abort incomplete multipart uploads",
+        "command": "aws s3api put-bucket-lifecycle-configuration --bucket {{.ResourceID}} --lifecycle-configuration file://lifecycle.json",
         "confidence": "HIGH",
         "action_risk": "LOW"
       }
@@ -224,6 +242,12 @@
       "unused_fargate_profile": {
         "action": "Delete unused Fargate profile",
         "command": "aws eks delete-fargate-profile --cluster-name <cluster> --fargate-profile-name {{.ResourceID}}",
+        "confidence": "MEDIUM",
+        "action_risk": "MEDIUM"
+      },
+      "oversized_nodegroup": {
+        "action": "Reduce node group desired/max size or use smaller instance type",
+        "command": "aws eks update-nodegroup-config --cluster-name <cluster> --nodegroup-name {{.ResourceID}} --scaling-config desiredSize=<n>",
         "confidence": "MEDIUM",
         "action_risk": "MEDIUM"
       }
@@ -338,6 +362,156 @@
         "command": "aws configservice delete-config-rule --config-rule-name {{.ResourceID}}",
         "confidence": "HIGH",
         "action_risk": "LOW"
+      }
+    },
+    "directory": {
+      "idle_directory": {
+        "action": "Delete idle directory service",
+        "command": "aws ds delete-directory --directory-id {{.ResourceID}}",
+        "confidence": "MEDIUM",
+        "action_risk": "HIGH"
+      }
+    },
+    "efs": {
+      "no_mount_targets": {
+        "action": "Delete file system with no mount targets",
+        "command": "aws efs delete-file-system --file-system-id {{.ResourceID}}",
+        "confidence": "HIGH",
+        "action_risk": "MEDIUM"
+      },
+      "no_connections": {
+        "action": "Delete unused file system or investigate lack of connections",
+        "command": "aws efs delete-file-system --file-system-id {{.ResourceID}}",
+        "confidence": "MEDIUM",
+        "action_risk": "MEDIUM"
+      },
+      "no_lifecycle_policy": {
+        "action": "Add lifecycle policy to transition to Infrequent Access",
+        "command": "aws efs put-lifecycle-configuration --file-system-id {{.ResourceID}} --lifecycle-policies TransitionToIA=AFTER_30_DAYS",
+        "confidence": "HIGH",
+        "action_risk": "LOW"
+      }
+    },
+    "elasticache": {
+      "idle_cluster": {
+        "action": "Delete idle ElastiCache cluster",
+        "command": "aws elasticache delete-cache-cluster --cache-cluster-id {{.ResourceID}}",
+        "confidence": "HIGH",
+        "action_risk": "HIGH"
+      },
+      "oversized_cluster": {
+        "action": "Downsize to a smaller node type",
+        "command": "aws elasticache modify-cache-cluster --cache-cluster-id {{.ResourceID}} --cache-node-type <smaller-type>",
+        "confidence": "MEDIUM",
+        "action_risk": "MEDIUM"
+      },
+      "previous_gen_node": {
+        "action": "Upgrade to current-gen node type",
+        "command": "aws elasticache modify-cache-cluster --cache-cluster-id {{.ResourceID}} --cache-node-type <current-gen-type>",
+        "confidence": "HIGH",
+        "action_risk": "MEDIUM"
+      }
+    },
+    "kinesis": {
+      "idle_stream": {
+        "action": "Delete idle Kinesis stream",
+        "command": "aws kinesis delete-stream --stream-name {{.ResourceID}}",
+        "confidence": "HIGH",
+        "action_risk": "HIGH"
+      }
+    },
+    "kms": {
+      "unrotated_cmk": {
+        "action": "Enable automatic key rotation or schedule key deletion",
+        "command": "aws kms enable-key-rotation --key-id {{.ResourceID}}",
+        "confidence": "HIGH",
+        "action_risk": "LOW"
+      }
+    },
+    "msk": {
+      "idle_cluster": {
+        "action": "Delete idle MSK cluster",
+        "command": "aws kafka delete-cluster --cluster-arn {{.ResourceID}}",
+        "confidence": "HIGH",
+        "action_risk": "HIGH"
+      },
+      "oversized_cluster": {
+        "action": "Downsize broker instance type",
+        "command": "aws kafka update-broker-type --cluster-arn {{.ResourceID}} --target-instance-type <smaller-type>",
+        "confidence": "MEDIUM",
+        "action_risk": "MEDIUM"
+      },
+      "overprovisioned_storage": {
+        "action": "Reduce broker storage volume size (not possible, consider recreating)",
+        "command": "aws kafka update-broker-storage --cluster-arn {{.ResourceID}} --target-broker-ebs-volume-info <config>",
+        "confidence": "LOW",
+        "action_risk": "HIGH"
+      }
+    },
+    "vpc_endpoint": {
+      "idle_vpc_endpoint": {
+        "action": "Delete unused VPC endpoint",
+        "command": "aws ec2 delete-vpc-endpoints --vpc-endpoint-ids {{.ResourceID}}",
+        "confidence": "HIGH",
+        "action_risk": "MEDIUM"
+      }
+    },
+    "opensearch": {
+      "idle_domain": {
+        "action": "Delete idle OpenSearch domain",
+        "command": "aws opensearch delete-domain --domain-name {{.ResourceID}}",
+        "confidence": "HIGH",
+        "action_risk": "HIGH"
+      },
+      "oversized_domain": {
+        "action": "Downsize instance type or reduce node count",
+        "command": "aws opensearch update-domain-config --domain-name {{.ResourceID}} --cluster-config InstanceType=<smaller-type>",
+        "confidence": "MEDIUM",
+        "action_risk": "MEDIUM"
+      },
+      "previous_gen_instance": {
+        "action": "Upgrade to current-gen instance type",
+        "command": "aws opensearch update-domain-config --domain-name {{.ResourceID}} --cluster-config InstanceType=<current-gen>",
+        "confidence": "HIGH",
+        "action_risk": "MEDIUM"
+      }
+    },
+    "quicksight": {
+      "inactive_user": {
+        "action": "Delete inactive QuickSight user",
+        "command": "aws quicksight delete-user --aws-account-id <account-id> --namespace default --user-name {{.ResourceID}}",
+        "confidence": "MEDIUM",
+        "action_risk": "MEDIUM"
+      }
+    },
+    "timestream": {
+      "idle_table": {
+        "action": "Delete unused Timestream table",
+        "command": "aws timestream-write delete-table --database-name <db> --table-name {{.ResourceID}}",
+        "confidence": "HIGH",
+        "action_risk": "HIGH"
+      },
+      "high_memory_retention": {
+        "action": "Reduce memory store retention period",
+        "command": "aws timestream-write update-table --database-name <db> --table-name {{.ResourceID}} --retention-properties MemoryStoreRetentionPeriodInHours=<hours>",
+        "confidence": "MEDIUM",
+        "action_risk": "MEDIUM"
+      }
+    },
+    "vpn": {
+      "idle_vpn": {
+        "action": "Delete idle VPN connection",
+        "command": "aws ec2 delete-vpn-connection --vpn-connection-id {{.ResourceID}}",
+        "confidence": "HIGH",
+        "action_risk": "HIGH"
+      }
+    },
+    "waf": {
+      "unused_web_acl": {
+        "action": "Delete unused WAF Web ACL",
+        "command": "aws wafv2 delete-web-acl --name {{.ResourceID}} --scope REGIONAL --id <id> --lock-token <token>",
+        "confidence": "HIGH",
+        "action_risk": "MEDIUM"
       }
     }
   },
