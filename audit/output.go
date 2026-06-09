@@ -444,12 +444,14 @@ func writeResourceTable(resources []Resource, out io.Writer) {
 		for _, c := range cols {
 			header += "\t" + c.Header
 		}
+		header += "\tTAGS"
 		fmt.Fprintln(w, header)
 		for _, r := range resources {
 			line := r.ResourceID
 			for _, c := range cols {
 				line += "\t" + r.Properties[c.Key]
 			}
+			line += "\t" + truncate(formatMap(r.Tags), 40)
 			fmt.Fprintln(w, line)
 		}
 	} else {
@@ -475,18 +477,32 @@ func writeResourceTable(resources []Resource, out io.Writer) {
 func writeResourceCSV(resources []Resource, out io.Writer) error {
 	w := csv.NewWriter(out)
 	defer w.Flush()
-	w.Write([]string{"region", "service", "resource_id", "type", "tags", "properties"})
-	for _, r := range resources {
-		w.Write(
-			[]string{
-				r.Region,
-				r.Service,
-				r.ResourceID,
-				r.Type,
-				formatMap(r.Tags),
-				formatMap(r.Properties),
-			},
-		)
+	key := ""
+	if len(resources) > 0 {
+		key = resources[0].Service + "/" + resources[0].Type
+	}
+
+	if cols, ok := resourceColumns[key]; ok {
+		header := []string{"resource_id"}
+		for _, c := range cols {
+			header = append(header, c.Key)
+		}
+		w.Write(header)
+		for _, r := range resources {
+			row := []string{r.ResourceID}
+			for _, c := range cols {
+				row = append(row, r.Properties[c.Key])
+			}
+			w.Write(row)
+		}
+	} else {
+		w.Write([]string{"region", "service", "resource_id", "type", "tags", "properties"})
+		for _, r := range resources {
+			w.Write([]string{
+				r.Region, r.Service, r.ResourceID, r.Type,
+				formatMap(r.Tags), formatMap(r.Properties),
+			})
+		}
 	}
 	return nil
 }
