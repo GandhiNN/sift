@@ -487,12 +487,14 @@ func writeResourceCSV(resources []Resource, out io.Writer) error {
 		for _, c := range cols {
 			header = append(header, c.Key)
 		}
+		header = append(header, "tags")
 		w.Write(header)
 		for _, r := range resources {
 			row := []string{r.ResourceID}
 			for _, c := range cols {
 				row = append(row, r.Properties[c.Key])
 			}
+			row = append(row, formatMap(r.Tags))
 			w.Write(row)
 		}
 	} else {
