@@ -407,21 +407,67 @@ func OutputResources(
 	return nil
 }
 
+// resourceColumns defines per-type column layouts for list output.
+// Each entry maps property keys to display headers.
+var resourceColumns = map[string][]struct{ Key, Header string }{
+	"glue/job": {
+		{"command", "CMD"},
+		{"workers", "WORKERS"},
+		{"runs_last_30", "RUNS(30)"},
+		{"avg_dpu_hours", "AVG DPU-HR"},
+		{"last_run_time", "LAST RUN"},
+		{"last_run_status", "STATUS"},
+	},
+	"vpc/subnet": {
+		{"vpc_id", "VPC"},
+		{"az", "AZ"},
+		{"cidr", "CIDR"},
+		{"available_ips", "AVAILABLE"},
+		{"total_ips", "TOTAL"},
+		{"usage_pct", "USAGE%"},
+		{"name", "NAME"},
+	},
+}
+
 func writeResourceTable(resources []Resource, out io.Writer) {
 	w := tabwriter.NewWriter(out, 0, 4, 2, ' ', 0)
-	fmt.Fprintln(w, "SERVICE\tRESOURCE\tTYPE\tTAGS\tPROPERTIES")
-	for _, r := range resources {
-		tags := formatMap(r.Tags)
-		props := formatMap(r.Properties)
-		fmt.Fprintf(
-			w,
-			"%s\t%s\t%s\t%s\t%s\n",
-			r.Service,
-			r.ResourceID,
-			r.Type,
-			truncate(tags, 40),
-			truncate(props, 80),
-		)
+
+	// Determine layout from first resource
+	key := ""
+	if len(resources) > 0 {
+		key = resources[0].Service + "/" + resources[0].Type
+	}
+
+	if cols, ok := resourceColumns[key]; ok {
+		// Typed columns
+		header := "RESOURCE"
+		for _, c := range cols {
+			header += "\t" + c.Header
+		}
+		fmt.Fprintln(w, header)
+		for _, r := range resources {
+			line := r.ResourceID
+			for _, c := range cols {
+				line += "\t" + r.Properties[c.Key]
+			}
+			fmt.Fprintln(w, line)
+		}
+	} else {
+		// Fallback generic
+		fmt.Fprintln(w, "SERVICE\tRESOURCE\tTYPE\tTAGS\tPROPERTIES")
+		for _, r := range resources {
+			tags := formatMap(r.Tags)
+			props := formatMap(r.Properties)
+			fmt.Fprintf(
+				w,
+				"%s\t%s\t%s\t%s\t%s\n",
+				r.Service,
+				r.ResourceID,
+				r.Type,
+				truncate(tags, 40),
+				truncate(props, 80),
+			)
+		}
 	}
 	w.Flush()
 }
