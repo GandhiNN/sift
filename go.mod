@@ -22,6 +22,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/eks v1.82.1
 	github.com/aws/aws-sdk-go-v2/service/elasticache v1.52.3
 	github.com/aws/aws-sdk-go-v2/service/elasticloadbalancingv2 v1.54.12
+	github.com/aws/aws-sdk-go-v2/service/eventbridge v1.46.6
 	github.com/aws/aws-sdk-go-v2/service/glue v1.140.0
 	github.com/aws/aws-sdk-go-v2/service/guardduty v1.75.2
 	github.com/aws/aws-sdk-go-v2/service/iam v1.53.8
@@ -57,7 +58,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/feature/ec2/imds v1.18.22 // indirect
 	github.com/aws/aws-sdk-go-v2/internal/configsources v1.4.29 // indirect
 	github.com/aws/aws-sdk-go-v2/internal/endpoints/v2 v2.7.29 // indirect
-	github.com/aws/aws-sdk-go-v2/internal/v4a v1.4.23 // indirect
+	github.com/aws/aws-sdk-go-v2/internal/v4a v1.4.30 // indirect
 	github.com/aws/aws-sdk-go-v2/service/internal/accept-encoding v1.13.9 // indirect
 	github.com/aws/aws-sdk-go-v2/service/internal/checksum v1.9.14 // indirect
 	github.com/aws/aws-sdk-go-v2/service/internal/endpoint-discovery v1.12.2 // indirect
