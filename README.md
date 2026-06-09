@@ -50,7 +50,7 @@ sift security --profile dev --service eks
 sift security --profile dev --risk-level HIGH
 ```
 
-Available services: `ec2`, `sagemaker`, `s3`, `rds`, `eks`, `iam`, `secrets`, `glue`, `lambda`, `dynamodb`, `elb`, `dms`, `ecr`, `redshift`, `stepfunctions`, `backup`, `baseline`, `ebs`, `elasticache`, `opensearch`, `kms`, `kinesis`, `waf`
+Available services: `ec2`, `sagemaker`, `s3`, `rds`, `eks`, `iam`, `secrets`, `glue`, `lambda`, `dynamodb`, `elb`, `dms`, `ecr`, `redshift`, `stepfunctions`, `backup`, `baseline`, `ebs`, `elasticache`, `opensearch`, `kms`, `kinesis`, `waf`, `cloudfront`, `acm`, `route53`, `sqs`, `sns`, `eventbridge`
 
 #### Cost
 
@@ -127,6 +127,55 @@ sift triage --profile dev --log-group /vpc/flowlogs --instance i-0abc123
 |------|----------|-------------|
 | `--log-group` | Yes | CloudWatch log group for VPC flow logs |
 | `--instance` | No | Target a specific EC2 instance ID |
+
+#### Governance
+
+Audit governance compliance across AWS resources. Config-driven checks for tagging, naming, and policy enforcement.
+
+```bash
+# All governance checks
+sift governance --profile dev
+
+# Tagging compliance only
+sift governance --profile dev --check tagging
+
+# Tagging scoped to specific services
+sift governance --profile dev --check tagging --service ec2,rds,s3
+```
+
+| Flag | Description |
+|------|-------------|
+| `--check` | Comma-separated governance checks (e.g., `tagging`) |
+| `--service` | Comma-separated AWS services to scope |
+
+Available checks: `tagging`
+
+##### Tagging configuration
+
+Create `~/.sift/tagging.json` to define your tagging policy:
+
+```json
+{
+  "baseline_tags": ["ProductCode", "Environment"],
+  "iac_tags": ["stack", "stack_env", "security_data_sensitivity", "stack_lifecycle", "project", "stack_version"],
+  "cost_tags": ["Project", "UseCase"],
+  "ownership_tags": ["TechnicalOwner", "BusinessOwner"],
+  "conditional_tags": {
+    "Backup_Plan": {
+      "when_tag": "Environment",
+      "when_values": ["production", "prod", "prd"]
+    }
+  }
+}
+```
+
+| Tier | Risk | Description |
+|------|------|-------------|
+| Baseline | CRITICAL | Mandatory tags without which resources should not exist |
+| IaC | HIGH | Tags indicating proper Terraform deployment |
+| Cost | MEDIUM | Tags for cost allocation and tracking |
+| Ownership | LOW | Tags identifying technical and business owners |
+| Conditional | HIGH | Tags required only under certain conditions (e.g., Backup_Plan in production) |
 
 ## Estimated cost
 
@@ -376,6 +425,56 @@ Sensitive ports flagged: MongoDB (27017-27018), MySQL (3306), PostgreSQL (5432),
 | Default ALLOW without rate-based rule | HIGH |
 | Default BLOCK or has rate limiting | MINIMAL |
 
+### CloudFront
+
+| Condition | Risk |
+|-----------|------|
+| Viewer protocol allows HTTP | HIGH |
+| Minimum TLS below 1.2 | MEDIUM |
+| No WAF web ACL associated | MEDIUM |
+| HTTPS enforced, TLS current, WAF attached | MINIMAL |
+
+### ACM
+
+| Condition | Risk |
+|-----------|------|
+| Certificate expired | CRITICAL |
+| Certificate expires within 30 days | HIGH |
+| Not eligible for auto-renewal | LOW |
+| Valid and auto-renewable | MINIMAL |
+
+### Route53
+
+| Condition | Risk |
+|-----------|------|
+| Dangling CNAME (subdomain takeover risk) | CRITICAL |
+| DNSSEC not enabled | LOW |
+| No issues | MINIMAL |
+
+### SQS
+
+| Condition | Risk |
+|-----------|------|
+| Queue policy allows wildcard principal | CRITICAL |
+| Server-side encryption disabled | HIGH |
+| Encrypted, no public access | MINIMAL |
+
+### SNS
+
+| Condition | Risk |
+|-----------|------|
+| Topic policy allows wildcard principal | CRITICAL |
+| Server-side encryption disabled | HIGH |
+| Encrypted, no public access | MINIMAL |
+
+### EventBridge
+
+| Condition | Risk |
+|-----------|------|
+| Event bus policy allows wildcard principal | HIGH |
+| Rule target without dead-letter queue | MEDIUM |
+| No issues | MINIMAL |
+
 ### Triage
 
 | Condition | Risk |
@@ -584,11 +683,20 @@ sift/
     │   ├── kms.go              # KMS key rotation + policy
     │   ├── kinesis.go          # Kinesis stream encryption
     │   ├── waf.go              # WAF rule coverage + rate limiting
+    │   ├── cloudfront.go       # CloudFront HTTPS + TLS + WAF
+    │   ├── acm.go              # ACM certificate expiry + renewal
+    │   ├── route53.go          # Route53 dangling records + DNSSEC
+    │   ├── sqs.go              # SQS public policies + encryption
+    │   ├── sns.go              # SNS public policies + encryption
+    │   ├── eventbridge.go      # EventBridge bus policies + DLQ
     │   └── network.go          # VPC flow log queries
     ├── triage/
     │   └── triage.go           # Deep EC2 investigation (IAM + flow logs)
     ├── ops/
+    │   ├── ops.go              # Module const + Audit entry point
     │   └── glue.go             # Crawler version limit checks
+    ├── governance/
+    │   └── tagging.go          # Tag compliance (baseline, IaC, cost, ownership, conditional)
     └── cost/
         ├── cost.go             # Module registration + Audit entry point
         ├── ec2.go              # Stopped instances, prev-gen, unused EIPs
