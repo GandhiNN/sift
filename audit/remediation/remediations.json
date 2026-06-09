@@ -325,6 +325,20 @@
         "confidence": "HIGH",
         "action_risk": "MEDIUM"
       }
+    },
+    "config": {
+      "record_all_resources": {
+        "action": "Scope Config recorder to specific resource types",
+        "command": "aws configservice put-configuration-recorder --configuration-recorder '{\"recordingGroup\":{\"allSupported\":false,\"resourceTypes\":[<types>]}}'",
+        "confidence": "MEDIUM",
+        "action_risk": "MEDIUM"
+      },
+      "unused_rule": {
+        "action": "Delete unused Config rule",
+        "command": "aws configservice delete-config-rule --config-rule-name {{.ResourceID}}",
+        "confidence": "HIGH",
+        "action_risk": "LOW"
+      }
     }
   },
   "security": {
