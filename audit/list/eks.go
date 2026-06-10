@@ -10,6 +10,7 @@ import (
 	"sift/audit/progress"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
+	ec2svc "github.com/aws/aws-sdk-go-v2/service/ec2"
 	"github.com/aws/aws-sdk-go-v2/service/eks"
 )
 
@@ -94,7 +95,31 @@ func ListEKSClusters(ctx context.Context, cfg aws.Config) ([]audit.Resource, err
 			if ng.ScalingConfig != nil {
 				totalNodes += aws.ToInt32(ng.ScalingConfig.DesiredSize)
 			}
-			instanceTypes = append(instanceTypes, ng.InstanceTypes...)
+			if len(ng.InstanceTypes) > 0 {
+				instanceTypes = append(instanceTypes, ng.InstanceTypes...)
+			} else if ng.LaunchTemplate != nil {
+				lt := ng.LaunchTemplate
+				ltInput := &ec2svc.DescribeLaunchTemplateVersionsInput{}
+				if lt.Id != nil {
+					ltInput.LaunchTemplateId = lt.Id
+				} else if lt.Name != nil {
+					ltInput.LaunchTemplateName = lt.Name
+				}
+				if ltInput.LaunchTemplateId != nil || ltInput.LaunchTemplateName != nil {
+					if lt.Version != nil {
+						ltInput.Versions = []string{*lt.Version}
+					} else {
+						ltInput.Versions = []string{"$Default"}
+					}
+					ec2Client := ec2svc.NewFromConfig(cfg)
+					ltResp, ltErr := ec2Client.DescribeLaunchTemplateVersions(ctx, ltInput)
+					if ltErr == nil && len(ltResp.LaunchTemplateVersions) > 0 {
+						if data := ltResp.LaunchTemplateVersions[0].LaunchTemplateData; data != nil && data.InstanceType != "" {
+							instanceTypes = append(instanceTypes, string(data.InstanceType))
+						}
+					}
+				}
+			}
 		}
 		props["total_nodes"] = strconv.Itoa(int(totalNodes))
 		if len(instanceTypes) > 0 {
