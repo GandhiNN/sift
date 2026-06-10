@@ -437,6 +437,14 @@ var resourceColumns = map[string][]struct{ Key, Header string }{
 		{"instance_types", "INSTANCE TYPES"},
 		{"created", "CREATED"},
 	},
+	"s3/bucket": {
+		{"size_gb", "SIZE(GB)"},
+		{"objects", "OBJECTS"},
+		{"versioning", "VERSIONING"},
+		{"public_blocked", "PUBLIC BLOCKED"},
+		{"lifecycle", "LIFECYCLE"},
+		{"created", "CREATED"},
+	},
 }
 
 func writeResourceTable(resources []Resource, out io.Writer) {
