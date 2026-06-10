@@ -207,6 +207,55 @@ Some AWS resources don't expose instance types directly (e.g., EKS nodegroups us
 
 Only fall through to the next step if the previous one returns empty. See `audit/cost/eks.go` for the reference implementation.
 
+## Adding a List Command
+
+The `list` module is **architecturally different** from security/cost/ops:
+
+| | Security / Cost / Ops | List |
+|--|----------------------|------|
+| Registration | Self-registers via `init()` | Manually wired in `cmd/list.go` |
+| Return type | `[]audit.Finding` | `[]audit.Resource` |
+| Orchestration | `audit.RunChecks` + registry | Direct function calls |
+| Output | Findings table (risk, status) | Resource table (properties) |
+
+List is **inventory**, not audit. It doesn't emit pass/fail findings or risk levels — it shows resources with metadata.
+
+### Adding a new list subcommand
+
+1. Create `audit/list/<service>.go`:
+
+```go
+package list
+
+import (
+    "context"
+    "sift/audit"
+    "github.com/aws/aws-sdk-go-v2/aws"
+)
+
+func ListMyResources(ctx context.Context, cfg aws.Config) ([]audit.Resource, error) {
+    // Paginate AWS API, build []audit.Resource
+    // Each resource has Service, ResourceID, Type, Properties map, Tags
+    return resources, nil
+}
+```
+
+2. Wire it in `cmd/list.go`:
+
+```go
+var listMyServiceCmd = &cobra.Command{
+    Use:   "myservice [resource]",
+    Short: "List MyService resources",
+    // ... call list.ListMyResources() ...
+}
+
+func init() {
+    listCmd.AddCommand(listMyServiceCmd)
+}
+```
+
+No self-registration, no remediation, no ProcessAll helpers needed.
+
 ## Checklist
 
 1. Create one file in the appropriate `audit/<module>/` directory
