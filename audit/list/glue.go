@@ -13,6 +13,31 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/sts"
 )
 
+func init() {
+	Register(Lister{
+		Service:  "glue",
+		SubTypes: []string{"jobs", "crawlers"},
+		Fn: func(ctx context.Context, cfg aws.Config, subType string) ([]audit.Resource, error) {
+			switch subType {
+			case "jobs":
+				return ListGlueJobs(ctx, cfg)
+			case "crawlers":
+				return ListGlueCrawlers(ctx, cfg)
+			default:
+				jobs, err := ListGlueJobs(ctx, cfg)
+				if err != nil {
+					return nil, err
+				}
+				crawlers, err := ListGlueCrawlers(ctx, cfg)
+				if err != nil {
+					return nil, err
+				}
+				return append(jobs, crawlers...), nil
+			}
+		},
+	})
+}
+
 func getAccountID(ctx context.Context, cfg aws.Config) string {
 	client := sts.NewFromConfig(cfg)
 	resp, err := client.GetCallerIdentity(ctx, &sts.GetCallerIdentityInput{})

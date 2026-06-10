@@ -13,6 +13,15 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/eks"
 )
 
+func init() {
+	Register(Lister{
+		Service: "eks",
+		Fn: func(ctx context.Context, cfg aws.Config, _ string) ([]audit.Resource, error) {
+			return ListEKSClusters(ctx, cfg)
+		},
+	})
+}
+
 func ListEKSClusters(ctx context.Context, cfg aws.Config) ([]audit.Resource, error) {
 	client := eks.NewFromConfig(cfg)
 	spinner := progress.NewSpinner(ctx, "Listing EKS clusters")

@@ -13,6 +13,16 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/ec2"
 )
 
+func init() {
+	Register(Lister{
+		Service:  "vpc",
+		SubTypes: []string{"subnets"},
+		Fn: func(ctx context.Context, cfg aws.Config, _ string) ([]audit.Resource, error) {
+			return ListVPCSubnets(ctx, cfg)
+		},
+	})
+}
+
 func ListVPCSubnets(ctx context.Context, cfg aws.Config) ([]audit.Resource, error) {
 	client := ec2.NewFromConfig(cfg)
 	spinner := progress.NewSpinner(ctx, "Listing VPC subnets")

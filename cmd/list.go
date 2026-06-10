@@ -3,6 +3,7 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"sift/audit"
@@ -15,13 +16,35 @@ import (
 var listCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List AWS resources with metadata",
-}
-
-var listGlueCmd = &cobra.Command{
-	Use:   "glue [resource]",
-	Short: "List Glue resources (jobs, crawlers)",
-	Args:  cobra.MaximumNArgs(1),
+	Args:  cobra.RangeArgs(1, 2),
 	Run: func(cmd *cobra.Command, args []string) {
+		service := args[0]
+		lister := list.Get(service)
+		if lister == nil {
+			fmt.Fprintf(os.Stderr, "Error: unknown service %q (available: %s)\n",
+				service, strings.Join(list.Services(), ", "))
+			os.Exit(2)
+		}
+
+		subType := ""
+		if len(args) == 2 {
+			subType = args[1]
+			if len(lister.SubTypes) > 0 {
+				valid := false
+				for _, st := range lister.SubTypes {
+					if st == subType {
+						valid = true
+						break
+					}
+				}
+				if !valid {
+					fmt.Fprintf(os.Stderr, "Error: unknown subtype %q (available: %s)\n",
+						subType, strings.Join(lister.SubTypes, ", "))
+					os.Exit(2)
+				}
+			}
+		}
+
 		start := time.Now()
 		ctx, cfg, cancel, err := buildAWSConfig()
 		if err != nil {
@@ -34,116 +57,7 @@ var listGlueCmd = &cobra.Command{
 			ctx = progress.WithQuiet(ctx, true)
 		}
 
-		var resources []audit.Resource
-
-		switch {
-		case len(args) == 0:
-			// List all
-			jobs, err := list.ListGlueJobs(ctx, cfg)
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-				os.Exit(2)
-			}
-			resources = append(resources, jobs...)
-			crawlers, err := list.ListGlueCrawlers(ctx, cfg)
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-				os.Exit(2)
-			}
-			resources = append(resources, crawlers...)
-		case args[0] == "jobs":
-			var err error
-			resources, err = list.ListGlueJobs(ctx, cfg)
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-				os.Exit(2)
-			}
-		case args[0] == "crawlers":
-			var err error
-			resources, err = list.ListGlueCrawlers(ctx, cfg)
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-				os.Exit(2)
-			}
-		default:
-			fmt.Fprintf(
-				os.Stderr,
-				"Error: unknown resource %q (available: jobs, crawlers)\n",
-				args[0],
-			)
-			os.Exit(2)
-		}
-
-		for i := range resources {
-			resources[i].Region = cfg.Region
-		}
-
-		if err := audit.OutputResources(format, resources, start, outputFile); err != nil {
-			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-			os.Exit(2)
-		}
-	},
-}
-
-var listVpcCmd = &cobra.Command{
-	Use:   "vpc [resource]",
-	Short: "List VPC resources (subnets)",
-	Args:  cobra.MaximumNArgs(1),
-	Run: func(cmd *cobra.Command, args []string) {
-		start := time.Now()
-		ctx, cfg, cancel, err := buildAWSConfig()
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-			os.Exit(2)
-		}
-		defer cancel()
-
-		if quiet {
-			ctx = progress.WithQuiet(ctx, true)
-		}
-
-		var resources []audit.Resource
-
-		switch {
-		case len(args) == 0, args[0] == "subnets":
-			resources, err = list.ListVPCSubnets(ctx, cfg)
-			if err != nil {
-				fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-				os.Exit(2)
-			}
-		default:
-			fmt.Fprintf(os.Stderr, "Error: unknown resource %q (available: subnets)\n", args[0])
-			os.Exit(2)
-		}
-
-		for i := range resources {
-			resources[i].Region = cfg.Region
-		}
-
-		if err := audit.OutputResources(format, resources, start, outputFile); err != nil {
-			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-			os.Exit(2)
-		}
-	},
-}
-
-var listEksCmd = &cobra.Command{
-	Use:   "eks",
-	Short: "List EKS clusters with nodegroup details",
-	Run: func(cmd *cobra.Command, args []string) {
-		start := time.Now()
-		ctx, cfg, cancel, err := buildAWSConfig()
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-			os.Exit(2)
-		}
-		defer cancel()
-
-		if quiet {
-			ctx = progress.WithQuiet(ctx, true)
-		}
-
-		resources, err := list.ListEKSClusters(ctx, cfg)
+		resources, err := lister.Fn(ctx, cfg, subType)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(2)
@@ -161,8 +75,5 @@ var listEksCmd = &cobra.Command{
 }
 
 func init() {
-	listCmd.AddCommand(listGlueCmd)
-	listCmd.AddCommand(listVpcCmd)
-	listCmd.AddCommand(listEksCmd)
 	rootCmd.AddCommand(listCmd)
 }
