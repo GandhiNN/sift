@@ -127,8 +127,42 @@ var listVpcCmd = &cobra.Command{
 	},
 }
 
+var listEksCmd = &cobra.Command{
+	Use:   "eks",
+	Short: "List EKS clusters with nodegroup details",
+	Run: func(cmd *cobra.Command, args []string) {
+		start := time.Now()
+		ctx, cfg, cancel, err := buildAWSConfig()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(2)
+		}
+		defer cancel()
+
+		if quiet {
+			ctx = progress.WithQuiet(ctx, true)
+		}
+
+		resources, err := list.ListEKSClusters(ctx, cfg)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(2)
+		}
+
+		for i := range resources {
+			resources[i].Region = cfg.Region
+		}
+
+		if err := audit.OutputResources(format, resources, start, outputFile); err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(2)
+		}
+	},
+}
+
 func init() {
 	listCmd.AddCommand(listGlueCmd)
 	listCmd.AddCommand(listVpcCmd)
+	listCmd.AddCommand(listEksCmd)
 	rootCmd.AddCommand(listCmd)
 }
