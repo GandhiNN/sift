@@ -441,7 +441,11 @@ func writeResourceTable(resources []Resource, out io.Writer) {
 		for _, r := range resources {
 			line := r.ResourceID
 			for _, c := range cols {
-				line += "\t" + r.Properties[c.Key]
+				val := r.Properties[c.Key]
+				if val == "" {
+					val = "-"
+				}
+				line += "\t" + val
 			}
 			line += "\t" + truncate(formatMap(r.Tags), 40)
 			fmt.Fprintln(w, line)
@@ -484,6 +488,10 @@ func writeResourceCSV(resources []Resource, out io.Writer) error {
 		for _, r := range resources {
 			row := []string{r.ResourceID}
 			for _, c := range cols {
+				val := r.Properties[c.Key]
+				if val == "" {
+					val = "-"
+				}
 				row = append(row, r.Properties[c.Key])
 			}
 			row = append(row, formatMap(r.Tags))

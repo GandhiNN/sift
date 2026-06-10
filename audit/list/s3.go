@@ -19,6 +19,7 @@ func init() {
 		Service: "s3",
 		Columns: map[string][]Column{
 			"bucket": {
+				{Key: "region", Header: "REGION"},
 				{Key: "size_gb", Header: "SIZE(GB)"},
 				{Key: "objects", Header: "OBJECTS"},
 				{Key: "versioning", Header: "VERSIONING"},
@@ -35,7 +36,6 @@ func init() {
 
 func ListS3Buckets(ctx context.Context, cfg aws.Config) ([]audit.Resource, error) {
 	client := s3.NewFromConfig(cfg)
-	cwClient := cloudwatch.NewFromConfig(cfg)
 
 	resp, err := client.ListBuckets(ctx, &s3.ListBucketsInput{})
 	if err != nil {
@@ -56,43 +56,71 @@ func ListS3Buckets(ctx context.Context, cfg aws.Config) ([]audit.Resource, error
 		inputs = append(inputs, bucketInput{name: aws.ToString(b.Name), created: created})
 	}
 	end := time.Now()
-	start := end.AddDate(0, 0, -1)
+	start := end.AddDate(0, 0, -3)
 
 	resources := audit.FetchAll(ctx, inputs, "Listing S3 buckets",
 		func(ctx context.Context, b bucketInput) audit.Resource {
 			props := map[string]string{"created": b.created}
 
+			// Resolve bucket region
+			locResp, err := client.GetBucketLocation(
+				ctx,
+				&s3.GetBucketLocationInput{Bucket: aws.String(b.name)},
+			)
+			bucketRegion := cfg.Region
+			if err == nil {
+				loc := string(locResp.LocationConstraint)
+				if loc == "" {
+					bucketRegion = "us-east-1" // empty LocationConstraint always means us-east-1
+				} else {
+					bucketRegion = loc
+				}
+			}
+			props["region"] = bucketRegion
+
+			// Create regional client for per-bucket calls
+			regionalCfg := cfg.Copy()
+			regionalCfg.Region = bucketRegion
+			regionalClient := s3.NewFromConfig(regionalCfg)
+			regionalCW := cloudwatch.NewFromConfig(regionalCfg)
+
 			// Bucket size from Cloudwatch
-			sizeResp, err := cwClient.GetMetricStatistics(ctx, &cloudwatch.GetMetricStatisticsInput{
-				Namespace:  aws.String("AWS/S3"),
-				MetricName: aws.String("BucketSizeBytes"),
-				Dimensions: []cwtypes.Dimension{
-					{Name: aws.String("BucketName"), Value: aws.String(b.name)},
-					{Name: aws.String("StorageType"), Value: aws.String("StandardStorage")},
+			sizeResp, err := regionalCW.GetMetricStatistics(
+				ctx,
+				&cloudwatch.GetMetricStatisticsInput{
+					Namespace:  aws.String("AWS/S3"),
+					MetricName: aws.String("BucketSizeBytes"),
+					Dimensions: []cwtypes.Dimension{
+						{Name: aws.String("BucketName"), Value: aws.String(b.name)},
+						{Name: aws.String("StorageType"), Value: aws.String("StandardStorage")},
+					},
+					StartTime:  &start,
+					EndTime:    &end,
+					Period:     aws.Int32(86400),
+					Statistics: []cwtypes.Statistic{cwtypes.StatisticAverage},
 				},
-				StartTime:  &start,
-				EndTime:    &end,
-				Period:     aws.Int32(86400),
-				Statistics: []cwtypes.Statistic{cwtypes.StatisticAverage},
-			})
+			)
 			if err == nil && len(sizeResp.Datapoints) > 0 {
 				sizeGB := aws.ToFloat64(sizeResp.Datapoints[0].Average) / (1024 * 1024 * 1024)
 				props["size_gb"] = fmt.Sprintf("%.2f", sizeGB)
 			}
 
 			// Object count from Cloudwatch
-			objResp, err := cwClient.GetMetricStatistics(ctx, &cloudwatch.GetMetricStatisticsInput{
-				Namespace:  aws.String("AWS/S3"),
-				MetricName: aws.String("NumberOfObjects"),
-				Dimensions: []cwtypes.Dimension{
-					{Name: aws.String("BucketName"), Value: aws.String(b.name)},
-					{Name: aws.String("StorageType"), Value: aws.String("AllStorageTypes")},
+			objResp, err := regionalCW.GetMetricStatistics(
+				ctx,
+				&cloudwatch.GetMetricStatisticsInput{
+					Namespace:  aws.String("AWS/S3"),
+					MetricName: aws.String("NumberOfObjects"),
+					Dimensions: []cwtypes.Dimension{
+						{Name: aws.String("BucketName"), Value: aws.String(b.name)},
+						{Name: aws.String("StorageType"), Value: aws.String("AllStorageTypes")},
+					},
+					StartTime:  &start,
+					EndTime:    &end,
+					Period:     aws.Int32(86400),
+					Statistics: []cwtypes.Statistic{cwtypes.StatisticAverage},
 				},
-				StartTime:  &start,
-				EndTime:    &end,
-				Period:     aws.Int32(86400),
-				Statistics: []cwtypes.Statistic{cwtypes.StatisticAverage},
-			})
+			)
 			if err == nil && len(objResp.Datapoints) > 0 {
 				props["objects"] = strconv.FormatInt(
 					int64(aws.ToFloat64(objResp.Datapoints[0].Average)),
@@ -101,16 +129,21 @@ func ListS3Buckets(ctx context.Context, cfg aws.Config) ([]audit.Resource, error
 			}
 
 			// Versioning
-			ver, err := client.GetBucketVersioning(
+			ver, err := regionalClient.GetBucketVersioning(
 				ctx,
 				&s3.GetBucketVersioningInput{Bucket: aws.String(b.name)},
 			)
 			if err == nil {
-				props["versioning"] = string(ver.Status)
+				status := string(ver.Status)
+				if status == "" {
+					status = "Disabled"
+				}
+				props["versioning"] = status
 			}
 
 			// Public access block
-			pab, err := client.GetPublicAccessBlock(
+			props["public_blocked"] = "false"
+			pab, err := regionalClient.GetPublicAccessBlock(
 				ctx,
 				&s3.GetPublicAccessBlockInput{Bucket: aws.String(b.name)},
 			)
@@ -122,7 +155,7 @@ func ListS3Buckets(ctx context.Context, cfg aws.Config) ([]audit.Resource, error
 				props["public_blocked"] = strconv.FormatBool(allBlocked)
 			}
 			// Lifecycle
-			_, err = client.GetBucketLifecycleConfiguration(
+			_, err = regionalClient.GetBucketLifecycleConfiguration(
 				ctx,
 				&s3.GetBucketLifecycleConfigurationInput{Bucket: aws.String(b.name)},
 			)
