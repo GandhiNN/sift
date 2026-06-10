@@ -14,9 +14,20 @@ import (
 )
 
 var listCmd = &cobra.Command{
-	Use:   "list",
+	Use:   "list <service> [subtype]",
 	Short: "List AWS resources with metadata",
-	Args:  cobra.RangeArgs(1, 2),
+	Long: func() string {
+		s := "List AWS resources with metadata. \n\nAvailable services:\n"
+		for _, l := range list.All() {
+			if len(l.SubTypes) > 0 {
+				s += fmt.Sprintf("  %s [%s]\n", l.Service, strings.Join(l.SubTypes, ", "))
+			} else {
+				s += fmt.Sprintf("  %s\n", l.Service)
+			}
+		}
+		return s
+	}(),
+	Args: cobra.RangeArgs(1, 2),
 	Run: func(cmd *cobra.Command, args []string) {
 		service := args[0]
 		lister := list.Get(service)
