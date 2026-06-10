@@ -36,3 +36,7 @@ func Services() []string {
 	}
 	return s
 }
+
+func All() []Lister {
+	return listers
+}
