@@ -18,6 +18,16 @@ import (
 func init() {
 	Register(Lister{
 		Service: "s3",
+		Columns: map[string][]Column{
+			"bucket": {
+				{Key: "size_gb", Header: "SIZE(GB)"},
+				{Key: "objects", Header: "OBJECTS"},
+				{Key: "versioning", Header: "VERSIONING"},
+				{Key: "public_blocked", Header: "PUBLIC BLOCKED"},
+				{Key: "lifecycle", Header: "LIFECYCLE"},
+				{Key: "created", Header: "CREATED"},
+			},
+		},
 		Fn: func(ctx context.Context, cfg aws.Config, _ string) ([]audit.Resource, error) {
 			return ListS3Buckets(ctx, cfg)
 		},

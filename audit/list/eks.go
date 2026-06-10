@@ -17,6 +17,18 @@ import (
 func init() {
 	Register(Lister{
 		Service: "eks",
+		Columns: map[string][]Column{
+			"cluster": {
+				{Key: "version", Header: "VERSION"},
+				{Key: "status", Header: "STATUS"},
+				{Key: "endpoint_public", Header: "PUBLIC"},
+				{Key: "endpoint_private", Header: "PRIVATE"},
+				{Key: "nodegroups", Header: "NGS"},
+				{Key: "total_nodes", Header: "NODES"},
+				{Key: "instance_types", Header: "INSTANCE TYPES"},
+				{Key: "created", Header: "CREATED"},
+			},
+		},
 		Fn: func(ctx context.Context, cfg aws.Config, _ string) ([]audit.Resource, error) {
 			return ListEKSClusters(ctx, cfg)
 		},

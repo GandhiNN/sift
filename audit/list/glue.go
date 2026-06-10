@@ -17,6 +17,23 @@ func init() {
 	Register(Lister{
 		Service:  "glue",
 		SubTypes: []string{"jobs", "crawlers"},
+		Columns: map[string][]Column{
+			"job": {
+				{Key: "command", Header: "CMD"},
+				{Key: "workers", Header: "WORKERS"},
+				{Key: "runs_last_30", Header: "RUNS(30)"},
+				{Key: "avg_dpu_hours", Header: "AVG DPU-HR"},
+				{Key: "last_run_time", Header: "LAST RUN"},
+				{Key: "last_run_status", Header: "STATUS"},
+			},
+			"crawler": {
+				{Key: "state", Header: "STATE"},
+				{Key: "schedule", Header: "SCHEDULE"},
+				{Key: "last_crawl_status", Header: "LAST STATUS"},
+				{Key: "last_crawl_time", Header: "LAST CRAWL"},
+				{Key: "version", Header: "VERSION"},
+			},
+		},
 		Fn: func(ctx context.Context, cfg aws.Config, subType string) ([]audit.Resource, error) {
 			switch subType {
 			case "jobs":

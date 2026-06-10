@@ -17,6 +17,17 @@ func init() {
 	Register(Lister{
 		Service:  "vpc",
 		SubTypes: []string{"subnets"},
+		Columns: map[string][]Column{
+			"subnet": {
+				{Key: "vpc_id", Header: "VPC"},
+				{Key: "az", Header: "AZ"},
+				{Key: "cidr", Header: "CIDR"},
+				{Key: "available_ips", Header: "AVAILABLE"},
+				{Key: "total_ips", Header: "TOTAL"},
+				{Key: "usage_pct", Header: "USAGE%"},
+				{Key: "name", Header: "NAME"},
+			},
+		},
 		Fn: func(ctx context.Context, cfg aws.Config, _ string) ([]audit.Resource, error) {
 			return ListVPCSubnets(ctx, cfg)
 		},

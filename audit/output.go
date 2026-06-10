@@ -407,44 +407,18 @@ func OutputResources(
 	return nil
 }
 
-// resourceColumns defines per-type column layouts for list output.
-// Each entry maps property keys to display headers.
-var resourceColumns = map[string][]struct{ Key, Header string }{
-	"glue/job": {
-		{"command", "CMD"},
-		{"workers", "WORKERS"},
-		{"runs_last_30", "RUNS(30)"},
-		{"avg_dpu_hours", "AVG DPU-HR"},
-		{"last_run_time", "LAST RUN"},
-		{"last_run_status", "STATUS"},
-	},
-	"vpc/subnet": {
-		{"vpc_id", "VPC"},
-		{"az", "AZ"},
-		{"cidr", "CIDR"},
-		{"available_ips", "AVAILABLE"},
-		{"total_ips", "TOTAL"},
-		{"usage_pct", "USAGE%"},
-		{"name", "NAME"},
-	},
-	"eks/cluster": {
-		{"version", "VERSION"},
-		{"status", "STATUS"},
-		{"endpoint_public", "PUBLIC"},
-		{"endpoint_private", "PRIVATE"},
-		{"nodegroups", "NGS"},
-		{"total_nodes", "NODES"},
-		{"instance_types", "INSTANCE TYPES"},
-		{"created", "CREATED"},
-	},
-	"s3/bucket": {
-		{"size_gb", "SIZE(GB)"},
-		{"objects", "OBJECTS"},
-		{"versioning", "VERSIONING"},
-		{"public_blocked", "PUBLIC BLOCKED"},
-		{"lifecycle", "LIFECYCLE"},
-		{"created", "CREATED"},
-	},
+// ResourceColumn defines a column for list table output.
+type ResourceColumn struct {
+	Key    string
+	Header string
+}
+
+// resourceColumns stores per-type column layouts, registered by list package.
+var resourceColumns = map[string][]ResourceColumn{}
+
+// RegisterColumns registers column layout for a resource type (e.g. "eks/cluster")
+func RegisterColumns(key string, cols []ResourceColumn) {
+	resourceColumns[key] = cols
 }
 
 func writeResourceTable(resources []Resource, out io.Writer) {
