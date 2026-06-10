@@ -71,7 +71,7 @@ sift cost --profile dev --sort-by cost
 sift cost --profile dev --diff
 ```
 
-Available services: `ec2`, `ebs`, `rds`, `s3`, `eks`, `network`, `cloudwatch`, `ecr`, `secrets`, `glue`, `lambda`, `dynamodb`, `dms`, `elb`, `sagemaker`, `redshift`, `stepfunctions`, `backup`, `kms`, `vpn`, `waf`, `kinesis`, `awsconfig`, `elasticache`, `opensearch`, `efs`, `docdb`, `directory`, `timestream`, `quicksight`, `msk`
+Available services: `ec2`, `ebs`, `rds`, `s3`, `eks`, `network`, `cloudwatch`, `ecr`, `secrets`, `glue`, `lambda`, `dynamodb`, `dms`, `elb`, `sagemaker`, `redshift`, `stepfunctions`, `backup`, `kms`, `vpn`, `waf`, `kinesis`, `awsconfig`, `elasticache`, `opensearch`, `efs`, `docdb`, `directory`, `timestream`, `quicksight`, `msk`, `sqs`, `sns`, `eventbridge`
 
 #### Ops
 
@@ -109,6 +109,10 @@ sift list glue --profile dev
 # List specific resource types
 sift list glue jobs --profile dev
 sift list glue crawlers --profile dev --format csv -o crawlers.csv
+
+# List VPC subnets with IP usage
+sift list vpc --profile dev
+sift list vpc subnets --profile dev --format table
 ```
 
 #### Triage
@@ -622,6 +626,24 @@ The crawler version limit (default 1,000,000) is fetched automatically from AWS 
 | Idle load balancer | HIGH | ~$18/mo base cost, zero traffic |
 | No target groups | MEDIUM | LB serving nothing |
 
+#### SQS
+
+| Issue | Risk | Rationale |
+|-------|------|-----------|
+| Idle queue | MEDIUM | Zero messages in 30 days, potential stuck DLQ |
+
+#### SNS
+
+| Issue | Risk | Rationale |
+|-------|------|-----------|
+| Idle topic | LOW | Zero publishes in 30 days |
+
+#### EventBridge
+
+| Issue | Risk | Rationale |
+|-------|------|-----------|
+| Idle bus | LOW | Zero invocations in 30 days (excludes default bus) |
+
 ## Project structure
 
 ```
@@ -692,6 +714,9 @@ sift/
     │   └── network.go          # VPC flow log queries
     ├── triage/
     │   └── triage.go           # Deep EC2 investigation (IAM + flow logs)
+    ├── list/
+    │   ├── glue.go             # Glue jobs (run frequency, avg DPU) + crawlers
+    │   └── vpc.go              # VPC subnets with IP usage
     ├── ops/
     │   ├── ops.go              # Module const + Audit entry point
     │   └── glue.go             # Crawler version limit checks
@@ -729,7 +754,10 @@ sift/
         ├── directory.go        # Idle directory services
         ├── timestream.go       # Unused Timestream databases
         ├── quicksight.go       # Unused QuickSight resources
-        └── msk.go              # Idle MSK clusters
+        ├── msk.go              # Idle MSK clusters
+        ├── sqs.go              # Idle SQS queues
+        ├── sns.go              # Idle SNS topics
+        └── eventbridge.go      # Idle EventBridge buses
 ```
 
 ## Authentication
