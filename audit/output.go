@@ -427,6 +427,16 @@ var resourceColumns = map[string][]struct{ Key, Header string }{
 		{"usage_pct", "USAGE%"},
 		{"name", "NAME"},
 	},
+	"eks/cluster": {
+		{"version", "VERSION"},
+		{"status", "STATUS"},
+		{"endpoint_public", "PUBLIC"},
+		{"endpoint_private", "PRIVATE"},
+		{"nodegroups", "NGS"},
+		{"total_nodes", "NODES"},
+		{"instance_types", "INSTANCE TYPES"},
+		{"created", "CREATED"},
+	},
 }
 
 func writeResourceTable(resources []Resource, out io.Writer) {
