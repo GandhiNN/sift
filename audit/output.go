@@ -492,7 +492,7 @@ func writeResourceCSV(resources []Resource, out io.Writer) error {
 				if val == "" {
 					val = "-"
 				}
-				row = append(row, r.Properties[c.Key])
+				row = append(row, val)
 			}
 			row = append(row, formatMap(r.Tags))
 			w.Write(row)
