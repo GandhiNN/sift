@@ -10,6 +10,7 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/configservice"
+	"github.com/aws/aws-sdk-go-v2/service/resourceexplorer2"
 )
 
 var resourceTypeMap = map[string]string{
@@ -93,6 +94,28 @@ func Discover(ctx context.Context, cfg aws.Config) ([]ServiceInfo, error) {
 			if len(parts) == 3 {
 				svc := strings.ToLower(parts[1])
 				counts[svc] += int(rc.Count)
+			}
+		}
+	}
+
+	// Supplement with Resource Explorer
+	reClient := resourceexplorer2.NewFromConfig(cfg)
+	reResp, err := reClient.Search(ctx, &resourceexplorer2.SearchInput{
+		QueryString: aws.String("*"),
+	})
+	if err == nil {
+		for _, r := range reResp.Resources {
+			resType := aws.ToString(r.ResourceType)
+			parts := strings.Split(resType, "::")
+			if len(parts) < 2 {
+				continue
+			}
+			svc := strings.ToLower(parts[1])
+			if mapped, ok := resourceTypeMap[resType]; ok {
+				svc = mapped
+			}
+			if counts[svc] == 0 {
+				counts[svc]++
 			}
 		}
 	}
