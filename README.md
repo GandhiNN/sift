@@ -113,7 +113,39 @@ sift list glue crawlers --profile dev --format csv -o crawlers.csv
 # List VPC subnets with IP usage
 sift list vpc --profile dev
 sift list vpc subnets --profile dev --format table
+
+# List EC2 instances
+sift list ec2 --profile dev
+
+# List RDS instances
+sift list rds --profile dev
+
+# List S3 buckets with size, versioning, access
+sift list s3 --profile dev
+
+# List EBS volumes
+sift list ebs --profile dev
+
+# List Lambda functions with invocation data
+sift list lambda --profile dev
+
+# List EKS clusters with nodegroup details
+sift list eks --profile dev
 ```
+
+Available services: `glue`, `vpc`, `ec2`, `rds`, `s3`, `ebs`, `lambda`, `eks`
+
+#### Discover
+
+Discover active AWS services in your account and show sift coverage. Uses AWS Config to detect which services have resources.
+
+```bash
+sift discover --profile dev
+```
+
+Output shows resource counts per service, which sift modules cover each service (security, cost, list), and suggests commands to run.
+
+Requires AWS Config to be enabled in the account.
 
 #### Triage
 
@@ -658,6 +690,8 @@ sift/
 │   ├── security.go             # Security audit command
 │   ├── cost.go                 # Cost audit command
 │   ├── ops.go                  # Ops audit command
+│   ├── list.go                 # List command (registry-driven)
+│   ├── discover.go             # Service discovery command
 │   └── triage.go               # Triage investigation command
 ├── config/
 │   └── config.go               # AWS credential/profile loading
@@ -715,8 +749,17 @@ sift/
     ├── triage/
     │   └── triage.go           # Deep EC2 investigation (IAM + flow logs)
     ├── list/
+    │   ├── registry.go         # Lister registration + column definitions
     │   ├── glue.go             # Glue jobs (run frequency, avg DPU) + crawlers
-    │   └── vpc.go              # VPC subnets with IP usage
+    │   ├── vpc.go              # VPC subnets with IP usage
+    │   ├── ec2.go              # EC2 instances
+    │   ├── rds.go              # RDS instances
+    │   ├── s3.go               # S3 buckets (size, versioning, access)
+    │   ├── ebs.go              # EBS volumes
+    │   ├── lambda.go           # Lambda functions (invocations, runtime)
+    │   └── eks.go              # EKS clusters (nodegroups, nodes, instance types)
+    ├── discover/
+    │   └── discover.go         # Service discovery via AWS Config
     ├── ops/
     │   ├── ops.go              # Module const + Audit entry point
     │   └── glue.go             # Crawler version limit checks
