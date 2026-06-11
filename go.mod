@@ -34,6 +34,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/quicksight v1.112.0
 	github.com/aws/aws-sdk-go-v2/service/rds v1.118.1
 	github.com/aws/aws-sdk-go-v2/service/redshift v1.62.8
+	github.com/aws/aws-sdk-go-v2/service/resourceexplorer2 v1.24.6
 	github.com/aws/aws-sdk-go-v2/service/resourcegroupstaggingapi v1.33.2
 	github.com/aws/aws-sdk-go-v2/service/route53 v1.63.2
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.100.0
