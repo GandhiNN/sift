@@ -1031,6 +1031,26 @@
         "confidence": "HIGH",
         "action_risk": "HIGH"
       }
+    },
+    "awsconfig": {
+      "not_enabled": {
+        "action": "Enable AWS Config recorder",
+        "command": "aws configservice put-configuration-recorder --configuration-recorder name=default,roleARN=<role-arn>,recordingGroup={allSupported=true}",
+        "confidence": "HIGH",
+        "action_risk": "LOW"
+      },
+      "not_recording": {
+        "action": "Start AWS Config recorder",
+        "command": "aws configservice start-configuration-recorder --configuration-recorder-name {{.ResourceID}}",
+        "confidence": "HIGH",
+        "action_risk": "LOW"
+      },
+      "partial_recording": {
+        "action": "Enable recording of all resource types",
+        "command": "aws configservice put-configuration-recorder --configuration-recorder name={{.ResourceID}},recordingGroup={allSupported=true}",
+        "confidence": "HIGH",
+        "action_risk": "LOW"
+      }
     }
   },
   "governance": {
