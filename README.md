@@ -12,6 +12,12 @@ make build
 
 Requires Go 1.25+ and a configured AWS profile (supports SSO, static credentials, and all standard AWS credential sources).
 
+### Development setup
+
+```bash
+pre-commit install
+```
+
 ## Usage
 
 ```bash
