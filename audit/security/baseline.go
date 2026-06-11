@@ -3,10 +3,8 @@ package security
 import (
 	"context"
 	"fmt"
-	"sync"
 
 	"sift/audit"
-	"sift/audit/progress"
 	"sift/audit/remediation"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -31,33 +29,17 @@ func baselineRisk(check string) string {
 	}
 }
 
+// AuditBaseline runs both CloudTrail and GuardDuty checks (used by triage).
 func AuditBaseline(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) {
-	var ctFindings, gdFindings []audit.Finding
-	var ctErr, gdErr error
-	var wg sync.WaitGroup
-
-	spinner := progress.NewSpinner(ctx, "Auditing baseline security")
-
-	wg.Add(2)
-	go func() {
-		defer wg.Done()
-		ctFindings, ctErr = auditCloudTrail(ctx, cfg)
-	}()
-	go func() {
-		defer wg.Done()
-		gdFindings, gdErr = auditGuardDuty(ctx, cfg)
-	}()
-	wg.Wait()
-	spinner.Finish()
-
-	if ctErr != nil {
-		return nil, fmt.Errorf("cloudtrail: %w", ctErr)
+	ct, err := auditCloudTrail(ctx, cfg)
+	if err != nil {
+		return nil, err
 	}
-	if gdErr != nil {
-		return nil, fmt.Errorf("guardduty: %w", gdErr)
+	gd, err := auditGuardDuty(ctx, cfg)
+	if err != nil {
+		return nil, err
 	}
-
-	return append(ctFindings, gdFindings...), nil
+	return append(ct, gd...), nil
 }
 
 func auditCloudTrail(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) {
