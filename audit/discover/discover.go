@@ -82,6 +82,13 @@ func Discover(ctx context.Context, cfg aws.Config) ([]ServiceInfo, error) {
 		resType := string(rc.ResourceType)
 		if svc, ok := resourceTypeMap[resType]; ok {
 			counts[svc] += int(rc.Count)
+		} else {
+			// Extract a readable service name from AWS::Service::Resource
+			parts := strings.Split(resType, "::")
+			if len(parts) == 3 {
+				svc := strings.ToLower(parts[1])
+				counts[svc] += int(rc.Count)
+			}
 		}
 	}
 
@@ -106,12 +113,21 @@ func Discover(ctx context.Context, cfg aws.Config) ([]ServiceInfo, error) {
 func FormatOutput(services []ServiceInfo) string {
 	var sb strings.Builder
 
-	sb.WriteString(fmt.Sprintf("  %-16s %8s %s\n", "SERVICE", "COUNT", "COVERAGE"))
-	sb.WriteString(fmt.Sprintf("  %-16s %8s %s\n", "-------", "-----", "--------"))
+	// Calculate max service name width
+	maxWidth := 7 // minimum "SERVICE" header width
+	for _, s := range services {
+		if len(s.Name) > maxWidth {
+			maxWidth = len(s.Name)
+		}
+	}
+
+	fmtStr := fmt.Sprintf("  %%-%ds  %%8s  %%s\n", maxWidth)
+	sb.WriteString(fmt.Sprintf(fmtStr, "SERVICE", "COUNT", "COVERAGE"))
+	sb.WriteString(fmt.Sprintf(fmtStr, strings.Repeat("-", maxWidth), "-----", "--------"))
 
 	var secSvcs, costSvcs []string
 	var uncovered []string
-
+	rowFmt := fmt.Sprintf("  %%-%ds  %%8d  %%s %%s\n", maxWidth)
 	for _, s := range services {
 		var coverage []string
 		if s.Security {
@@ -134,7 +150,7 @@ func FormatOutput(services []ServiceInfo) string {
 			uncovered = append(uncovered, s.Name)
 		}
 
-		sb.WriteString(fmt.Sprintf("  %-16s %8d %s %s\n", s.Name, s.Count, marker, coverStr))
+		sb.WriteString(fmt.Sprintf(rowFmt, s.Name, s.Count, marker, coverStr))
 	}
 
 	sb.WriteString("\nSuggested commands:\n")
@@ -143,6 +159,9 @@ func FormatOutput(services []ServiceInfo) string {
 	}
 	if len(costSvcs) > 0 {
 		sb.WriteString(fmt.Sprintf("  sift cost --service %s\n", strings.Join(costSvcs, ",")))
+	}
+	if len(uncovered) > 0 {
+		sb.WriteString(fmt.Sprintf("\nNot covered: %s\n", strings.Join(uncovered, ", ")))
 	}
 
 	return sb.String()
