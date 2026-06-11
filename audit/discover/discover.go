@@ -51,6 +51,9 @@ var resourceTypeMap = map[string]string{
 	"AWS::Route53::HostedZone":                  "route53",
 	"AWS::ACM::Certificate":                     "acm",
 	"AWS::CloudWatch::LogGroup":                 "cloudwatch",
+	"AWS::CloudTrail::Trail":                    "cloudtrail",
+	"AWS::GuardDuty::Detector":                  "guardduty",
+	"AWS::Config::ConfigurationRecorder":        "awsconfig",
 }
 
 type ServiceInfo struct {
