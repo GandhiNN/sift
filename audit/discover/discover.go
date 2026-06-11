@@ -25,6 +25,8 @@ var resourceTypeMap = map[string]string{
 	"AWS::DynamoDB::Table":                      "dynamodb",
 	"AWS::EKS::Cluster":                         "eks",
 	"AWS::ElasticLoadBalancingV2::LoadBalancer": "elb",
+	"AWS::ElasticLoadBalancingV2::TargetGroup":  "elb",
+	"AWS::ElasticLoadBalancingV2::Listener":     "elb",
 	"AWS::IAM::Role":                            "iam",
 	"AWS::KMS::Key":                             "kms",
 	"AWS::SNS::Topic":                           "sns",
