@@ -56,7 +56,7 @@ sift security --profile dev --service eks
 sift security --profile dev --risk-level HIGH
 ```
 
-Available services: `ec2`, `sagemaker`, `s3`, `rds`, `eks`, `iam`, `secrets`, `glue`, `lambda`, `dynamodb`, `elb`, `dms`, `ecr`, `redshift`, `stepfunctions`, `backup`, `baseline`, `ebs`, `elasticache`, `opensearch`, `kms`, `kinesis`, `waf`, `cloudfront`, `acm`, `route53`, `sqs`, `sns`, `eventbridge`
+Available services: `ec2`, `sagemaker`, `s3`, `rds`, `eks`, `iam`, `secrets`, `glue`, `lambda`, `dynamodb`, `elb`, `dms`, `ecr`, `redshift`, `stepfunctions`, `backup`, `cloudtrail`, `guardduty`, `ebs`, `elasticache`, `opensearch`, `kms`, `kinesis`, `waf`, `cloudfront`, `acm`, `route53`, `sqs`, `sns`, `eventbridge`
 
 #### Cost
 
@@ -738,7 +738,7 @@ sift/
     │   ├── redshift.go         # Redshift public access + encryption
     │   ├── stepfunctions.go    # Step Functions logging + tracing
     │   ├── backup.go           # Backup vault encryption
-    │   ├── baseline.go         # CloudTrail + GuardDuty
+    │   ├── baseline.go         # CloudTrail + GuardDuty (registered as cloudtrail, guardduty)
     │   ├── ebs.go              # EBS volume encryption + public snapshots
     │   ├── elasticache.go      # ElastiCache encryption + AUTH
     │   ├── opensearch.go       # OpenSearch access control + encryption
