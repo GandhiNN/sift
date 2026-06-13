@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 
@@ -26,7 +27,12 @@ var discoverCmd = &cobra.Command{
 			os.Exit(2)
 		}
 
-		fmt.Print(discover.FormatOutput(services))
+		if format == "json" {
+			b, _ := json.MarshalIndent(services, "", "  ")
+			fmt.Println(string(b))
+		} else {
+			fmt.Print(discover.FormatOutput(services))
+		}
 	},
 }
 
