@@ -108,6 +108,9 @@ func RunChecks(
 	for _, f := range results {
 		out = append(out, f...)
 	}
+	for i := range out {
+		out[i].ComputeID()
+	}
 	return out, nil
 }
 
