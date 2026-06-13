@@ -1,0 +1,211 @@
+package history
+
+import (
+	"database/sql"
+	"encoding/json"
+	"fmt"
+	"os"
+	"path/filepath"
+	"time"
+
+	"sift/audit"
+
+	_ "modernc.org/sqlite"
+)
+
+type DB struct {
+	db *sql.DB
+}
+
+type ScanMeta struct {
+	ID         string    `json:"id"`
+	Profile    string    `json:"profile"`
+	Command    string    `json:"command"`
+	Region     string    `json:"region,omitempty"`
+	Services   string    `json:"services,omitempty"`
+	Timestamp  time.Time `json:"timestamp"`
+	DurationMs int64     `json:"duration_ms,omitempty"`
+}
+
+func OpenDB() (*DB, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return nil, fmt.Errorf("get home dir: %w", err)
+	}
+	dir := filepath.Join(home, ".sift")
+	if err := os.MkdirAll(dir, 0700); err != nil {
+		return nil, fmt.Errorf("create sift dir: %w", err)
+	}
+
+	dbPath := filepath.Join(dir, "sift.db")
+	db, err := sql.Open("sqlite", dbPath)
+	if err != nil {
+		return nil, fmt.Errorf("open db: %w", err)
+	}
+
+	if err := migrate(db); err != nil {
+		db.Close()
+		return nil, err
+	}
+
+	return &DB{db: db}, nil
+}
+
+func (d *DB) Close() error {
+	return d.db.Close()
+}
+
+func (d *DB) SaveScan(meta ScanMeta, findings []audit.Finding) error {
+	tx, err := d.db.Begin()
+	if err != nil {
+		return fmt.Errorf("begin tx: %w", err)
+	}
+	defer tx.Rollback()
+
+	_, err = tx.Exec(
+		`INSERT INTO scans (id, profile, command, region, services, timestamp, duration_ms) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		meta.ID,
+		meta.Profile,
+		meta.Command,
+		meta.Region,
+		meta.Services,
+		meta.Timestamp,
+		meta.DurationMs,
+	)
+	if err != nil {
+		return fmt.Errorf("insert scan: %w", err)
+	}
+
+	stmt, err := tx.Prepare(
+		`INSERT OR REPLACE INTO findings (id, scan_id, region, service, resource_id, check_name, status, detail, risk_level, cost, remediation, tags) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+	)
+	if err != nil {
+		return fmt.Errorf("prepare stmt: %w", err)
+	}
+	defer stmt.Close()
+
+	for i := range findings {
+		f := &findings[i]
+		if f.ID == "" {
+			f.ComputeID()
+		}
+
+		var remJSON, tagsJSON string
+		if f.Remediation != nil {
+			b, _ := json.Marshal(f.Remediation)
+			remJSON = string(b)
+		}
+		if len(f.Tags) > 0 {
+			b, _ := json.Marshal(f.Tags)
+			tagsJSON = string(b)
+		}
+
+		_, err = stmt.Exec(
+			f.ID, meta.ID, f.Region, f.Service, f.ResourceID, f.Check,
+			f.Status, f.Detail, f.RiskLevel, f.EstimatedMonthlyCost,
+			remJSON, tagsJSON,
+		)
+		if err != nil {
+			return fmt.Errorf("insert finding: %w", err)
+		}
+	}
+
+	return tx.Commit()
+}
+
+func (d *DB) LatestScan(profile, command string) (*ScanMeta, []audit.Finding, error) {
+	row := d.db.QueryRow(
+		`SELECT id, profile, command, region, services, timestamp, duration_ms, FROM scans WHERE profile = ? AND command = ? ORDER BY timestamp DESC LIMIT 1`,
+		profile,
+		command,
+	)
+
+	var meta ScanMeta
+	if err := row.Scan(&meta.ID, &meta.Profile, &meta.Command, &meta.Region, &meta.Services, &meta.Timestamp, &meta.DurationMs); err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil, nil
+		}
+		return nil, nil, fmt.Errorf("query latest scan: %w", err)
+	}
+
+	findings, err := d.findingsByScan(meta.ID)
+	if err != nil {
+		return nil, nil, err
+	}
+	return &meta, findings, nil
+}
+
+func (d *DB) FindingHistory(findingID string) ([]audit.Finding, error) {
+	rows, err := d.db.Query(
+		`SELECT f.id, f.region, f.service, f.resource_id, f.check_name, f.status, f.detail, f.risk_level, f.cost, f.remediation, f.tags
+		FROM findings f JOIN scans s ON f.scan_id = s.id
+		WHERE f.id = ? ORDER BY s.timestamp DESC`,
+		findingID,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("query finding history: %w", err)
+	}
+	defer rows.Close()
+	return scanFindings(rows)
+}
+
+func (d *DB) Query(service, riskLevel, status string) ([]audit.Finding, error) {
+	q := `SELECT f.id, f.region, f.service, f.resource_id, f.check_name, f.status, f.detail, f.risk_level, f.cost, f.remediation, f.tags
+		  FROM findings f
+		  JOIN (SELECT id FROM scans ORDER BY timestamp DESC LIMIT 1) s ON f.scan_id = s.id
+		  WHERE 1=1`
+	var args []interface{}
+
+	if service != "" {
+		q += " AND f.service = ?"
+		args = append(args, service)
+	}
+	if riskLevel != "" {
+		q += " AND f.risk_level = ?"
+		args = append(args, riskLevel)
+	}
+	if status != "" {
+		q += " AND f.status = ?"
+		args = append(args, status)
+	}
+
+	rows, err := d.db.Query(q, args...)
+	if err != nil {
+		return nil, fmt.Errorf("query findings: %w", err)
+	}
+	defer rows.Close()
+	return scanFindings(rows)
+}
+
+func (d *DB) findingsByScan(scanID string) ([]audit.Finding, error) {
+	rows, err := d.db.Query(
+		`SELECT id, region, service, resource_id, check_name, status, detail, risk_level, cost, remediation, tags FROM findings WHERE scan_id = ?`,
+		scanID,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("query findings by scan: %w", err)
+	}
+	defer rows.Close()
+	return scanFindings(rows)
+}
+
+func scanFindings(rows *sql.Rows) ([]audit.Finding, error) {
+	var findings []audit.Finding
+	for rows.Next() {
+		var f audit.Finding
+		var remJSON, tagsJSON sql.NullString
+		if err := rows.Scan(&f.ID, &f.Region, &f.Service, &f.ResourceID, &f.Check, &f.Status, &f.Detail, &f.RiskLevel, &f.EstimatedMonthlyCost, &remJSON, &tagsJSON); err != nil {
+			return nil, err
+		}
+		if remJSON.Valid && remJSON.String != "" {
+			var rem audit.Remediation
+			json.Unmarshal([]byte(remJSON.String), &rem)
+			f.Remediation = &rem
+		}
+		if tagsJSON.Valid && tagsJSON.String != "" {
+			json.Unmarshal([]byte(tagsJSON.String), &f.Tags)
+		}
+		findings = append(findings, f)
+	}
+	return findings, nil
+}
