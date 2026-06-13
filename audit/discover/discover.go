@@ -58,11 +58,11 @@ var resourceTypeMap = map[string]string{
 }
 
 type ServiceInfo struct {
-	Name     string
-	Count    int
-	Security bool
-	Cost     bool
-	List     bool
+	Name     string `json:"name"`
+	Count    int    `json:"count"`
+	Security bool   `json:"security"`
+	Cost     bool   `json:"cost"`
+	List     bool   `json:"list"`
 }
 
 func Discover(ctx context.Context, cfg aws.Config) ([]ServiceInfo, error) {
