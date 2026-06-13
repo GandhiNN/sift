@@ -2,6 +2,8 @@ package audit
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 )
 
@@ -14,6 +16,7 @@ type Remediation struct {
 }
 
 type Finding struct {
+	ID                   string            `json:"id"`
 	Region               string            `json:"region,omitempty"`
 	Service              string            `json:"service"`
 	ResourceID           string            `json:"resource_id"`
@@ -24,6 +27,12 @@ type Finding struct {
 	RiskLevel            string            `json:"risk_level"`
 	EstimatedMonthlyCost float64           `json:"estimated_monthly_cost,omitempty"`
 	Remediation          *Remediation      `json:"remediation,omitempty"`
+}
+
+// ComputeID sets the finding ID as a short hash of service+resource+check
+func (f *Finding) ComputeID() {
+	h := sha256.Sum256([]byte(f.Service + "/" + f.ResourceID + "/" + f.Check))
+	f.ID = hex.EncodeToString(h[:8])
 }
 
 func ErrorFinding(service, resourceID, check string, err error) Finding {
