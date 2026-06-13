@@ -78,13 +78,14 @@ func runAudit(command, serviceFlag string, validServices map[string]bool, fn aud
 	}
 
 	// Save to history and show diff
-	store, storeErr := history.NewStore()
-	if storeErr == nil {
+	db, dbErr := history.OpenDB()
+	if dbErr == nil {
+		defer db.Close()
 		if diff {
-			prev, ts, err := store.Latest(profile, command)
+			_, prev, err := db.LatestScan(profile, command)
 			if err == nil && prev != nil {
 				d := history.ComputeDiff(prev, allFindings)
-				fmt.Fprintf(os.Stderr, "\nDiff vs %s:\n", ts.Format("2006-01-02 15:04"))
+				fmt.Fprintf(os.Stderr, "\nDiff vs previous scan")
 				fmt.Fprintf(os.Stderr, " New:		%d\n", len(d.New))
 				fmt.Fprintf(os.Stderr, " Resolved: 	%d\n", len(d.Resolved))
 				fmt.Fprintf(os.Stderr, " Ongoing: 	%d\n", len(d.Ongoing))
@@ -93,7 +94,16 @@ func runAudit(command, serviceFlag string, validServices map[string]bool, fn aud
 			}
 		}
 		if !noSave {
-			if err := store.Save(profile, command, allFindings); err != nil {
+			meta := history.ScanMeta{
+				ID:         fmt.Sprintf("%d", time.Now().UnixNano()),
+				Profile:    profile,
+				Command:    command,
+				Region:     strings.Join(regions(configs), ","),
+				Services:   serviceFlag,
+				Timestamp:  time.Now().UTC(),
+				DurationMs: time.Since(start).Milliseconds(),
+			}
+			if err := db.SaveScan(meta, allFindings); err != nil {
 				slog.Warn("failed to save history", "error", err)
 			}
 		}
@@ -102,4 +112,12 @@ func runAudit(command, serviceFlag string, validServices map[string]bool, fn aud
 	if audit.HasHighRiskFindings(allFindings) {
 		os.Exit(1)
 	}
+}
+
+func regions(configs []aws.Config) []string {
+	var r []string
+	for _, c := range configs {
+		r = append(r, c.Region)
+	}
+	return r
 }
