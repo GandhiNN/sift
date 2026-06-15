@@ -209,3 +209,24 @@ func scanFindings(rows *sql.Rows) ([]audit.Finding, error) {
 	}
 	return findings, nil
 }
+
+func (d *DB) RecentScans(limit int) ([]ScanMeta, error) {
+	rows, err := d.db.Query(
+		`SELECT id, profile, command, region, services, timestamp, duration_ms FROM scans ORDER BY timestamp DESC LIMIT ?`,
+		limit,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("query recent scans: %w", err)
+	}
+	defer rows.Close()
+
+	var scans []ScanMeta
+	for rows.Next() {
+		var s ScanMeta
+		if err := rows.Scan(&s.ID, &s.Profile, &s.Command, &s.Region, &s.Services, &s.Timestamp, &s.DurationMs); err != nil {
+			return nil, err
+		}
+		scans = append(scans, s)
+	}
+	return scans, nil
+}
