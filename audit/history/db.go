@@ -115,7 +115,7 @@ func (d *DB) SaveScan(meta ScanMeta, findings []audit.Finding) error {
 
 func (d *DB) LatestScan(profile, command string) (*ScanMeta, []audit.Finding, error) {
 	row := d.db.QueryRow(
-		`SELECT id, profile, command, region, services, timestamp, duration_ms, FROM scans WHERE profile = ? AND command = ? ORDER BY timestamp DESC LIMIT 1`,
+		`SELECT id, profile, command, region, services, timestamp, duration_ms FROM scans WHERE profile = ? AND command = ? ORDER BY timestamp DESC LIMIT 1`,
 		profile,
 		command,
 	)
@@ -229,4 +229,21 @@ func (d *DB) RecentScans(limit int) ([]ScanMeta, error) {
 		scans = append(scans, s)
 	}
 	return scans, nil
+}
+
+func (d *DB) FindingsByCommand(
+	profile string,
+	commands []string,
+) (map[string][]audit.Finding, error) {
+	result := make(map[string][]audit.Finding)
+	for _, cmd := range commands {
+		meta, findings, err := d.LatestScan(profile, cmd)
+		if err != nil {
+			return nil, err
+		}
+		if meta != nil && len(findings) > 0 {
+			result[cmd] = findings
+		}
+	}
+	return result, nil
 }
