@@ -1,0 +1,6 @@
+services:
+  llm:
+   image: mdelapenya/phi3:latest-3.8b
+   ports:
+    - "11434:11434"
+   restart: unless-stopped
