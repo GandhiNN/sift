@@ -227,7 +227,7 @@ Pricing can be customized without rebuilding by placing a `prices.json` at `~/.s
 
 ## Scan history & diff
 
-Every scan is automatically saved to `~/.sift/history/<profile>/`. Use `--diff` to compare against the previous scan:
+Scan results are stored in a local SQLite database at `~/.sift/sift.db`. Use `--diff` to compare against the previous scan:
 
 ```bash
 sift cost --profile dev --diff
@@ -236,13 +236,36 @@ sift cost --profile dev --diff
 Output:
 
 ```bash
-Diff vs 2026-05-18 09:30:
+Diff vs previous scan:
   New:      2
   Resolved: 1
   Ongoing:  32
 ```
 
-History is retained for the last 30 scans per profile/command. Disable saving with `--no-save`.
+Disable saving with `--no-save`.
+
+### Querying history
+
+```bash
+# Show last 5 scans
+sift history --last 5
+
+# Query latest findings by service and risk
+sift history --service ec2 --risk CRITICAL
+
+# Track a specific finding over time
+sift history --finding <id>
+
+# JSON output
+sift history --service s3 --format json
+```
+
+| Flag | Description |
+|------|-------------|
+| `--finding` | Show history for a specific finding ID |
+| `--service` | Filter findings by service |
+| `--risk` | Filter findings by risk level |
+| `--last` | Show last N scans |
 
 ## Remediation recommendations
 
@@ -823,7 +846,7 @@ Sift uses the standard AWS SDK credential chain. Any method supported by the AWS
 | Path | Description |
 |------|-------------|
 | `~/.sift/prices.json` | Custom pricing overrides (optional) |
-| `~/.sift/history/` | Scan history (auto-created) |
+| `~/.sift/sift.db` | Scan history database (auto-created) |
 
 ## Environment variables
 
