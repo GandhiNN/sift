@@ -267,6 +267,27 @@ sift history --service s3 --format json
 | `--risk` | Filter findings by risk level |
 | `--last` | Show last N scans |
 
+## AI analysis
+
+Analyze findings with a local or remote LLM:
+
+```bash
+# Start local LLM
+docker compose up -d
+
+# Analyze latest findings
+sift ai --profile dev
+
+# Scope to module/service
+sift ai --profile dev --module security
+sift ai --profile dev --service ec2
+
+# Custom question
+sift ai --profile dev "What's the most urgent fix?"
+```
+
+Configure the endpoint in `~/.sift/ai.json`. See [docs/ai.md](docs/ai.md) for full setup and options.
+
 ## Remediation recommendations
 
 Findings include actionable remediation recommendations with:
