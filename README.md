@@ -253,6 +253,10 @@ sift history --last 5
 # Query latest findings by service and risk
 sift history --service ec2 --risk CRITICAL
 
+# Filter by module (security or cost)
+sift history --module security
+sift history --module cost
+
 # Track a specific finding over time
 sift history --finding <id>
 
@@ -263,6 +267,7 @@ sift history --service s3 --format json
 | Flag | Description |
 |------|-------------|
 | `--finding` | Show history for a specific finding ID |
+| `--module` | Filter by module (security, cost) |
 | `--service` | Filter findings by service |
 | `--risk` | Filter findings by risk level |
 | `--last` | Show last N scans |
