@@ -17,6 +17,7 @@ type Remediation struct {
 
 type Finding struct {
 	ID                   string            `json:"id"`
+	Module               string            `json:"module,omitempty"`
 	Region               string            `json:"region,omitempty"`
 	Service              string            `json:"service"`
 	ResourceID           string            `json:"resource_id"`
