@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -17,6 +18,14 @@ import (
 type Config struct {
 	Endpoint string `json:"endpoint"`
 	Model    string `json:"model"`
+}
+
+var riskOrder = map[string]int{
+	"MINIMAL":  0,
+	"LOW":      1,
+	"MEDIUM":   2,
+	"HIGH":     3,
+	"CRITICAL": 4,
 }
 
 func LoadConfig() Config {
@@ -67,13 +76,34 @@ func BuildContext(grouped map[string][]audit.Finding) string {
 		if len(relevant) == 0 {
 			continue
 		}
+		// Sort by risk (CRITICAL first) and cap at 20
+		sort.Slice(relevant, func(i, j int) bool {
+			return riskOrder[relevant[i].RiskLevel] > riskOrder[relevant[j].RiskLevel]
+		})
+		if len(relevant) > 10 {
+			relevant = relevant[:10]
+		}
 		total += len(relevant)
 		sb.WriteString(
-			fmt.Sprintf("## %s findings (%d issues):\n", strings.ToUpper(module), len(relevant)),
+			fmt.Sprintf(
+				"## %s findings (top %d issues):\n",
+				strings.ToUpper(module),
+				len(relevant),
+			),
 		)
-		b, _ := json.MarshalIndent(relevant, "", "  ")
-		sb.Write(b)
-		sb.WriteString("\n\n")
+		for _, f := range relevant {
+			sb.WriteString(
+				fmt.Sprintf(
+					"- [%s] %s/%s: %s (%s)\n",
+					f.RiskLevel,
+					f.Service,
+					f.Check,
+					f.Detail,
+					f.ResourceID,
+				),
+			)
+		}
+		sb.WriteString("\n")
 	}
 
 	if total == 0 {
@@ -86,7 +116,7 @@ func AnalyzeWithContext(cfg Config, context, question string) (string, error) {
 	messages := []message{
 		{
 			Role:    "system",
-			Content: "You are an AWS security and cost expert. Analyze the following audit findings and provide actionable recommendations. Be concise and prioritize by risk level.",
+			Content: "You are an AWS infrastructure expert. Analyze ONLY the provided audit findings. Do not suggest actions outside the scope of the findings shown. Be concise and prioritize by risk level.",
 		},
 		{Role: "user", Content: context + "\n\n" + question},
 	}
@@ -97,7 +127,7 @@ func AnalyzeWithContext(cfg Config, context, question string) (string, error) {
 		Stream:   false,
 	})
 
-	client := &http.Client{Timeout: 120 * time.Second}
+	client := &http.Client{Timeout: 300 * time.Second}
 	resp, err := client.Post(cfg.Endpoint, "application/json", bytes.NewReader(body))
 	if err != nil {
 		return "", fmt.Errorf("LLM request failed: %w", err)
