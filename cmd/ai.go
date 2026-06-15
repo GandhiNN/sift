@@ -43,14 +43,14 @@ var aiCmd = &cobra.Command{
 			}
 			context = ai.BuildContext(map[string][]audit.Finding{"finding": findings})
 		case aiService != "":
-			findings, err = db.Query(aiService, "", "")
+			findings, err = db.Query(aiService, "", "", "")
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 				os.Exit(2)
 			}
 			context = ai.BuildContext(map[string][]audit.Finding{aiService: findings})
 		default:
-			findings, err = db.Query("", "", "")
+			findings, err = db.Query("", "", "", "")
 			modules := []string{"security", "cost"}
 			if aiModule != "" {
 				modules = []string{aiModule}

@@ -16,6 +16,7 @@ var (
 	historyService string
 	historyRisk    string
 	historyLast    int
+	historyModule  string
 )
 
 var historyCmd = &cobra.Command{
@@ -61,7 +62,20 @@ var historyCmd = &cobra.Command{
 			}
 
 		default:
-			findings, err := db.Query(historyService, historyRisk, "")
+			// show latest scan for both 'history' and 'cost'
+			var findings []audit.Finding
+			if historyModule != "" {
+				findings, err = db.Query(historyService, historyRisk, "", historyModule)
+			} else {
+				for _, mod := range []string{"security", "cost"} {
+					f, e := db.Query(historyService, historyRisk, "", mod)
+					if e != nil {
+						err = e
+						break
+					}
+					findings = append(findings, f...)
+				}
+			}
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 				os.Exit(2)
@@ -80,10 +94,10 @@ func output(findings []audit.Finding) {
 		b, _ := json.MarshalIndent(findings, "", "  ")
 		fmt.Println(string(b))
 	} else {
-		fmt.Printf("  %-16s  %-10s  %-8s  %-30s  %s\n", "ID", "SERVICE", "RISK", "RESOURCE", "CHECK")
+		fmt.Printf("  %-16s  %-10s  %-10s  %-8s  %-30s  %s\n", "ID", "MODULE", "SERVICE", "RISK", "RESOURCE", "CHECK")
 		for _, f := range findings {
-			fmt.Printf("  %-16s  %-10s  %-8s  %-30s  %s\n",
-				f.ID, f.Service, f.RiskLevel, truncateStr(f.ResourceID, 30), f.Check)
+			fmt.Printf("  %-16s  %-10s  %-10s  %-8s  %-30s  %s\n",
+				f.ID, f.Module, f.Service, f.RiskLevel, truncateStr(f.ResourceID, 30), f.Check)
 		}
 	}
 }
@@ -101,5 +115,6 @@ func init() {
 	historyCmd.Flags().StringVar(&historyService, "service", "", "Filter by service")
 	historyCmd.Flags().StringVar(&historyRisk, "risk", "", "Filter by risk level")
 	historyCmd.Flags().IntVar(&historyLast, "last", 0, "Show last N scans")
+	historyCmd.Flags().StringVar(&historyModule, "module", "", "Filter by module (security, cost)")
 	rootCmd.AddCommand(historyCmd)
 }

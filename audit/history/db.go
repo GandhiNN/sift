@@ -149,12 +149,19 @@ func (d *DB) FindingHistory(findingID string) ([]audit.Finding, error) {
 	return scanFindings(rows)
 }
 
-func (d *DB) Query(service, riskLevel, status string) ([]audit.Finding, error) {
-	q := `SELECT f.id, f.region, f.service, f.resource_id, f.check_name, f.status, f.detail, f.risk_level, f.cost, f.remediation, f.tags
-		  FROM findings f
-		  JOIN (SELECT id FROM scans ORDER BY timestamp DESC LIMIT 1) s ON f.scan_id = s.id
-		  WHERE 1=1`
+func (d *DB) Query(service, riskLevel, status, module string) ([]audit.Finding, error) {
+	scanSubQuery := `SELECT id, command FROM scans`
 	var args []interface{}
+	if module != "" {
+		scanSubQuery += " WHERE command = ?"
+		args = append(args, module)
+	}
+	scanSubQuery += " ORDER BY timestamp DESC LIMIT 1"
+
+	q := `SELECT f.id, f.region, f.service, f.resource_id, f.check_name, f.status, f.detail, f.risk_level, f.cost, f.remediation, f.tags, s.command
+		  FROM findings f
+		  JOIN (` + scanSubQuery + `) s ON f.scan_id = s.id
+		  WHERE 1=1`
 
 	if service != "" {
 		q += " AND f.service = ?"
@@ -174,7 +181,25 @@ func (d *DB) Query(service, riskLevel, status string) ([]audit.Finding, error) {
 		return nil, fmt.Errorf("query findings: %w", err)
 	}
 	defer rows.Close()
-	return scanFindings(rows)
+
+	var findings []audit.Finding
+	for rows.Next() {
+		var f audit.Finding
+		var remJSON, tagsJSON sql.NullString
+		if err := rows.Scan(&f.ID, &f.Region, &f.Service, &f.ResourceID, &f.Check, &f.Status, &f.Detail, &f.RiskLevel, &f.EstimatedMonthlyCost, &remJSON, &tagsJSON, &f.Module); err != nil {
+			return nil, err
+		}
+		if remJSON.Valid && remJSON.String != "" {
+			var rem audit.Remediation
+			json.Unmarshal([]byte(remJSON.String), &rem)
+			f.Remediation = &rem
+		}
+		if tagsJSON.Valid && tagsJSON.String != "" {
+			json.Unmarshal([]byte(tagsJSON.String), &f.Tags)
+		}
+		findings = append(findings, f)
+	}
+	return findings, nil
 }
 
 func (d *DB) findingsByScan(scanID string) ([]audit.Finding, error) {
