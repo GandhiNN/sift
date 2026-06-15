@@ -130,7 +130,7 @@ func writeTable(data any, out io.Writer) {
 
 	if hasRegion {
 		if hasCost {
-			fmt.Fprintln(w, "RISK\tREGION\tSERVICE\tRESOURCE\tCHECK\t$/MO\tDETAIL")
+			fmt.Fprintln(w, "ID\tRISK\tREGION\tSERVICE\tRESOURCE\tCHECK\t$/MO\tDETAIL")
 			for _, f := range findings {
 				cost := ""
 				if f.EstimatedMonthlyCost > 0 {
@@ -138,7 +138,8 @@ func writeTable(data any, out io.Writer) {
 				}
 				fmt.Fprintf(
 					w,
-					"%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
+					"%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
+					f.ID,
 					colorRisk(
 						f.RiskLevel,
 					),
@@ -151,30 +152,30 @@ func writeTable(data any, out io.Writer) {
 				)
 			}
 		} else {
-			fmt.Fprintln(w, "RISK\tREGION\tSERVICE\tRESOURCE\tCHECK\tDETAIL")
+			fmt.Fprintln(w, "ID\tRISK\tREGION\tSERVICE\tRESOURCE\tCHECK\tDETAIL")
 			for _, f := range findings {
-				fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\n",
-					colorRisk(f.RiskLevel), f.Region, f.Service, f.ResourceID, f.Check, truncate(f.Detail, 80),
+				fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
+					f.ID, colorRisk(f.RiskLevel), f.Region, f.Service, f.ResourceID, f.Check, truncate(f.Detail, 80),
 				)
 			}
 		}
 	} else {
 		if hasCost {
-			fmt.Fprintln(w, "RISK\tSERVICE\tRESOURCE\tCHECK\t$/MO\tDETAIL")
+			fmt.Fprintln(w, "ID\tRISK\tSERVICE\tRESOURCE\tCHECK\t$/MO\tDETAIL")
 			for _, f := range findings {
 				cost := ""
 				if f.EstimatedMonthlyCost > 0 {
 					cost = fmt.Sprintf("$%.2f", f.EstimatedMonthlyCost)
 				}
-				fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\n",
-					colorRisk(f.RiskLevel), f.Service, f.ResourceID, f.Check, cost, truncate(f.Detail, 80),
+				fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
+					f.ID, colorRisk(f.RiskLevel), f.Service, f.ResourceID, f.Check, cost, truncate(f.Detail, 80),
 				)
 			}
 		} else {
-			fmt.Fprintln(w, "RISK\tSERVICE\tRESOURCE\tCHECK\tDETAIL")
+			fmt.Fprintln(w, "ID\tRISK\tSERVICE\tRESOURCE\tCHECK\tDETAIL")
 			for _, f := range findings {
-				fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n",
-					colorRisk(f.RiskLevel), f.Service, f.ResourceID, f.Check, truncate(f.Detail, 80),
+				fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\n",
+					f.ID, colorRisk(f.RiskLevel), f.Service, f.ResourceID, f.Check, truncate(f.Detail, 80),
 				)
 			}
 		}
