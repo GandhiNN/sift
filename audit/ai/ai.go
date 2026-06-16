@@ -62,6 +62,13 @@ type chatResponse struct {
 	} `json:"message"`
 }
 
+type streamChunk struct {
+	Message struct {
+		Content string `json:"content"`
+	} `json:"message"`
+	Done bool `json:"done"`
+}
+
 func BuildContext(grouped map[string][]audit.Finding) string {
 	var sb strings.Builder
 	total := 0
@@ -112,7 +119,7 @@ func BuildContext(grouped map[string][]audit.Finding) string {
 	return sb.String()
 }
 
-func AnalyzeWithContext(cfg Config, context, question string) (string, error) {
+func AnalyzeWithContext(cfg Config, context, question string, stream io.Writer) error {
 	messages := []message{
 		{
 			Role:    "system",
@@ -121,28 +128,42 @@ func AnalyzeWithContext(cfg Config, context, question string) (string, error) {
 		{Role: "user", Content: context + "\n\n" + question},
 	}
 
+	streaming := stream != nil
 	body, _ := json.Marshal(chatRequest{
 		Model:    cfg.Model,
 		Messages: messages,
-		Stream:   false,
+		Stream:   streaming,
 	})
 
 	client := &http.Client{Timeout: 300 * time.Second}
 	resp, err := client.Post(cfg.Endpoint, "application/json", bytes.NewReader(body))
 	if err != nil {
-		return "", fmt.Errorf("LLM request failed: %w", err)
+		return fmt.Errorf("LLM request failed: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
 		b, _ := io.ReadAll(resp.Body)
-		return "", fmt.Errorf("LLM returned %d: %s", resp.StatusCode, string(b))
+		return fmt.Errorf("LLM returned %d: %s", resp.StatusCode, string(b))
 	}
 
-	var result chatResponse
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return "", fmt.Errorf("decode response: %w", err)
+	if streaming {
+		decoder := json.NewDecoder(resp.Body)
+		for decoder.More() {
+			var chunk streamChunk
+			if err := decoder.Decode(&chunk); err != nil {
+				break
+			}
+			fmt.Fprint(stream, chunk.Message.Content)
+		}
+		fmt.Fprintln(stream)
+	} else {
+		var result chatResponse
+		if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+			return fmt.Errorf("decode response: %w", err)
+		}
+		fmt.Fprintln(stream, result.Message.Content)
 	}
 
-	return result.Message.Content, nil
+	return nil
 }

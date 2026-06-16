@@ -74,13 +74,10 @@ var aiCmd = &cobra.Command{
 		cfg := ai.LoadConfig()
 		fmt.Fprintf(os.Stderr, "Querying %s (%s)...\n", cfg.Model, cfg.Endpoint)
 
-		answer, err := ai.AnalyzeWithContext(cfg, context, question)
-		if err != nil {
+		if err := ai.AnalyzeWithContext(cfg, context, question, os.Stdout); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(2)
 		}
-
-		fmt.Println(answer)
 	},
 }
 
