@@ -137,9 +137,18 @@ sift list lambda --profile dev
 
 # List EKS clusters with nodegroup details
 sift list eks --profile dev
+
+# List IAM roles with usage
+sift list iam --profile dev
+
+# List DynamoDB tables
+sift list dynamodb --profile dev
+
+# List load balancers
+sift list elb --profile dev
 ```
 
-Available services: `glue`, `vpc`, `ec2`, `rds`, `s3`, `ebs`, `lambda`, `eks`
+Available services: `glue`, `vpc`, `ec2`, `rds`, `s3`, `ebs`, `lambda`, `eks`, `iam`, `dynamodb`, `elb`
 
 #### Discover
 
@@ -812,7 +821,10 @@ sift/
     │   ├── s3.go               # S3 buckets (size, versioning, access)
     │   ├── ebs.go              # EBS volumes
     │   ├── lambda.go           # Lambda functions (invocations, runtime)
-    │   └── eks.go              # EKS clusters (nodegroups, nodes, instance types)
+    │   ├── eks.go              # EKS clusters (nodegroups, nodes, instance types)
+    │   ├── iam.go              # IAM roles (last used, policies, trust)
+    │   ├── dynamodb.go         # DynamoDB tables (mode, items, PITR)
+    │   └── elb.go              # Load balancers (type, scheme, targets)
     ├── discover/
     │   └── discover.go         # Service discovery via AWS Config
     ├── ops/
