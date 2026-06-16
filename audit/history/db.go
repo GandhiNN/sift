@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"sift/audit"
@@ -149,12 +150,20 @@ func (d *DB) FindingHistory(findingID string) ([]audit.Finding, error) {
 	return scanFindings(rows)
 }
 
-func (d *DB) Query(service, riskLevel, status, module string) ([]audit.Finding, error) {
+func (d *DB) Query(service, riskLevel, status, module, profile string) ([]audit.Finding, error) {
 	scanSubQuery := `SELECT id, command FROM scans`
+	var conditions []string
 	var args []interface{}
 	if module != "" {
-		scanSubQuery += " WHERE command = ?"
+		conditions = append(conditions, "command = ?")
 		args = append(args, module)
+	}
+	if profile != "" {
+		conditions = append(conditions, "profile = ?")
+		args = append(args, profile)
+	}
+	if len(conditions) > 0 {
+		scanSubQuery += " WHERE " + strings.Join(conditions, " AND ")
 	}
 	scanSubQuery += " ORDER BY timestamp DESC LIMIT 1"
 

@@ -23,6 +23,10 @@ var historyCmd = &cobra.Command{
 	Use:   "history",
 	Short: "Query scan history from local database",
 	Run: func(cmd *cobra.Command, args []string) {
+		histProfile := ""
+		if cmd.Flags().Changed("profile") {
+			histProfile = profile
+		}
 		db, err := history.OpenDB()
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
@@ -65,10 +69,16 @@ var historyCmd = &cobra.Command{
 			// show latest scan for both 'history' and 'cost'
 			var findings []audit.Finding
 			if historyModule != "" {
-				findings, err = db.Query(historyService, historyRisk, "", historyModule)
+				findings, err = db.Query(
+					historyService,
+					historyRisk,
+					"",
+					historyModule,
+					histProfile,
+				)
 			} else {
 				for _, mod := range []string{"security", "cost"} {
-					f, e := db.Query(historyService, historyRisk, "", mod)
+					f, e := db.Query(historyService, historyRisk, "", mod, histProfile)
 					if e != nil {
 						err = e
 						break
