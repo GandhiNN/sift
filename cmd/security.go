@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"os"
 	"sift/audit"
 	"sift/audit/security"
 
@@ -14,6 +15,9 @@ var securityCmd = &cobra.Command{
 	Short: "Audit AWS resource security posture",
 	Run: func(cmd *cobra.Command, args []string) {
 		runAudit("security", securityServices, audit.ValidServices(security.Module), security.Audit)
+		if exitCode != 0 {
+			os.Exit(exitCode)
+		}
 	},
 }
 

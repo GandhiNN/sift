@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"os"
 	"strings"
 
 	"sift/audit"
@@ -35,6 +36,10 @@ var governanceCmd = &cobra.Command{
 				return governance.Audit(ctx, cfg, services)
 			},
 		)
+
+		if exitCode != 0 {
+			os.Exit(exitCode)
+		}
 	},
 }
 

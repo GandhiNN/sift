@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"os"
 	"strings"
 
 	"sift/audit"
@@ -21,6 +22,9 @@ var opsCmd = &cobra.Command{
 		}
 
 		runAudit("ops", opsServices, audit.ValidServices(ops.Module), ops.Audit)
+		if exitCode != 0 {
+			os.Exit(exitCode)
+		}
 	},
 }
 

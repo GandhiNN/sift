@@ -110,9 +110,11 @@ func runAudit(command, serviceFlag string, validServices map[string]bool, fn aud
 	}
 
 	if audit.HasHighRiskFindings(allFindings) {
-		os.Exit(1)
+		exitCode = 1
 	}
 }
+
+var exitCode int
 
 func regions(configs []aws.Config) []string {
 	var r []string

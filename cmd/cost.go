@@ -26,6 +26,9 @@ var costCmd = &cobra.Command{
 		if groupBy != "" {
 			printCostGroupBy(groupBy)
 		}
+		if exitCode != 0 {
+			os.Exit(exitCode)
+		}
 	},
 }
 
@@ -37,7 +40,11 @@ func printCostGroupBy(tagKey string) {
 	defer db.Close()
 
 	findings, err := db.Query("", "", "", "cost", profile)
-	if err != nil || len(findings) == 0 {
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "group-by error: %v\n", err)
+	}
+	if len(findings) == 0 {
+		fmt.Fprintf(os.Stderr, "group-by: no findings found\n")
 		return
 	}
 
