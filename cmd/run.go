@@ -18,7 +18,10 @@ import (
 
 type auditFunc func(context.Context, aws.Config, []string) ([]audit.Finding, error)
 
-var checksCtxOverride []string
+var (
+	checksCtxOverride []string
+	exitCode          int
+)
 
 func runAudit(command, serviceFlag string, validServices map[string]bool, fn auditFunc) {
 	start := time.Now()
@@ -113,8 +116,6 @@ func runAudit(command, serviceFlag string, validServices map[string]bool, fn aud
 		exitCode = 1
 	}
 }
-
-var exitCode int
 
 func regions(configs []aws.Config) []string {
 	var r []string

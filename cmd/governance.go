@@ -12,8 +12,10 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var govServices string
-var govCheck string
+var (
+	govServices string
+	govCheck    string
+)
 
 var governanceCmd = &cobra.Command{
 	Use:   "governance",

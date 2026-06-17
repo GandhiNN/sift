@@ -10,8 +10,10 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var opsServices string
-var opsCheck string
+var (
+	opsServices string
+	opsCheck    string
+)
 
 var opsCmd = &cobra.Command{
 	Use:   "ops",
