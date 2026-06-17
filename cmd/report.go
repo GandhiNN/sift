@@ -33,6 +33,9 @@ var reportCmd = &cobra.Command{
 			if latestTime == "" || meta.Timestamp.Format("2006-01-02 15:04") > latestTime {
 				latestTime = meta.Timestamp.Format("2006-01-02 15:04")
 			}
+			for i := range findings {
+				findings[i].Module = mod
+			}
 			allFindings = append(allFindings, findings...)
 		}
 
@@ -116,6 +119,34 @@ var reportCmd = &cobra.Command{
 
 		if diffLine != "" {
 			fmt.Println("\n" + diffLine)
+		}
+
+		// Compliance score
+		fmt.Println("\nCOMPLIANCE:")
+		for _, mod := range []string{"security", "cost"} {
+			resources := map[string]bool{}    // all resources
+			nonCompliant := map[string]bool{} // resources with issues
+			for _, f := range allFindings {
+				if f.Module != mod || f.ResourceID == "" {
+					continue
+				}
+				resources[f.ResourceID] = true
+				if f.Status != "PASS" {
+					nonCompliant[f.ResourceID] = true
+				}
+			}
+			total := len(resources)
+			if total > 0 {
+				compliant := total - len(nonCompliant)
+				pct := float64(compliant) / float64(total) * 100
+				fmt.Printf(
+					"  %-12s %.0f%% (%d of %d resources fully compliant)\n",
+					mod+":",
+					pct,
+					compliant,
+					total,
+				)
+			}
 		}
 
 		// Services breakdown
