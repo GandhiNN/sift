@@ -40,11 +40,7 @@ func printCostGroupBy(tagKey string) {
 	defer db.Close()
 
 	findings, err := db.Query("", "", "", "cost", profile)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "group-by error: %v\n", err)
-	}
-	if len(findings) == 0 {
-		fmt.Fprintf(os.Stderr, "group-by: no findings found\n")
+	if err != nil || len(findings) == 0 {
 		return
 	}
 

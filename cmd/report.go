@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 	"sort"
-	"strings"
 
 	"sift/audit"
 	"sift/audit/history"
@@ -137,8 +136,6 @@ var reportCmd = &cobra.Command{
 		for _, s := range svcs {
 			fmt.Printf("  %-16s %d issues\n", s.name, s.count)
 		}
-
-		_ = strings.Join // keep import
 	},
 }
 
