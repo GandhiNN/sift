@@ -58,6 +58,19 @@ func AuditOpenSearchCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, 
 			}
 
 			domain := desc.DomainStatus
+
+			// Get tags
+			var tags map[string]string
+			if domain.ARN != nil {
+				tagResp, tagErr := client.ListTags(ctx, &opensearch.ListTagsInput{ARN: domain.ARN})
+				if tagErr == nil {
+					tags = make(map[string]string, len(tagResp.TagList))
+					for _, t := range tagResp.TagList {
+						tags[aws.ToString(t.Key)] = aws.ToString(t.Value)
+					}
+				}
+			}
+
 			instanceType := string(domain.ClusterConfig.InstanceType)
 			instanceCount := aws.ToInt32(domain.ClusterConfig.InstanceCount)
 
@@ -124,6 +137,7 @@ func AuditOpenSearchCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, 
 				results = append(results, audit.Finding{
 					Service:    "opensearch",
 					ResourceID: name,
+					Tags:       tags,
 					Check:      "idle_domain",
 					Status:     "WARN",
 					Detail: fmt.Sprintf(
@@ -148,6 +162,7 @@ func AuditOpenSearchCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, 
 				results = append(results, audit.Finding{
 					Service:              "opensearch",
 					ResourceID:           name,
+					Tags:                 tags,
 					Check:                "oversized_domain",
 					Status:               "WARN",
 					Detail:               fmt.Sprintf("type=%s, nodes=%d, avg CPU=%.1f%% over %d days, consider downsizing", instanceType, instanceCount, avgCPU, lookback),
@@ -163,6 +178,7 @@ func AuditOpenSearchCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, 
 					results = append(results, audit.Finding{
 						Service:    "opensearch",
 						ResourceID: name,
+						Tags:       tags,
 						Check:      "previous_gen_instance",
 						Status:     "WARN",
 						Detail: fmt.Sprintf(
@@ -186,6 +202,7 @@ func AuditOpenSearchCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, 
 				results = append(results, audit.Finding{
 					Service:    "opensearch",
 					ResourceID: name,
+					Tags:       tags,
 					Check:      "opensearch_cost",
 					Status:     "PASS",
 					Detail: fmt.Sprintf(

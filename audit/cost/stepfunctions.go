@@ -43,6 +43,20 @@ func AuditStepFunctionsCost(ctx context.Context, cfg aws.Config) ([]audit.Findin
 		func(ctx context.Context, sm sfntypes.StateMachineListItem) audit.Finding {
 			arn := aws.ToString(sm.StateMachineArn)
 			name := aws.ToString(sm.Name)
+
+			// Get tags
+			var tags map[string]string
+			tagResp, tagErr := client.ListTagsForResource(
+				ctx,
+				&sfn.ListTagsForResourceInput{ResourceArn: &arn},
+			)
+			if tagErr == nil {
+				tags = make(map[string]string, len(tagResp.Tags))
+				for _, t := range tagResp.Tags {
+					tags[aws.ToString(t.Key)] = aws.ToString(t.Value)
+				}
+			}
+
 			execResp, err := client.ListExecutions(ctx, &sfn.ListExecutionsInput{
 				StateMachineArn: &arn,
 				MaxResults:      1,
@@ -56,6 +70,7 @@ func AuditStepFunctionsCost(ctx context.Context, cfg aws.Config) ([]audit.Findin
 				return audit.Finding{
 					Service:    "stepfunctions",
 					ResourceID: name,
+					Tags:       tags,
 					Check:      "unused_state_machine",
 					Status:     "WARN",
 					Detail:     detail,
@@ -72,6 +87,7 @@ func AuditStepFunctionsCost(ctx context.Context, cfg aws.Config) ([]audit.Findin
 			return audit.Finding{
 				Service:    "stepfunctions",
 				ResourceID: name,
+				Tags:       tags,
 				Check:      "unused_state_machine",
 				Status:     "PASS",
 				Detail: fmt.Sprintf(

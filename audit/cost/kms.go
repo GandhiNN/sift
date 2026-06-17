@@ -68,11 +68,25 @@ func AuditKMSCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 			)
 			rotationEnabled := rotResp != nil && rotResp.KeyRotationEnabled
 
+			// Get tags
+			var tags map[string]string
+			tagResp, tagErr := client.ListResourceTags(
+				ctx,
+				&kms.ListResourceTagsInput{KeyId: &keyID},
+			)
+			if tagErr == nil {
+				tags = make(map[string]string, len(tagResp.Tags))
+				for _, t := range tagResp.Tags {
+					tags[aws.ToString(t.TagKey)] = aws.ToString(t.TagValue)
+				}
+			}
+
 			if !rotationEnabled {
 				detail := "customer-managed key, rotation disabled, $1/mo"
 				return []audit.Finding{{
 					Service:              "kms",
 					ResourceID:           keyID,
+					Tags:                 tags,
 					Check:                "unrotated_cmk",
 					Status:               "WARN",
 					Detail:               detail,

@@ -53,6 +53,20 @@ func AuditKinesisCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, err
 			if err != nil {
 				return audit.ErrorFinding("kinesis", name, "describe_stream", err)
 			}
+
+			// Get tags
+			var tags map[string]string
+			tagResp, tagErr := client.ListTagsForStream(
+				ctx,
+				&kinesis.ListTagsForStreamInput{StreamName: &name},
+			)
+			if tagErr == nil {
+				tags = make(map[string]string, len(tagResp.Tags))
+				for _, t := range tagResp.Tags {
+					tags[aws.ToString(t.Key)] = aws.ToString(t.Value)
+				}
+			}
+
 			shards := aws.ToInt32(desc.StreamDescriptionSummary.OpenShardCount)
 			monthlyCost := float64(shards) * 11.0 // ~$11/shard/mo
 
@@ -82,6 +96,7 @@ func AuditKinesisCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, err
 				return audit.Finding{
 					Service:    "kinesis",
 					ResourceID: name,
+					Tags:       tags,
 					Check:      "idle_stream",
 					Status:     "WARN",
 					Detail: fmt.Sprintf(
@@ -104,6 +119,7 @@ func AuditKinesisCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, err
 			return audit.Finding{
 				Service:    "kinesis",
 				ResourceID: name,
+				Tags:       tags,
 				Check:      "idle_stream",
 				Status:     "PASS",
 				Detail: fmt.Sprintf(

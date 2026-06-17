@@ -69,6 +69,22 @@ func AuditSagemakerCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, e
 				return audit.ErrorFinding("sagemaker", name, "describe", err)
 			}
 			e := parseSagemakerCostEntry(desc, name)
+
+			// Get tags
+			var tags map[string]string
+			if desc.NotebookInstanceArn != nil {
+				tagResp, tagErr := client.ListTags(
+					ctx,
+					&sagemaker.ListTagsInput{ResourceArn: desc.NotebookInstanceArn},
+				)
+				if tagErr == nil {
+					tags = make(map[string]string, len(tagResp.Tags))
+					for _, t := range tagResp.Tags {
+						tags[aws.ToString(t.Key)] = aws.ToString(t.Value)
+					}
+				}
+			}
+
 			monthlyCost := pricing.SageMakerMonthly(e.instanceType)
 
 			switch smtypes.NotebookInstanceStatus(e.status) {
@@ -76,6 +92,7 @@ func AuditSagemakerCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, e
 				return audit.Finding{
 					Service:    "sagemaker",
 					ResourceID: e.name,
+					Tags:       tags,
 					Check:      "stopped_notebook",
 					Status:     "WARN",
 					Detail: fmt.Sprintf(
@@ -96,6 +113,7 @@ func AuditSagemakerCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, e
 				return audit.Finding{
 					Service:              "sagemaker",
 					ResourceID:           e.name,
+					Tags:                 tags,
 					Check:                "running_notebook",
 					Status:               "PASS",
 					Detail:               fmt.Sprintf("type=%s in service", e.instanceType),
@@ -106,6 +124,7 @@ func AuditSagemakerCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, e
 				return audit.Finding{
 					Service:    "sagemaker",
 					ResourceID: e.name,
+					Tags:       tags,
 					Check:      "notebook_status",
 					Status:     "PASS",
 					Detail: fmt.Sprintf(
