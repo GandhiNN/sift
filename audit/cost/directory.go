@@ -38,7 +38,7 @@ func AuditDirectoryCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, e
 		ctx,
 		directories,
 		"Auditing Directory Service cost",
-		func(_ context.Context, d dstypes.DirectoryDescription) audit.Finding {
+		func(ctx context.Context, d dstypes.DirectoryDescription) audit.Finding {
 			id := aws.ToString(d.DirectoryId)
 			name := aws.ToString(d.Name)
 			dirType := string(d.Type)
@@ -46,10 +46,24 @@ func AuditDirectoryCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, e
 			monthlyCost := pricing.DirectoryMonthly(dirType, size)
 			resourceID := fmt.Sprintf("%s (%s)", name, id)
 
+			// Get tags
+			var tags map[string]string
+			tagResp, tagErr := client.ListTagsForResource(
+				ctx,
+				&directoryservice.ListTagsForResourceInput{ResourceId: &id},
+			)
+			if tagErr == nil {
+				tags = make(map[string]string, len(tagResp.Tags))
+				for _, t := range tagResp.Tags {
+					tags[aws.ToString(t.Key)] = aws.ToString(t.Value)
+				}
+			}
+
 			if d.Stage == dstypes.DirectoryStageActive && len(d.DnsIpAddrs) == 0 {
 				return audit.Finding{
 					Service:    "directory",
 					ResourceID: resourceID,
+					Tags:       tags,
 					Check:      "idle_directory",
 					Status:     "WARN",
 					Detail: fmt.Sprintf(
@@ -72,6 +86,7 @@ func AuditDirectoryCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, e
 			return audit.Finding{
 				Service:              "directory",
 				ResourceID:           resourceID,
+				Tags:                 tags,
 				Check:                "idle_directory",
 				Status:               "PASS",
 				Detail:               fmt.Sprintf("type-%s, size=%s, active", dirType, size),

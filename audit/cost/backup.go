@@ -47,6 +47,19 @@ func AuditBackupCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, erro
 		"Auditing Backup cost",
 		func(ctx context.Context, v backuptypes.BackupVaultListMember) audit.Finding {
 			vaultName := aws.ToString(v.BackupVaultName)
+
+			// Get tags
+			var tags map[string]string
+			if v.BackupVaultArn != nil {
+				tagResp, tagErr := client.ListTags(
+					ctx,
+					&backup.ListTagsInput{ResourceArn: v.BackupVaultArn},
+				)
+				if tagErr == nil {
+					tags = tagResp.Tags
+				}
+			}
+
 			rpInput := &backup.ListRecoveryPointsByBackupVaultInput{BackupVaultName: &vaultName}
 			var oldCount, totalCount int
 			var oldBytes int64
@@ -81,6 +94,7 @@ func AuditBackupCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, erro
 				return audit.Finding{
 					Service:              "backup",
 					ResourceID:           vaultName,
+					Tags:                 tags,
 					Check:                "old_recovery_points",
 					Status:               "WARN",
 					Detail:               detail,
@@ -98,6 +112,7 @@ func AuditBackupCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, erro
 			return audit.Finding{
 				Service:    "backup",
 				ResourceID: vaultName,
+				Tags:       tags,
 				Check:      "old_recovery_points",
 				Status:     "PASS",
 				Detail: fmt.Sprintf(

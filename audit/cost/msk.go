@@ -30,6 +30,7 @@ func AuditMSKCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 		brokerType string
 		brokers    int32
 		storageGB  int32
+		tags       map[string]string
 	}
 
 	input := &kafka.ListClustersV2Input{}
@@ -57,12 +58,14 @@ func AuditMSKCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 				brokerType string
 				brokers    int32
 				storageGB  int32
+				tags       map[string]string
 			}{
 				arn:        aws.ToString(c.ClusterArn),
 				name:       aws.ToString(c.ClusterName),
 				brokerType: brokerType,
 				brokers:    brokers,
 				storageGB:  storageGB,
+				tags:       c.Tags,
 			})
 		}
 		if resp.NextToken == nil {
@@ -86,6 +89,7 @@ func AuditMSKCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 			brokerType string
 			brokers    int32
 			storageGB  int32
+			tags       map[string]string
 		}) []audit.Finding {
 			var results []audit.Finding
 			storageCost := float64(c.brokers) * float64(c.storageGB) * 0.10
@@ -117,6 +121,7 @@ func AuditMSKCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 				results = append(results, audit.Finding{
 					Service:    "msk",
 					ResourceID: c.name,
+					Tags:       c.tags,
 					Check:      "idle_cluster",
 					Status:     "WARN",
 					Detail: fmt.Sprintf(
@@ -162,6 +167,7 @@ func AuditMSKCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 					results = append(results, audit.Finding{
 						Service:    "msk",
 						ResourceID: c.name,
+						Tags:       c.tags,
 						Check:      "oversized_cluster",
 						Status:     "WARN",
 						Detail: fmt.Sprintf(
@@ -207,6 +213,7 @@ func AuditMSKCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 					results = append(results, audit.Finding{
 						Service:    "msk",
 						ResourceID: c.name,
+						Tags:       c.tags,
 						Check:      "overprovisioned_storage",
 						Status:     "WARN",
 						Detail: fmt.Sprintf(
@@ -233,6 +240,7 @@ func AuditMSKCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 				results = append(results, audit.Finding{
 					Service:    "msk",
 					ResourceID: c.name,
+					Tags:       c.tags,
 					Check:      "msk_cost",
 					Status:     "PASS",
 					Detail: fmt.Sprintf(

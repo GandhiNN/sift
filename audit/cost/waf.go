@@ -43,6 +43,19 @@ func AuditWAFCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 			aclARN := aws.ToString(acl.ARN)
 			name := aws.ToString(acl.Name)
 
+			// Get tags
+			var tags map[string]string
+			tagResp, tagErr := client.ListTagsForResource(
+				ctx,
+				&wafv2.ListTagsForResourceInput{ResourceARN: &aclARN},
+			)
+			if tagErr == nil && tagResp.TagInfoForResource != nil {
+				tags = make(map[string]string, len(tagResp.TagInfoForResource.TagList))
+				for _, t := range tagResp.TagInfoForResource.TagList {
+					tags[aws.ToString(t.Key)] = aws.ToString(t.Value)
+				}
+			}
+
 			resp, err := client.GetWebACL(ctx, &wafv2.GetWebACLInput{
 				Name:  &name,
 				Id:    acl.Id,
@@ -75,6 +88,7 @@ func AuditWAFCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 				return audit.Finding{
 					Service:              "waf",
 					ResourceID:           name,
+					Tags:                 tags,
 					Check:                "unused_web_acl",
 					Status:               "WARN",
 					Detail:               detail,
@@ -92,6 +106,7 @@ func AuditWAFCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 			return audit.Finding{
 				Service:    "waf",
 				ResourceID: name,
+				Tags:       tags,
 				Check:      "unused_web_acl",
 				Status:     "PASS",
 				Detail: fmt.Sprintf(
