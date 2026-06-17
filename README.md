@@ -73,6 +73,10 @@ sift cost --profile dev --service ebs,cloudwatch
 # Sort by highest cost first
 sift cost --profile dev --sort-by cost
 
+# Group waste by tag
+sift cost --profile dev --group-by Project
+sift cost --profile dev --group-by Team
+
 # Show what changed since last scan
 sift cost --profile dev --diff
 ```
