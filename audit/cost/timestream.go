@@ -41,6 +41,7 @@ func AuditTimestreamCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, 
 	type tsTable struct {
 		database         string
 		table            string
+		arn              string
 		memRetentionHrs  int64
 		magRetentionDays int64
 	}
@@ -62,6 +63,7 @@ func AuditTimestreamCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, 
 				tables = append(tables, tsTable{
 					database:         db,
 					table:            aws.ToString(t.TableName),
+					arn:              *t.Arn,
 					memRetentionHrs:  memHrs,
 					magRetentionDays: magDays,
 				})
@@ -82,6 +84,21 @@ func AuditTimestreamCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, 
 		"Auditing Timestream cost",
 		func(ctx context.Context, t tsTable) audit.Finding {
 			resourceID := fmt.Sprintf("%s/%s", t.database, t.table)
+
+			// Get tags
+			var tags map[string]string
+			if t.arn != "" {
+				tagResp, tagErr := client.ListTagsForResource(
+					ctx,
+					&timestreamwrite.ListTagsForResourceInput{ResourceARN: &t.arn},
+				)
+				if tagErr == nil {
+					tags = make(map[string]string, len(tagResp.Tags))
+					for _, tag := range tagResp.Tags {
+						tags[aws.ToString(tag.Key)] = aws.ToString(tag.Value)
+					}
+				}
+			}
 
 			// Check write records
 			writeResp, _ := cwClient.GetMetricStatistics(ctx, &cloudwatch.GetMetricStatisticsInput{
@@ -114,6 +131,7 @@ func AuditTimestreamCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, 
 				return audit.Finding{
 					Service:    "timestream",
 					ResourceID: resourceID,
+					Tags:       tags,
 					Check:      "idle_table",
 					Status:     "WARN",
 					Detail:     detail,
@@ -137,6 +155,7 @@ func AuditTimestreamCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, 
 				return audit.Finding{
 					Service:    "timestream",
 					ResourceID: resourceID,
+					Tags:       tags,
 					Check:      "high_memory_retention",
 					Status:     "WARN",
 					Detail:     detail,
@@ -154,6 +173,7 @@ func AuditTimestreamCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, 
 			return audit.Finding{
 				Service:    "timestream",
 				ResourceID: resourceID,
+				Tags:       tags,
 				Check:      "timestream_cost",
 				Status:     "PASS",
 				Detail:     fmt.Sprintf("memory_retention=%dh, active writes", t.memRetentionHrs),
