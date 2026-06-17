@@ -35,6 +35,21 @@ func AuditEventBridgeCost(ctx context.Context, cfg aws.Config) ([]audit.Finding,
 		func(ctx context.Context, bus ebtypes.EventBus) audit.Finding {
 			name := aws.ToString(bus.Name)
 
+			// Get tags
+			var tags map[string]string
+			if bus.Arn != nil {
+				tagResp, tagErr := client.ListTagsForResource(
+					ctx,
+					&eventbridge.ListTagsForResourceInput{ResourceARN: bus.Arn},
+				)
+				if tagErr == nil {
+					tags = make(map[string]string, len(tagResp.Tags))
+					for _, t := range tagResp.Tags {
+						tags[aws.ToString(t.Key)] = aws.ToString(t.Value)
+					}
+				}
+			}
+
 			resp, err := cwClient.GetMetricStatistics(ctx, &cloudwatch.GetMetricStatisticsInput{
 				Namespace:  aws.String("AWS/Events"),
 				MetricName: aws.String("Invocations"),
@@ -61,6 +76,7 @@ func AuditEventBridgeCost(ctx context.Context, cfg aws.Config) ([]audit.Finding,
 				return audit.Finding{
 					Service:    "eventbridge",
 					ResourceID: name,
+					Tags:       tags,
 					Check:      "idle_bus",
 					Status:     "WARN",
 					Detail:     detail,
@@ -74,6 +90,7 @@ func AuditEventBridgeCost(ctx context.Context, cfg aws.Config) ([]audit.Finding,
 			return audit.Finding{
 				Service:    "eventbridge",
 				ResourceID: name,
+				Tags:       tags,
 				Check:      "idle_bus",
 				Status:     "PASS",
 				Detail:     fmt.Sprintf("%.0f invocations in last 30 days", totalInvocations),

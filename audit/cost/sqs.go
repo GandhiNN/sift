@@ -45,6 +45,13 @@ func AuditSQSCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 		func(ctx context.Context, url string) audit.Finding {
 			name := url[strings.LastIndex(url, "/")+1:]
 
+			// Get tags
+			var tags map[string]string
+			tagResp, err := client.ListQueueTags(ctx, &sqs.ListQueueTagsInput{QueueUrl: &url})
+			if err == nil {
+				tags = tagResp.Tags
+			}
+
 			// Get approximate messages to detect stuck DLQs
 			attrs, err := client.GetQueueAttributes(ctx, &sqs.GetQueueAttributesInput{
 				QueueUrl: &url,
@@ -87,6 +94,7 @@ func AuditSQSCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 				return audit.Finding{
 					Service:    "sqs",
 					ResourceID: name,
+					Tags:       tags,
 					Check:      "idle_queue",
 					Status:     "WARN",
 					Detail:     detail,
@@ -100,6 +108,7 @@ func AuditSQSCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 			return audit.Finding{
 				Service:    "sqs",
 				ResourceID: name,
+				Tags:       tags,
 				Check:      "idle_queue",
 				Status:     "PASS",
 				Detail:     fmt.Sprintf("%.0f messages sent in last 30 days", totalSent),

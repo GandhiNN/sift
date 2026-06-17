@@ -46,6 +46,19 @@ func AuditSNSCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 		func(ctx context.Context, arn string) audit.Finding {
 			name := arn[strings.LastIndex(arn, ":")+1:]
 
+			// Get tags
+			var tags map[string]string
+			tagResp, tagErr := client.ListTagsForResource(
+				ctx,
+				&sns.ListTagsForResourceInput{ResourceArn: &arn},
+			)
+			if tagErr == nil {
+				tags = make(map[string]string, len(tagResp.Tags))
+				for _, t := range tagResp.Tags {
+					tags[aws.ToString(t.Key)] = aws.ToString(t.Value)
+				}
+			}
+
 			resp, err := cwClient.GetMetricStatistics(ctx, &cloudwatch.GetMetricStatisticsInput{
 				Namespace:  aws.String("AWS/SNS"),
 				MetricName: aws.String("NumberOfMessagesPublished"),
@@ -72,6 +85,7 @@ func AuditSNSCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 				return audit.Finding{
 					Service:    "sns",
 					ResourceID: name,
+					Tags:       tags,
 					Check:      "idle_topic",
 					Status:     "WARN",
 					Detail:     detail,
@@ -85,6 +99,7 @@ func AuditSNSCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 			return audit.Finding{
 				Service:    "sns",
 				ResourceID: name,
+				Tags:       tags,
 				Check:      "idle_topic",
 				Status:     "PASS",
 				Detail:     fmt.Sprintf("%.0f messages published in last 30 days", totalPublished),

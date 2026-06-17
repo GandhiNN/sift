@@ -29,9 +29,11 @@ func AuditElastiCacheCost(ctx context.Context, cfg aws.Config) ([]audit.Finding,
 
 	var clusters []struct {
 		id       string
+		arn      string
 		nodeType string
 		engine   string
 		nodes    int32
+		tags     map[string]string
 	}
 
 	input := &elasticache.DescribeCacheClustersInput{}
@@ -41,16 +43,34 @@ func AuditElastiCacheCost(ctx context.Context, cfg aws.Config) ([]audit.Finding,
 			return nil, fmt.Errorf("describe cache clusters: %w", err)
 		}
 		for _, c := range resp.CacheClusters {
+			tags := make(map[string]string)
+			if c.ARN != nil {
+				tagResp, err := client.ListTagsForResource(
+					ctx,
+					&elasticache.ListTagsForResourceInput{
+						ResourceName: c.ARN,
+					},
+				)
+				if err == nil {
+					for _, t := range tagResp.TagList {
+						tags[aws.ToString(t.Key)] = aws.ToString(t.Value)
+					}
+				}
+			}
 			clusters = append(clusters, struct {
 				id       string
+				arn      string
 				nodeType string
 				engine   string
 				nodes    int32
+				tags     map[string]string
 			}{
 				id:       aws.ToString(c.CacheClusterId),
+				arn:      aws.ToString(c.ARN),
 				nodeType: aws.ToString(c.CacheNodeType),
 				engine:   aws.ToString(c.Engine),
 				nodes:    aws.ToInt32(c.NumCacheNodes),
+				tags:     tags,
 			})
 		}
 		if resp.Marker == nil {
@@ -70,9 +90,11 @@ func AuditElastiCacheCost(ctx context.Context, cfg aws.Config) ([]audit.Finding,
 		"Auditing ElastiCache cost",
 		func(ctx context.Context, c struct {
 			id       string
+			arn      string
 			nodeType string
 			engine   string
 			nodes    int32
+			tags     map[string]string
 		}) []audit.Finding {
 			var results []audit.Finding
 
@@ -138,6 +160,7 @@ func AuditElastiCacheCost(ctx context.Context, cfg aws.Config) ([]audit.Finding,
 				results = append(results, audit.Finding{
 					Service:              "elasticache",
 					ResourceID:           c.id,
+					Tags:                 c.tags,
 					Check:                "idle_cluster",
 					Status:               "WARN",
 					Detail:               detail,
@@ -157,6 +180,7 @@ func AuditElastiCacheCost(ctx context.Context, cfg aws.Config) ([]audit.Finding,
 				results = append(results, audit.Finding{
 					Service:              "elasticache",
 					ResourceID:           c.id,
+					Tags:                 c.tags,
 					Check:                "oversized_cluster",
 					Status:               "WARN",
 					Detail:               detail,
@@ -172,6 +196,7 @@ func AuditElastiCacheCost(ctx context.Context, cfg aws.Config) ([]audit.Finding,
 					results = append(results, audit.Finding{
 						Service:    "elasticache",
 						ResourceID: c.id,
+						Tags:       c.tags,
 						Check:      "previous_gen_node",
 						Status:     "WARN",
 						Detail: fmt.Sprintf(
@@ -195,6 +220,7 @@ func AuditElastiCacheCost(ctx context.Context, cfg aws.Config) ([]audit.Finding,
 				results = append(results, audit.Finding{
 					Service:    "elasticache",
 					ResourceID: c.id,
+					Tags:       c.tags,
 					Check:      "elasticache_cost",
 					Status:     "PASS",
 					Detail: fmt.Sprintf(
