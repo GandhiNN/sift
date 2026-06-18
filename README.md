@@ -361,6 +361,20 @@ Example (JSON output):
 
 Remediations can be customized without rebuilding by placing a `remediations.json` at `~/.sift/remediations.json`. See `audit/remediation/remediations.json` for the format.
 
+### Executing remediations
+
+Use `sift fix` to show or execute the remediation command for a specific finding:
+
+```bash
+# Show the command without executing
+sift fix <finding-id> --dry-run
+
+# Show and prompt to execute
+sift fix <finding-id>
+```
+
+The finding ID is shown in the `ID` column of scan output and `sift history`.
+
 ## Risk matrices
 
 ### EC2

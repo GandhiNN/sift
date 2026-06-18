@@ -108,6 +108,25 @@ Then add remediation templates to `audit/remediation/remediations.json`:
 }
 ```
 
+### Template variables
+
+Commands support these variables, resolved at `sift fix` time:
+
+| Variable | Source | Example |
+|----------|--------|---------|
+| `{{.ResourceID}}` | 4th arg to `Recommend()` | `my-queue`, `arn:aws:...` |
+| `{{.Region}}` | Finding's region | `eu-west-1` |
+| `{{.AccountID}}` | STS GetCallerIdentity | `123456789012` |
+| `{{.ClusterName}}` | Split ResourceID on `/` (EKS) | `my-cluster` |
+| `{{.NodegroupName}}` | Split ResourceID on `/` (EKS) | `my-ng` |
+| `{{.DatabaseName}}` | Split ResourceID on `/` (Timestream) | `my-db` |
+| `{{.TableName}}` | Split ResourceID on `/` (Timestream/DynamoDB) | `my-table` |
+| `{{.IndexName}}` | Split ResourceID on `/` (DynamoDB GSI) | `my-gsi` |
+
+For composite ResourceIDs (e.g., `cluster/nodegroup`), pass the full composite to `Recommend()` and use the service-specific variables in templates.
+
+Unresolvable values (user must fill in) use `<placeholder>` syntax and trigger a warning in `sift fix`.
+
 That's it. The service automatically appears in `sift security --service sqs`.
 
 ## Adding a Cost Check
