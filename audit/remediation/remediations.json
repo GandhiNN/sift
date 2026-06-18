@@ -105,13 +105,13 @@
     "elb": {
       "idle_lb": {
         "action": "Delete idle load balancer",
-        "command": "aws elbv2 delete-load-balancer --load-balancer-arn <arn>",
+        "command": "aws elbv2 delete-load-balancer --load-balancer-arn {{.ResourceID}}",
         "confidence": "HIGH",
         "action_risk": "HIGH"
       },
       "no_targets": {
         "action": "Attach target groups or delete LB",
-        "command": "aws elbv2 delete-load-balancer --load-balancer-arn <arn>",
+        "command": "aws elbv2 delete-load-balancer --load-balancer-arn {{.ResourceID}}",
         "confidence": "HIGH",
         "action_risk": "MEDIUM"
       }
@@ -171,13 +171,13 @@
     "dms": {
       "idle_instance": {
         "action": "Delete idle replication instance",
-        "command": "aws dms delete-replication-instance --replication-instance-arn <arn>",
+        "command": "aws dms delete-replication-instance --replication-instance-arn {{.ResourceID}}",
         "confidence": "HIGH",
         "action_risk": "HIGH"
       },
       "all_tasks_stopped": {
         "action": "Delete instance or restart tasks",
-        "command": "aws dms delete-replication-instance --replication-instance-arn <arn>",
+        "command": "aws dms delete-replication-instance --replication-instance-arn {{.ResourceID}}",
         "confidence": "MEDIUM",
         "action_risk": "MEDIUM"
       },
@@ -223,31 +223,31 @@
       },
       "previous_gen_node": {
         "action": "Upgrade node group to current-gen instance type",
-        "command": "aws eks update-nodegroup-config --cluster-name <cluster> --nodegroup-name {{.ResourceID}}",
+        "command": "aws eks update-nodegroup-config --cluster-name {{.ClusterName}} --nodegroup-name {{.NodegroupName}}",
         "confidence": "LOW",
         "action_risk": "MEDIUM"
       },
       "empty_nodegroup": {
         "action": "Delete empty node group if unused",
-        "command": "aws eks delete-nodegroup --cluster-name <cluster> --nodegroup-name {{.ResourceID}}",
+        "command": "aws eks delete-nodegroup --cluster-name {{.ClusterName}} --nodegroup-name {{.NodegroupName}}",
         "confidence": "MEDIUM",
         "action_risk": "MEDIUM"
       },
       "graviton_opportunity": {
         "action": "Switch node group to Graviton instance type for ~20% savings",
-        "command": "aws eks update-nodegroup-config --cluster-name <cluster> --nodegroup-name {{.ResourceID}}",
+        "command": "aws eks update-nodegroup-config --cluster-name {{.ClusterName}} --nodegroup-name {{.NodegroupName}}",
         "confidence": "HIGH",
         "action_risk": "MEDIUM"
       },
       "unused_fargate_profile": {
         "action": "Delete unused Fargate profile",
-        "command": "aws eks delete-fargate-profile --cluster-name <cluster> --fargate-profile-name {{.ResourceID}}",
+        "command": "aws eks delete-fargate-profile --cluster-name {{.ClusterName}} --fargate-profile-name {{.NodegroupName}}",
         "confidence": "MEDIUM",
         "action_risk": "MEDIUM"
       },
       "oversized_nodegroup": {
         "action": "Reduce node group desired/max size or use smaller instance type",
-        "command": "aws eks update-nodegroup-config --cluster-name <cluster> --nodegroup-name {{.ResourceID}} --scaling-config desiredSize=<n>",
+        "command": "aws eks update-nodegroup-config --cluster-name {{.ClusterName}} --nodegroup-name {{.NodegroupName}} --scaling-config desiredSize=<n>",
         "confidence": "MEDIUM",
         "action_risk": "MEDIUM"
       }
@@ -277,7 +277,7 @@
     "stepfunctions": {
       "unused_state_machine": {
         "action": "Delete unused state machine",
-        "command": "aws stepfunctions delete-state-machine --state-machine-arn <arn>",
+        "command": "aws stepfunctions delete-state-machine --state-machine-arn arn:aws:states:{{.Region}}:{{.AccountID}}:stateMachine:{{.ResourceID}}",
         "confidence": "MEDIUM",
         "action_risk": "MEDIUM"
       }
@@ -299,7 +299,7 @@
       },
       "unused_gsi": {
         "action": "Delete unused GSI",
-        "command": "aws dynamodb update-table --table-name <table> --global-secondary-index-updates '[{\"Delete\":{\"IndexName\":\"<gsi>\"}}]'",
+        "command": "aws dynamodb update-table --table-name {{.TableName}} --global-secondary-index-updates '[{\"Delete\":{\"IndexName\":\"{{.IndexName}}\"}}]'",
         "confidence": "MEDIUM",
         "action_risk": "MEDIUM"
       }
@@ -487,7 +487,7 @@
     "timestream": {
       "idle_table": {
         "action": "Delete unused Timestream table",
-        "command": "aws timestream-write delete-table --database-name <db> --table-name {{.ResourceID}}",
+        "command": "aws timestream-write delete-table --database-name {{.DatabaseName}} --table-name {{.TableName}}",
         "confidence": "HIGH",
         "action_risk": "HIGH"
       },
@@ -517,7 +517,7 @@
     "sqs": {
       "idle_queue": {
         "action": "Delete idle SQS queue",
-        "command": "aws sqs delete-queue --queue-url <queue-url>",
+        "command": "aws sqs delete-queue --queue-url https://sqs.{{.Region}}.amazonaws.com/{{.AccountID}}/{{.ResourceID}}",
         "confidence": "HIGH",
         "action_risk": "MEDIUM"
       }
@@ -525,7 +525,7 @@
     "sns": {
       "idle_topic": {
         "action": "Delete idle SNS topic",
-        "command": "aws sns delete-topic --topic-arn <topic-arn>",
+        "command": "aws sns delete-topic --topic-arn arn:aws:sns:{{.Region}}:{{.AccountID}}:{{.ResourceID}}",
         "confidence": "HIGH",
         "action_risk": "MEDIUM"
       }
@@ -795,13 +795,13 @@
     "stepfunctions": {
       "no_logging": {
         "action": "Enable execution logging",
-        "command": "aws stepfunctions update-state-machine --state-machine-arn <arn> --logging-configuration level=ALL,includeExecutionData=true,destinations=[{cloudWatchLogsLogGroup:{logGroupArn:<arn>}}]",
+        "command": "aws stepfunctions update-state-machine --state-machine-arn arn:aws:states:{{.Region}}:{{.AccountID}}:stateMachine:{{.ResourceID}} --logging-configuration level=ALL,includeExecutionData=true,destinations=[{cloudWatchLogsLogGroup:{logGroupArn:arn:aws:states:{{.Region}}:{{.AccountID}}:stateMachine:{{.ResourceID}}}}]",
         "confidence": "HIGH",
         "action_risk": "LOW"
       },
       "no_tracing": {
         "action": "Enable X-Ray tracing",
-        "command": "aws stepfunctions update-state-machine --state-machine-arn <arn> --tracing-configuration enabled=true",
+        "command": "aws stepfunctions update-state-machine --state-machine-arn arn:aws:states:{{.Region}}:{{.AccountID}}:stateMachine:{{.ResourceID}} --tracing-configuration enabled=true",
         "confidence": "HIGH",
         "action_risk": "LOW"
       }
@@ -877,13 +877,13 @@
     "sns": {
       "public_access": {
         "action": "Restrict topic policy to specific principals",
-        "command": "aws sns set-topic-attributes --topic-arn <arn> --attribute-name Policy --attribute-value <restricted-policy>",
+        "command": "aws sns set-topic-attributes --topic-arn arn:aws:sns:{{.Region}}:{{.AccountID}}:{{.ResourceID}} --attribute-name Policy --attribute-value <restricted-policy>",
         "confidence": "HIGH",
         "action_risk": "MEDIUM"
       },
       "no_encryption": {
         "action": "Enable server-side encryption with KMS",
-        "command": "aws sns set-topic-attributes --topic-arn <arn> --attribute-name KmsMasterKeyId --attribute-value alias/aws/sns",
+        "command": "aws sns set-topic-attributes --topic-arn arn:aws:sns:{{.Region}}:{{.AccountID}}:{{.ResourceID}} --attribute-name KmsMasterKeyId --attribute-value alias/aws/sns",
         "confidence": "HIGH",
         "action_risk": "LOW"
       }
