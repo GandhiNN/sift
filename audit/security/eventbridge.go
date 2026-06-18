@@ -88,7 +88,7 @@ func AuditEventBridge(ctx context.Context, cfg aws.Config) ([]audit.Finding, err
 									"security",
 									"eventbridge",
 									"no_dlq",
-									ruleName,
+									ruleName+"/"+aws.ToString(target.Id),
 									d,
 								),
 							})
