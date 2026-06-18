@@ -126,7 +126,7 @@ func AuditELBCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 						"cost",
 						"elb",
 						"no_targets",
-						e.name,
+						e.arn,
 						"no target groups attached",
 					),
 				}}
