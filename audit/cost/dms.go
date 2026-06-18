@@ -130,7 +130,7 @@ func AuditDMSCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 						"cost",
 						"dms",
 						"idle_instance",
-						d.id,
+						d.arn,
 						"no replication tasks assigned",
 					),
 				})
@@ -143,7 +143,7 @@ func AuditDMSCost(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 					Detail:               fmt.Sprintf("class=%s, all %d tasks stopped but instance running", d.class, stoppedTasks[d.arn]),
 					RiskLevel:            "MEDIUM",
 					EstimatedMonthlyCost: pricing.DMSMonthly(d.class),
-					Remediation:          remediation.Recommend("cost", "dms", "all_tasks_stopped", d.id, fmt.Sprintf("all %d tasks stopped", stoppedTasks[d.arn])),
+					Remediation:          remediation.Recommend("cost", "dms", "all_tasks_stopped", d.arn, fmt.Sprintf("all %d tasks stopped", stoppedTasks[d.arn])),
 				})
 			}
 			for _, prefix := range dmsPrevGenPrefixes {
