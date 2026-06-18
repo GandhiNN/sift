@@ -32,6 +32,12 @@ var migrations = []string{
 	CREATE INDEX IF NOT EXISTS idx_findings_status ON findings(status);
 	CREATE INDEX IF NOT EXISTS idx_findings_risk ON findings(risk_level);
 	CREATE INDEX IF NOT EXISTS idx_findings_scan ON findings(scan_id);`,
+
+	// v2: first-seen tracking
+	`CREATE TABLE IF NOT EXISTS finding_first_seen (
+		finding_id TEXT PRIMARY KEY,
+		first_seen DATETIME NOT NULL
+	);`,
 }
 
 func migrate(db *sql.DB) error {

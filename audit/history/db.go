@@ -109,8 +109,15 @@ func (d *DB) SaveScan(meta ScanMeta, findings []audit.Finding) error {
 		if err != nil {
 			return fmt.Errorf("insert finding: %w", err)
 		}
-	}
 
+		// Track first-seen (ignore if already exists)
+		if f.Status != "PASS" {
+			tx.Exec(
+				`INSERT OR IGNORE INTO finding_first_seen (finding_id, first_seen) VALUES (?,?)`,
+				f.ID, meta.Timestamp,
+			)
+		}
+	}
 	return tx.Commit()
 }
 
@@ -280,4 +287,43 @@ func (d *DB) FindingsByCommand(
 		}
 	}
 	return result, nil
+}
+
+type AgingFinding struct {
+	ID         string    `json:"id"`
+	FirstSeen  time.Time `json:"first_seen"`
+	AgeDays    int       `json:"age_days"`
+	Service    string    `json:"service"`
+	ResourceID string    `json:"resource_id"`
+	Check      string    `json:"check"`
+	RiskLevel  string    `json:"risk_level"`
+	Detail     string    `json:"detail"`
+}
+
+func (d *DB) AgingFindings(minDays int) ([]AgingFinding, error) {
+	rows, err := d.db.Query(
+		`SELECT fs.finding_id, fs.first_seen, f.service, f.resource_id, f.check_name, f.risk_level, f.detail
+		FROM finding_first_seen fs
+		JOIN findings f ON fs.finding_id = f.id
+		JOIN (SELECT id FROM scans ORDER BY timestamp DESC LIMI 1) s ON f.scan_id = s.id
+		WHERE julianday('now') - julianday(fs.first_seen) >= ?
+		AND f.status != 'PASS'
+		ORDER BY fs.first_seen ASC`,
+		minDays,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("query aging findings: %w", err)
+	}
+	defer rows.Close()
+
+	var results []AgingFinding
+	for rows.Next() {
+		var a AgingFinding
+		if err := rows.Scan(&a.ID, &a.FirstSeen, &a.Service, &a.ResourceID, &a.Check, &a.RiskLevel, &a.Detail); err != nil {
+			return nil, err
+		}
+		a.AgeDays = int(time.Since(a.FirstSeen).Hours() / 24)
+		results = append(results, a)
+	}
+	return results, nil
 }

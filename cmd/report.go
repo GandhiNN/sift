@@ -23,8 +23,21 @@ var reportCmd = &cobra.Command{
 		}
 		defer db.Close()
 
-		// Support comma-separated profiles
-		profiles := strings.Split(profile, ",")
+		// Determine profiles to query
+		var profiles []string
+		if cmd.Flags().Changed("profile") {
+			profiles = strings.Split(profile, ",")
+		} else {
+			// Query all profiles from DB
+			scans, _ := db.RecentScans(100)
+			seen := map[string]bool{}
+			for _, s := range scans {
+				if !seen[s.Profile] {
+					seen[s.Profile] = true
+					profiles = append(profiles, s.Profile)
+				}
+			}
+		}
 
 		// Gather findings from both modules
 		var allFindings []audit.Finding
@@ -194,6 +207,27 @@ var reportCmd = &cobra.Command{
 		for _, f := range issues {
 			svcCounts[f.Service]++
 		}
+
+		// Aging findings
+		aging, _ := db.AgingFindings(7)
+		if len(aging) > 0 {
+			fmt.Printf("\nAGING (open >7 days): %d findings\n", len(aging))
+			limit := 5
+			if len(aging) < limit {
+				limit = len(aging)
+			}
+			for _, a := range aging[:limit] {
+				fmt.Printf(
+					"  [%s] %s/%s: %dd old - %s\n",
+					a.RiskLevel,
+					a.Service,
+					a.Check,
+					a.AgeDays,
+					truncateStr(a.ResourceID, 30),
+				)
+			}
+		}
+
 		fmt.Println("\nBY SERVICE:")
 		type svcCount struct {
 			name  string

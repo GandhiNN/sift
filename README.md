@@ -324,6 +324,7 @@ Output includes:
 - **Estimated waste** (total $/month)
 - **Top issues** by risk and cost impact
 - **Compliance scores** (security, cost, tagging — % of resources fully compliant)
+- **Aging findings** (issues open >7 days, sorted by age)
 - **Service breakdown** (issues per service)
 
 The health score penalizes CRITICAL findings 4x more than LOW, giving a single trackable number for platform posture.
