@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"sort"
+	"strings"
 
 	"sift/audit"
 	"sift/audit/history"
@@ -22,21 +23,27 @@ var reportCmd = &cobra.Command{
 		}
 		defer db.Close()
 
+		// Support comma-separated profiles
+		profiles := strings.Split(profile, ",")
+
 		// Gather findings from both modules
 		var allFindings []audit.Finding
 		var latestTime string
-		for _, mod := range []string{"security", "cost"} {
-			meta, findings, err := db.LatestScan(profile, mod)
-			if err != nil || meta == nil {
-				continue
+		for _, p := range profiles {
+			for _, mod := range []string{"security", "cost", "governance"} {
+				meta, findings, err := db.LatestScan(strings.TrimSpace(p), mod)
+				if err != nil || meta == nil {
+					continue
+				}
+				if latestTime == "" || meta.Timestamp.Format("2006-01-02 15:04") > latestTime {
+					latestTime = meta.Timestamp.Format("2006-01-02 15:04")
+				}
+				for i := range findings {
+					findings[i].Module = mod
+					findings[i].Region = strings.TrimSpace(p) // use profile as region for grouping
+				}
+				allFindings = append(allFindings, findings...)
 			}
-			if latestTime == "" || meta.Timestamp.Format("2006-01-02 15:04") > latestTime {
-				latestTime = meta.Timestamp.Format("2006-01-02 15:04")
-			}
-			for i := range findings {
-				findings[i].Module = mod
-			}
-			allFindings = append(allFindings, findings...)
 		}
 
 		if len(allFindings) == 0 {
@@ -76,19 +83,19 @@ var reportCmd = &cobra.Command{
 
 		// Diff
 		var diffLine string
-		for _, mod := range []string{"security", "cost"} {
+		for _, mod := range []string{"security", "cost", "governance"} {
 			_, prev, _ := db.LatestScan(profile, mod)
 			_ = prev // diff requires two scans; skip if only one
 		}
 
 		// Output
 		fmt.Println("=== SIFT EXECUTIVE SUMMARY ===")
-		fmt.Printf("Profile: %s | %s\n\n", profile, latestTime)
+		fmt.Printf("Profiles: %s | %s\n\n", strings.Join(profiles, ", "), latestTime)
 
 		fmt.Println("RISK OVERVIEW")
 		for _, level := range []string{"CRITICAL", "HIGH", "MEDIUM", "LOW"} {
 			if risks[level] > 0 {
-				fmt.Printf("  %-10s %d\n", level+";", risks[level])
+				fmt.Printf("  %-10s %d\n", level+":", risks[level])
 			}
 		}
 
@@ -121,9 +128,38 @@ var reportCmd = &cobra.Command{
 			fmt.Println("\n" + diffLine)
 		}
 
+		// Platform health score (risk-weighted)
+		totalResources := map[string]bool{}
+		var penalty float64
+		for _, f := range allFindings {
+			if f.ResourceID == "" {
+				continue
+			}
+			totalResources[f.ResourceID] = true
+			switch f.RiskLevel {
+			case "CRITICAL":
+				penalty += 4
+			case "HIGH":
+				penalty += 3
+			case "MEDIUM":
+				penalty += 2
+			case "LOW":
+				penalty += 1
+			}
+		}
+		if len(totalResources) > 0 {
+			// Max possible penalty: every resource has one CRITICAL finding
+			maxPenalty := float64(len(totalResources)) * 4
+			health := 100 - (penalty/maxPenalty)*100
+			if health < 0 {
+				health = 0
+			}
+			fmt.Printf("\nPLATFORM HEALTH: %.0f/100\n", health)
+		}
+
 		// Compliance score
 		fmt.Println("\nCOMPLIANCE:")
-		for _, mod := range []string{"security", "cost"} {
+		for _, mod := range []string{"security", "cost", "governance"} {
 			resources := map[string]bool{}    // all resources
 			nonCompliant := map[string]bool{} // resources with issues
 			for _, f := range allFindings {
@@ -139,9 +175,13 @@ var reportCmd = &cobra.Command{
 			if total > 0 {
 				compliant := total - len(nonCompliant)
 				pct := float64(compliant) / float64(total) * 100
+				label := mod
+				if mod == "governance" {
+					label = "tagging"
+				}
 				fmt.Printf(
 					"  %-12s %.0f%% (%d of %d resources fully compliant)\n",
-					mod+":",
+					label+":",
 					pct,
 					compliant,
 					total,
