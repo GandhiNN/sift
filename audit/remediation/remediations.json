@@ -863,13 +863,13 @@
     "sqs": {
       "public_access": {
         "action": "Restrict queue policy to specific principals",
-        "command": "aws sqs set-queue-attributes --queue-url <url> --attributes '{\"Policy\":\"<restricted-policy>\"}'",
+        "command": "aws sqs set-queue-attributes --queue-url https://sqs.{{.Region}}.amazonaws.com/{{.AccountID}}/{{.ResourceID}} --attributes '{\"Policy\":\"<restricted-policy>\"}'",
         "confidence": "HIGH",
         "action_risk": "MEDIUM"
       },
       "no_encryption": {
         "action": "Enable server-side encryption",
-        "command": "aws sqs set-queue-attributes --queue-url <url> --attributes '{\"SqsManagedSseEnabled\":\"true\"}'",
+        "command": "aws sqs set-queue-attributes --queue-url https://sqs.{{.Region}}.amazonaws.com/{{.AccountID}}/{{.ResourceID}} --attributes '{\"SqsManagedSseEnabled\":\"true\"}'",
         "confidence": "HIGH",
         "action_risk": "LOW"
       }
@@ -897,7 +897,7 @@
       },
       "no_dlq": {
         "action": "Configure a dead-letter queue for the rule target",
-        "command": "aws events put-targets --rule {{.ResourceID}} --targets '[{\"Id\":\"<id>\",\"Arn\":\"<arn>\",\"DeadLetterConfig\":{\"Arn\":\"<dlq-arn>\"}}]'",
+        "command": "aws events put-targets --rule {{.RuleName}} --targets '[{\"Id\":\"{{.TargetID}}\",\"Arn\":\"<target-arn>\",\"DeadLetterConfig\":{\"Arn\":\"<dlq-arn>\"}}]'",
         "confidence": "HIGH",
         "action_risk": "LOW"
       }
@@ -1057,31 +1057,31 @@
     "tagging": {
       "missing_baseline_tags": {
         "action": "Add mandatory baseline tags to the resource",
-        "command": "aws resourcegroupstaggingapi tag-resources --resource-arn-list <arn> --tags ProductCode=<value>,Environment=<value>",
+        "command": "aws resourcegroupstaggingapi tag-resources --resource-arn-list {{.ResourceID}} --tags ProductCode=<value>,Environment=<value>",
         "confidence": "HIGH",
         "action_risk": "LOW"
       },
       "missing_iac_tags": {
         "action": "Deploy resource via Terraform or add IaC tags manually",
-        "command": "aws resourcegroupstaggingapi tag-resources --resource-arn-list <arn> --tags stack=<value>,stack_env=<value>",
+        "command": "aws resourcegroupstaggingapi tag-resources --resource-arn-list {{.ResourceID}} --tags stack=<value>,stack_env=<value>",
         "confidence": "HIGH",
         "action_risk": "LOW"
       },
       "missing_cost_tags": {
         "action": "Add cost allocation tags for tracking",
-        "command": "aws resourcegroupstaggingapi tag-resources --resource-arn-list <arn> --tags Project=<value>,UseCase=<value>",
+        "command": "aws resourcegroupstaggingapi tag-resources --resource-arn-list {{.ResourceID}} --tags Project=<value>,UseCase=<value>",
         "confidence": "HIGH",
         "action_risk": "LOW"
       },
       "missing_ownership_tags": {
         "action": "Add technical and business owner tags",
-        "command": "aws resourcegroupstaggingapi tag-resources --resource-arn-list <arn> --tags TechnicalOwner=<value>,BusinessOwner=<value>",
+        "command": "aws resourcegroupstaggingapi tag-resources --resource-arn-list {{.ResourceID}} --tags TechnicalOwner=<value>,BusinessOwner=<value>",
         "confidence": "HIGH",
         "action_risk": "LOW"
       },
       "missing_conditional_tag": {
         "action": "Add required conditional tag (e.g., Backup_Plan for production)",
-        "command": "aws resourcegroupstaggingapi tag-resources --resource-arn-list <arn> --tags Backup_Plan=<value>",
+        "command": "aws resourcegroupstaggingapi tag-resources --resource-arn-list {{.ResourceID}} --tags Backup_Plan=<value>",
         "confidence": "HIGH",
         "action_risk": "LOW"
       }
