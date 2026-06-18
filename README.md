@@ -797,7 +797,12 @@ sift/
 │   ├── ops.go                  # Ops audit command
 │   ├── list.go                 # List command (registry-driven)
 │   ├── discover.go             # Service discovery command
-│   └── triage.go               # Triage investigation command
+│   ├── triage.go               # Triage investigation command
+│   ├── governance.go           # Governance audit command
+│   ├── history.go              # Query scan history
+│   ├── report.go               # Executive summary report
+│   ├── ai.go                   # AI analysis command
+│   └── fix.go                  # Remediation execution
 ├── config/
 │   └── config.go               # AWS credential/profile loading
 └── audit/
@@ -811,13 +816,16 @@ sift/
     │   ├── pricing.go          # Price lookup (embedded + ~/.sift/prices.json override)
     │   └── prices.json         # Static pricing data (eu-west-1)
     ├── history/
-    │   ├── history.go          # Scan persistence (~/.sift/history/)
+    │   ├── db.go               # SQLite storage (scans, findings, queries)
+    │   ├── migrations.go       # Versioned schema migrations
     │   └── diff.go             # Delta computation between scans
     ├── progress/
     │   └── progress.go         # Progress bar utilities
     ├── remediation/
     │   ├── remediation.go      # Remediation recommendation engine
     │   └── remediations.json   # Remediation templates
+    ├── ai/
+    │   └── ai.go               # LLM integration (Ollama/OpenAI-compatible)
     ├── security/
     │   ├── security.go         # Module registration + Audit entry point
     │   ├── sg.go               # Shared SG open-to-world helpers
