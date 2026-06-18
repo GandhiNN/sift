@@ -306,6 +306,28 @@ sift ai --profile dev "What's the most urgent fix?"
 
 Configure the endpoint in `~/.sift/ai.json`. See [docs/ai.md](docs/ai.md) for full setup and options.
 
+## Executive report
+
+Generate a summary for business stakeholders:
+
+```bash
+# Single environment
+sift report --profile dev
+
+# Aggregated across environments
+sift report --profile icloud-dev,icloud-qa,icloud-prd
+```
+
+Output includes:
+- **Platform health score** (risk-weighted, 0-100)
+- **Risk overview** (CRITICAL/HIGH/MEDIUM/LOW counts)
+- **Estimated waste** (total $/month)
+- **Top issues** by risk and cost impact
+- **Compliance scores** (security, cost, tagging — % of resources fully compliant)
+- **Service breakdown** (issues per service)
+
+The health score penalizes CRITICAL findings 4x more than LOW, giving a single trackable number for platform posture.
+
 ## Remediation recommendations
 
 Findings include actionable remediation recommendations with:
