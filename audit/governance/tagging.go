@@ -172,7 +172,7 @@ func AuditTagging(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 						"governance",
 						"tagging",
 						"missing_baseline_tags",
-						resourceID,
+						arn,
 						d,
 					),
 				})
@@ -199,7 +199,7 @@ func AuditTagging(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 						"governance",
 						"tagging",
 						"missing_iac_tags",
-						resourceID,
+						arn,
 						d,
 					),
 				})
@@ -226,7 +226,7 @@ func AuditTagging(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 						"governance",
 						"tagging",
 						"missing_cost_tags",
-						resourceID,
+						arn,
 						d,
 					),
 				})
@@ -264,7 +264,7 @@ func AuditTagging(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 							"governance",
 							"tagging",
 							"missing_conditional_tag",
-							resourceID,
+							arn,
 							d,
 						),
 					})
