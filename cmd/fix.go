@@ -63,6 +63,9 @@ var fixCmd = &cobra.Command{
 			case "route53":
 				command = strings.ReplaceAll(command, "{{.ZoneID}}", parts[0])
 				command = strings.ReplaceAll(command, "{{.RecordName}}", parts[1])
+			case "eventbridge":
+				command = strings.ReplaceAll(command, "{{.RuleName}}", parts[0])
+				command = strings.ReplaceAll(command, "{{.TargetID}}", parts[1])
 			}
 		}
 
