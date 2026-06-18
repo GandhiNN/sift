@@ -479,7 +479,7 @@
     "quicksight": {
       "inactive_user": {
         "action": "Delete inactive QuickSight user",
-        "command": "aws quicksight delete-user --aws-account-id <account-id> --namespace default --user-name {{.ResourceID}}",
+        "command": "aws quicksight delete-user --aws-account-id {{.AccountID}} --namespace default --user-name {{.ResourceID}}",
         "confidence": "MEDIUM",
         "action_risk": "MEDIUM"
       }
@@ -493,7 +493,7 @@
       },
       "high_memory_retention": {
         "action": "Reduce memory store retention period",
-        "command": "aws timestream-write update-table --database-name <db> --table-name {{.ResourceID}} --retention-properties MemoryStoreRetentionPeriodInHours=<hours>",
+        "command": "aws timestream-write update-table --database-name {{.DatabaseName}} --table-name {{.TableName}} --retention-properties MemoryStoreRetentionPeriodInHours=<hours>",
         "confidence": "MEDIUM",
         "action_risk": "MEDIUM"
       }
@@ -543,7 +543,7 @@
     "elb": {
       "no_waf": {
         "action": "Associate a WAF WebACL with rate-based rules",
-        "command": "aws wafv2 associate-web-acl --web-acl-arn <acl-arn> --resource-arn <lb-arn>",
+        "command": "aws wafv2 associate-web-acl --web-acl-arn <acl-arn> --resource-arn {{.ResourceID}}",
         "confidence": "HIGH",
         "action_risk": "LOW"
       },
@@ -555,7 +555,7 @@
       },
       "no_shield": {
         "action": "Enable AWS Shield Advanced",
-        "command": "aws shield create-protection --name <name> --resource-arn <lb-arn>",
+        "command": "aws shield create-protection --name <name> --resource-arn {{.ResourceID}}",
         "confidence": "HIGH",
         "action_risk": "LOW"
       },
@@ -849,13 +849,13 @@
     "route53": {
       "dangling_cname": {
         "action": "Remove or update the dangling CNAME record to prevent subdomain takeover",
-        "command": "aws route53 change-resource-record-sets --hosted-zone-id <zone-id> --change-batch '{\"Changes\":[{\"Action\":\"DELETE\",\"ResourceRecordSet\":{\"Name\":\"{{.ResourceID}}\",\"Type\":\"CNAME\",\"TTL\":300,\"ResourceRecords\":[{\"Value\":\"<target>\"}]}}]}'",
+        "command": "aws route53 change-resource-record-sets --hosted-zone-id {{.ZoneID}} --change-batch '{\"Changes\":[{\"Action\":\"DELETE\",\"ResourceRecordSet\":{\"Name\":\"{{.RecordName}}\",\"Type\":\"CNAME\",\"TTL\":300,\"ResourceRecords\":[{\"Value\":\"<target>\"}]}}]}'",
         "confidence": "HIGH",
         "action_risk": "MEDIUM"
       },
       "no_dnssec": {
         "action": "Enable DNSSEC signing for the hosted zone",
-        "command": "aws route53 enable-hosted-zone-dnssec --hosted-zone-id <zone-id>",
+        "command": "aws route53 enable-hosted-zone-dnssec --hosted-zone-id {{.ResourceID}}",
         "confidence": "HIGH",
         "action_risk": "MEDIUM"
       }

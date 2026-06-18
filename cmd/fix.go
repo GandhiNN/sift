@@ -60,6 +60,9 @@ var fixCmd = &cobra.Command{
 			case "dynamodb":
 				command = strings.ReplaceAll(command, "{{.TableName}}", parts[0])
 				command = strings.ReplaceAll(command, "{{.IndexName}}", parts[1])
+			case "route53":
+				command = strings.ReplaceAll(command, "{{.ZoneID}}", parts[0])
+				command = strings.ReplaceAll(command, "{{.RecordName}}", parts[1])
 			}
 		}
 

@@ -225,7 +225,7 @@ func checkDDoSReadiness(
 				"security",
 				"elb",
 				"no_waf",
-				name,
+				arn,
 				"internet-facing ALB has no WAF associated",
 			),
 		})
@@ -260,7 +260,7 @@ func checkDDoSReadiness(
 				"security",
 				"elb",
 				"no_shield",
-				name,
+				arn,
 				detail,
 			),
 		})

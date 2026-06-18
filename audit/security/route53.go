@@ -58,7 +58,7 @@ func AuditRoute53(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 						"security",
 						"route53",
 						"no_dnssec",
-						zoneName,
+						zoneID,
 						d,
 					),
 				})
@@ -96,7 +96,7 @@ func AuditRoute53(ctx context.Context, cfg aws.Config) ([]audit.Finding, error) 
 								"security",
 								"route53",
 								"dangling_cname",
-								name,
+								zoneID+"/"+name,
 								d,
 							),
 						})
