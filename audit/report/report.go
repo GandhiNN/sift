@@ -11,9 +11,10 @@ type ReportData struct {
 	Timestamp   string
 	HealthScore float64
 
-	Risks      map[string]int
-	TotalWaste float64
-	TopIssues  []audit.Finding
+	Risks       map[string]int
+	TotalWaste  float64
+	TopSecurity []audit.Finding
+	TopCost     []audit.Finding
 
 	Trend *Trend
 

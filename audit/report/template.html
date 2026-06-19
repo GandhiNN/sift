@@ -56,10 +56,24 @@
     </div>
     {{end}}
 
-    <h2>Top Issues</h2>
+    <h2>Top Security Issues</h2>
+    <table>
+        <tr><th>#</th><th>Risk</th><th>Service</th><th>Check</th><th>Detail</th></tr>
+        {{range $i, $f := .TopSecurity}}
+        <tr>
+            <td>{{inc $i}}</td>
+            <td class="{{lower $f.RiskLevel}}">{{$f.RiskLevel}}</td>
+            <td>{{$f.Service}}</td>
+            <td>{{$f.Check}}</td>
+            <td>{{$f.Detail}}</td>
+        </tr>
+        {{end}}
+    </table>
+
+    <h2>Top Cost Issues</h2>
     <table>
         <tr><th>#</th><th>Risk</th><th>Service</th><th>Check</th><th>Detail</th><th>Cost</th></tr>
-        {{range $i, $f := .TopIssues}}
+        {{range $i, $f := .TopCost}}
         <tr>
             <td>{{inc $i}}</td>
             <td class="{{lower $f.RiskLevel}}">{{$f.RiskLevel}}</td>

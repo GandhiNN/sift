@@ -30,16 +30,43 @@ func RenderText(w io.Writer, r *ReportData) {
 		fmt.Fprintf(w, "  %-22s %d\n", "Ongoing:", r.Trend.Ongoing)
 	}
 
-	fmt.Fprintf(w, "\nTOP ISSUES:\n")
-	for i, f := range r.TopIssues {
-		line := fmt.Sprintf("  %d. [%s] %s/%s: %s", i+1, f.RiskLevel, f.Service, f.Check, f.Detail)
-		if f.EstimatedMonthlyCost > 0 {
-			line += fmt.Sprintf("  ($%.0f/mo)", f.EstimatedMonthlyCost)
+	if len(r.TopSecurity) > 0 {
+		fmt.Fprintf(w, "\nTOP SECURITY ISSUES:\n")
+		for i, f := range r.TopSecurity {
+			line := fmt.Sprintf(
+				"  %d. [%s] %s/%s: %s",
+				i+1,
+				f.RiskLevel,
+				f.Service,
+				f.Check,
+				f.Detail,
+			)
+			if len(line) > 120 {
+				line = line[:117] + "..."
+			}
+			fmt.Fprintln(w, line)
 		}
-		if len(line) > 120 {
-			line = line[:117] + "..."
+	}
+
+	if len(r.TopCost) > 0 {
+		fmt.Fprintf(w, "\nTOP COST ISSUES:\n")
+		for i, f := range r.TopCost {
+			line := fmt.Sprintf(
+				"  %d. [%s] %s/%s: %s",
+				i+1,
+				f.RiskLevel,
+				f.Service,
+				f.Check,
+				f.Detail,
+			)
+			if f.EstimatedMonthlyCost > 0 {
+				line += fmt.Sprintf(" ($%.0f/mo)", f.EstimatedMonthlyCost)
+			}
+			if len(line) > 120 {
+				line = line[:117] + "..."
+			}
+			fmt.Fprintln(w, line)
 		}
-		fmt.Fprintln(w, line)
 	}
 
 	fmt.Fprintf(w, "\nCOMPLIANCE:\n")

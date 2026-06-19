@@ -45,20 +45,36 @@ func Build(db *history.DB, profiles []string) *ReportData {
 		}
 	}
 
-	// Top issues
-	sort.Slice(issues, func(i, j int) bool {
-		ri := riskOrd(issues[i].RiskLevel)
-		rj := riskOrd(issues[j].RiskLevel)
-		if ri != rj {
-			return ri > rj
+	// Top issues per module
+	var secIssues, costIssues []audit.Finding
+	for _, f := range issues {
+		switch f.Module {
+		case "security":
+			secIssues = append(secIssues, f)
+		case "cost":
+			costIssues = append(costIssues, f)
 		}
-		return issues[i].EstimatedMonthlyCost > issues[j].EstimatedMonthlyCost
-	})
-	limit := 10
-	if len(issues) < limit {
-		limit = len(issues)
 	}
-	r.TopIssues = issues[:limit]
+	sortByRisk := func(s []audit.Finding) {
+		sort.Slice(s, func(i, j int) bool {
+			ri := riskOrd(s[i].RiskLevel)
+			rj := riskOrd(s[j].RiskLevel)
+			if ri != rj {
+				return ri > rj
+			}
+			return s[i].EstimatedMonthlyCost > s[j].EstimatedMonthlyCost
+		})
+	}
+	sortByRisk(secIssues)
+	sortByRisk(costIssues)
+	if len(secIssues) > 5 {
+		secIssues = secIssues[:5]
+	}
+	if len(costIssues) > 5 {
+		costIssues = costIssues[:5]
+	}
+	r.TopSecurity = secIssues
+	r.TopCost = costIssues
 
 	// Health score
 	totalResources := map[string]bool{}
