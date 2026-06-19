@@ -17,6 +17,7 @@ var (
 	aiFinding  string
 	aiQuestion string
 	aiModule   string
+	aiPrompt   string
 )
 
 var aiCmd = &cobra.Command{
@@ -74,7 +75,7 @@ var aiCmd = &cobra.Command{
 		cfg := ai.LoadConfig()
 		fmt.Fprintf(os.Stderr, "Querying %s (%s)...\n", cfg.Model, cfg.Endpoint)
 
-		if err := ai.AnalyzeWithContext(cfg, context, question, os.Stdout); err != nil {
+		if err := ai.AnalyzeWithContext(cfg, context, question, aiPrompt, os.Stdout); err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(2)
 		}
@@ -86,5 +87,7 @@ func init() {
 	aiCmd.Flags().StringVar(&aiService, "service", "", "Scope to findings from a specific service")
 	aiCmd.Flags().StringVar(&aiFinding, "finding", "", "Analyze a specific finding by ID")
 	aiCmd.Flags().StringVar(&aiQuestion, "question", "", "Custom question to ask")
+	aiCmd.Flags().
+		StringVar(&aiPrompt, "prompt", "", "Prompt template name (e.g., executive, incident, compliance)")
 	rootCmd.AddCommand(aiCmd)
 }

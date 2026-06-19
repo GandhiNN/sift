@@ -16,8 +16,25 @@ import (
 )
 
 type Config struct {
-	Endpoint string `json:"endpoint"`
-	Model    string `json:"model"`
+	Endpoint string            `json:"endpoint"`
+	Model    string            `json:"model"`
+	Prompts  map[string]string `json:"prompts"`
+}
+
+const defaultPrompt = "You are an AWS infrastructure expert. Analyze ONLY the provided audit findings. Do not suggest actions outside the scope of the findings shown. Be concise and prioritize by risk level."
+
+func (c Config) GetPrompt(name string) string {
+	if name != "" && c.Prompts != nil {
+		if p, ok := c.Prompts[name]; ok {
+			return p
+		}
+	}
+	if c.Prompts != nil {
+		if p, ok := c.Prompts["default"]; ok {
+			return p
+		}
+	}
+	return defaultPrompt
 }
 
 var riskOrder = map[string]int{
@@ -119,12 +136,9 @@ func BuildContext(grouped map[string][]audit.Finding) string {
 	return sb.String()
 }
 
-func AnalyzeWithContext(cfg Config, context, question string, stream io.Writer) error {
+func AnalyzeWithContext(cfg Config, context, question, promptName string, stream io.Writer) error {
 	messages := []message{
-		{
-			Role:    "system",
-			Content: "You are an AWS infrastructure expert. Analyze ONLY the provided audit findings. Do not suggest actions outside the scope of the findings shown. Be concise and prioritize by risk level.",
-		},
+		{Role: "system", Content: cfg.GetPrompt(promptName)},
 		{Role: "user", Content: context + "\n\n" + question},
 	}
 
