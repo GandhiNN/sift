@@ -327,3 +327,25 @@ func (d *DB) AgingFindings(minDays int) ([]AgingFinding, error) {
 	}
 	return results, nil
 }
+
+func (d *DB) PreviousScan(profile, command string) (*ScanMeta, []audit.Finding, error) {
+	row := d.db.QueryRow(
+		`SELECT id, profile, command, region, services, timestamp, duration_ms FROM scans WHERE profile = ? AND command = ? ORDER BY timestamp DESC LIMIT 1 OFFSET 1`,
+		profile,
+		command,
+	)
+
+	var meta ScanMeta
+	if err := row.Scan(&meta.ID, &meta.Profile, &meta.Command, &meta.Region, &meta.Services, &meta.Timestamp, &meta.DurationMs); err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil, nil
+		}
+		return nil, nil, fmt.Errorf("query previous scan: %w", err)
+	}
+
+	findings, err := d.findingsByScan(meta.ID)
+	if err != nil {
+		return nil, nil, err
+	}
+	return &meta, findings, nil
+}
