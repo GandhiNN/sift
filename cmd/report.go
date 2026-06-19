@@ -228,6 +228,49 @@ var reportCmd = &cobra.Command{
 			}
 		}
 
+		// Cost attribution
+		var totalCostAttr, attrCost float64
+		var tagged, untagged int
+		for _, f := range allFindings {
+			if f.Module != "cost" || f.Status == "PASS" {
+				continue
+			}
+			totalCostAttr += f.EstimatedMonthlyCost
+			if len(f.Tags) > 0 {
+				tagged++
+				if _, ok := f.Tags["Project"]; ok {
+					attrCost += f.EstimatedMonthlyCost
+				}
+			} else {
+				untagged++
+			}
+		}
+		if tagged+untagged > 0 {
+			total := tagged + untagged
+			fmt.Println("\nCOST ATTRIBUTION (by Project tag):")
+			if totalCostAttr > 0 {
+				fmt.Printf(
+					"  Cost attributable:  %.0f%% ($%.0f/mo of $%.0f/mo)\n",
+					attrCost/totalCostAttr*100,
+					attrCost,
+					totalCostAttr,
+				)
+				fmt.Printf("  Unattributed cost:  $%.0f/mo\n", totalCostAttr-attrCost)
+			}
+			fmt.Printf(
+				"  Resources tagged:   %.0f%% (%d of %d)\n",
+				float64(tagged)/float64(total)*100,
+				tagged,
+				total,
+			)
+			fmt.Printf(
+				"  Resources untagged: %.0f%% (%d of %d)\n",
+				float64(untagged)/float64(total)*100,
+				untagged,
+				total,
+			)
+		}
+
 		fmt.Println("\nBY SERVICE:")
 		type svcCount struct {
 			name  string
