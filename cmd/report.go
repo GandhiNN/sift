@@ -96,11 +96,22 @@ var reportCmd = &cobra.Command{
 			return issues[i].EstimatedMonthlyCost > issues[j].EstimatedMonthlyCost
 		})
 
-		// Diff
-		var diffLine string
-		for _, mod := range []string{"security", "cost", "governance"} {
-			_, prev, _ := db.LatestScan(profile, mod)
-			_ = prev // diff requires two scans; skip if only one
+		// Trend vs previous scan
+		var prevFindings []audit.Finding
+		for _, p := range profiles {
+			for _, mod := range []string{"security", "cost", "governance"} {
+				_, prev, _ := db.PreviousScan(strings.TrimSpace(p), mod)
+				if prev != nil {
+					prevFindings = append(prevFindings, prev...)
+				}
+			}
+		}
+		if len(prevFindings) > 0 {
+			d := history.ComputeDiff(prevFindings, allFindings)
+			fmt.Println("\nTREND (vs previous scan):")
+			fmt.Printf("  %-22s %d\n", "New issues:", len(d.New))
+			fmt.Printf("  %-22s %d\n", "Resolved:", len(d.Resolved))
+			fmt.Printf("  %-22s %d\n", "Ongoing:", len(d.Ongoing))
 		}
 
 		// Output
@@ -137,10 +148,6 @@ var reportCmd = &cobra.Command{
 				line += fmt.Sprintf(" ($%.0f/mo)", f.EstimatedMonthlyCost)
 			}
 			fmt.Println(truncateStr(line, 120))
-		}
-
-		if diffLine != "" {
-			fmt.Println("\n" + diffLine)
 		}
 
 		// Platform health score (risk-weighted)
