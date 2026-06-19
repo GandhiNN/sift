@@ -1,8 +1,10 @@
 package cmd
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 
@@ -228,43 +230,85 @@ var reportCmd = &cobra.Command{
 			}
 		}
 
-		// Cost attribution
+		// Cost attribution based on `cost_tags` from tagging config
+		costTags := []string{"Project"}
+		if home, err := os.UserHomeDir(); err == nil {
+			if data, err := os.ReadFile(filepath.Join(home, ".sift", "tagging.json")); err == nil {
+				var tc struct {
+					CostTags []string `json:"cost_tags"`
+				}
+				if json.Unmarshal(data, &tc) == nil && len(tc.CostTags) > 0 {
+					costTags = tc.CostTags
+				}
+			}
+		}
 		var totalCostAttr, attrCost float64
-		var tagged, untagged int
+		var fullyTagged, partiallyTagged, untagged int
 		for _, f := range allFindings {
 			if f.Module != "cost" || f.Status == "PASS" {
 				continue
 			}
 			totalCostAttr += f.EstimatedMonthlyCost
-			if len(f.Tags) > 0 {
-				tagged++
-				if _, ok := f.Tags["Project"]; ok {
-					attrCost += f.EstimatedMonthlyCost
+			if len(f.Tags) == 0 {
+				untagged++
+				continue
+			}
+			hasAll := true
+			hasAny := false
+			for _, tag := range costTags {
+				if _, ok := f.Tags[tag]; ok {
+					hasAny = true
+				} else {
+					hasAll = false
 				}
+			}
+			if hasAll {
+				fullyTagged++
+				attrCost += f.EstimatedMonthlyCost
+			} else if hasAny {
+				partiallyTagged++
+				attrCost += f.EstimatedMonthlyCost
 			} else {
 				untagged++
 			}
 		}
-		if tagged+untagged > 0 {
-			total := tagged + untagged
-			fmt.Println("\nCOST ATTRIBUTION (by Project tag):")
+		total := fullyTagged + partiallyTagged + untagged
+		if total > 0 {
+			fmt.Printf("\nCOST ATTRIBUTION (by %s):\n", strings.Join(costTags, ", "))
 			if totalCostAttr > 0 {
 				fmt.Printf(
-					"  Cost attributable:  %.0f%% ($%.0f/mo of $%.0f/mo)\n",
+					"  %-22s %4.0f%%  $%.0f/mo of $%.0f/mo\n", "Fully attributable:",
 					attrCost/totalCostAttr*100,
 					attrCost,
 					totalCostAttr,
 				)
-				fmt.Printf("  Unattributed cost:  $%.0f/mo\n", totalCostAttr-attrCost)
+				fmt.Printf(
+					"  %-22s %4.0f%%   $%.0f/mo of $%.0f/mo\n",
+					"Unattributed cost:",
+					(totalCostAttr-attrCost)/totalCostAttr*100,
+					totalCostAttr-attrCost,
+					totalCostAttr,
+				)
 			}
 			fmt.Printf(
-				"  Resources tagged:   %.0f%% (%d of %d)\n",
-				float64(tagged)/float64(total)*100,
-				tagged,
+				"  %-22s %4.0f%%   %d of %d resources\n",
+				"Fully tagged:",
+				float64(fullyTagged)/float64(total)*100,
+				fullyTagged,
 				total,
 			)
+			if partiallyTagged > 0 {
+				fmt.Printf(
+					"  %-22s %4.0f%%   %d of %d resources\n",
+					"Partially tagged:",
+					float64(partiallyTagged)/float64(total)*100,
+					partiallyTagged,
+					total,
+				)
+			}
 			fmt.Printf(
-				"  Resources untagged: %.0f%% (%d of %d)\n",
+				"  %-22s %4.0f%%   %d of %d resources\n",
+				"Untagged:",
 				float64(untagged)/float64(total)*100,
 				untagged,
 				total,
