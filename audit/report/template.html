@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Sift Executive Report</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 900px; margin: 0 auto; padding: 2rem; color: #333; }
+        h1 { border-bottom: 2px solid #2563eb; padding-bottom: 0.5rem; }
+        h2 { color: #1e40af; margin-top: 2rem; }
+        .health { font-size: 2.5rem; font-weight: bold; color: {{if ge .HealthScore 80}}#16a34a{{else if ge .HealthScore 60}}#ca8a04{{else}}#dc2626{{end}}; }
+        .meta { color: #6b7280; margin-bottom: 2rem; }
+        table { border-collapse: collapse; width: 100%; margin: 1rem 0; }
+        th, td { padding: 0.5rem 1rem; text-align: left; border-bottom: 1px solid #e5e7eb; }
+        th { background: #f9fafb; font-weight: 600; }
+        .critical { color: #dc2626; font-weight: bold; }
+        .high { color: #ea580c; font-weight: bold; }
+        .medium { color: #ca8a04; }
+        .low { color: #6b7280; }
+        .metric { display: inline-block; margin: 1rem 2rem 1rem 0; }
+        .metric-value { font-size: 1.5rem; font-weight: bold; }
+        .metric-label { color: #6b7280; font-size: 0.9rem; }
+        .trend { padding: 0.5rem 1rem; background: #f0fdf4; border-radius: 0.5rem; display: inline-block; }
+        .trend.negative { background: #fef2f2; }
+    </style>
+</head>
+<body>
+    <h1>Sift Executive Report</h1>
+    <p class="meta">Profiles: {{range $i, $p := .Profiles}}{{if $i}}, {{end}}{{$p}}{{end}} | {{.Timestamp}}</p>
+
+    <div class="health">{{printf "%.0f" .HealthScore}}/100</div>
+    <p>Platform Health Score</p>
+
+    <h2>Risk Overview</h2>
+    <div>
+        {{range $level, $count := .Risks}}{{if $count}}
+        <div class="metric">
+            <div class="metric-value {{if eq $level "CRITICAL"}}critical{{else if eq $level "HIGH"}}high{{else if eq $level "MEDIUM"}}medium{{else}}low{{end}}">{{$count}}</div>
+            <div class="metric-label">{{$level}}</div>
+        </div>
+        {{end}}{{end}}
+    </div>
+
+    {{if gt .TotalWaste 0}}
+    <div class="metric">
+        <div class="metric-value">${{printf "%.0f" .TotalWaste}}/mo</div>
+        <div class="metric-label">Estimated Waste</div>
+    </div>
+    {{end}}
+
+    {{if .Trend}}
+    <h2>Trend</h2>
+    <div>
+        <span class="trend">New: {{.Trend.New}}</span>
+        <span class="trend">Resolved: {{.Trend.Resolved}}</span>
+        <span class="trend">Ongoing: {{.Trend.Ongoing}}</span>
+    </div>
+    {{end}}
+
+    <h2>Top Issues</h2>
+    <table>
+        <tr><th>#</th><th>Risk</th><th>Service</th><th>Check</th><th>Detail</th><th>Cost</th></tr>
+        {{range $i, $f := .TopIssues}}
+        <tr>
+            <td>{{inc $i}}</td>
+            <td class="{{lower $f.RiskLevel}}">{{$f.RiskLevel}}</td>
+            <td>{{$f.Service}}</td>
+            <td>{{$f.Check}}</td>
+            <td>{{$f.Detail}}</td>
+            <td>{{if gt $f.EstimatedMonthlyCost 0.0}}${{printf "%.0f" $f.EstimatedMonthlyCost}}{{end}}</td>
+        </tr>
+        {{end}}
+    </table>
+
+    <h2>Compliance</h2>
+    <table>
+        <tr><th>Module</th><th>Score</th><th>Compliant</th><th>Total</th></tr>
+        {{range .Compliance}}
+        <tr>
+            <td>{{.Label}}</td>
+            <td>{{printf "%.0f" .Percent}}%</td>
+            <td>{{.Compliant}}</td>
+            <td>{{.Total}}</td>
+        </tr>
+        {{end}}
+    </table>
+
+    {{if .Aging}}
+    <h2>Aging Findings (open &gt;7 days)</h2>
+    <table>
+        <tr><th>Risk</th><th>Service</th><th>Check</th><th>Age</th><th>Resource</th></tr>
+        {{range .Aging}}
+        <tr>
+            <td class="{{lower .RiskLevel}}">{{.RiskLevel}}</td>
+            <td>{{.Service}}</td>
+            <td>{{.Check}}</td>
+            <td>{{.AgeDays}}d</td>
+            <td>{{.ResourceID}}</td>
+        </tr>
+        {{end}}
+    </table>
+    {{end}}
+
+    {{if .CostAttribution}}
+    <h2>Cost Attribution (by {{join .CostAttribution.Tags ", "}})</h2>
+    <table>
+        <tr><th>Metric</th><th>%</th><th>Value</th></tr>
+        {{if gt .CostAttribution.TotalCost 0.0}}
+        <tr><td>Fully attributable</td><td>{{printf "%.0f" (pct .CostAttribution.AttributedCost .CostAttribution.TotalCost)}}%</td><td>${{printf "%.0f" .CostAttribution.AttributedCost}}/mo</td></tr>
+        <tr><td>Unattributed cost</td><td>{{printf "%.0f" (pct (sub .CostAttribution.TotalCost .CostAttribution.AttributedCost) .CostAttribution.TotalCost)}}%</td><td>${{printf "%.0f" (sub .CostAttribution.TotalCost .CostAttribution.AttributedCost)}}/mo</td></tr>
+        {{end}}
+        <tr><td>Fully tagged</td><td>{{printf "%.0f" (pct (toFloat .CostAttribution.FullyTagged) (toFloat .CostAttribution.TotalResources))}}%</td><td>{{.CostAttribution.FullyTagged}} of {{.CostAttribution.TotalResources}}</td></tr>
+        {{if gt .CostAttribution.PartiallyTagged 0}}
+        <tr><td>Partially tagged</td><td>{{printf "%.0f" (pct (toFloat .CostAttribution.PartiallyTagged) (toFloat .CostAttribution.TotalResources))}}%</td><td>{{.CostAttribution.PartiallyTagged}} of {{.CostAttribution.TotalResources}}</td></tr>
+        {{end}}
+        <tr><td>Untagged</td><td>{{printf "%.0f" (pct (toFloat .CostAttribution.Untagged) (toFloat .CostAttribution.TotalResources))}}%</td><td>{{.CostAttribution.Untagged}} of {{.CostAttribution.TotalResources}}</td></tr>
+    </table>
+    {{end}}
+
+    <h2>By Service</h2>
+    <table>
+        <tr><th>Service</th><th>Issues</th></tr>
+        {{range .Services}}
+        <tr><td>{{.Name}}</td><td>{{.Count}}</td></tr>
+        {{end}}
+    </table>
+</body>
+</html>
