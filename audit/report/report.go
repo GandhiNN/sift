@@ -25,6 +25,9 @@ type ReportData struct {
 	CostAttribution *CostAttribution
 
 	Services []ServiceCount
+
+	AISummary         string
+	AIRecommendations []string
 }
 
 type Trend struct {

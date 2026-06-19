@@ -43,6 +43,13 @@ var reportCmd = &cobra.Command{
 			os.Exit(2)
 		}
 
+		useAI, _ := cmd.Flags().GetBool("ai")
+		if useAI {
+			if err := report.Enrich(r); err != nil {
+				fmt.Fprintf(os.Stderr, "AI enrichment failed: %v\n", err)
+			}
+		}
+
 		out := os.Stdout
 		if outputFile != "" {
 			f, err := os.Create(outputFile)
@@ -69,5 +76,7 @@ var reportCmd = &cobra.Command{
 }
 
 func init() {
+	reportCmd.Flags().
+		Bool("ai", false, "Enrich report with AI-generated summary and recommendations")
 	rootCmd.AddCommand(reportCmd)
 }

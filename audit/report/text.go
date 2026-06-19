@@ -153,4 +153,14 @@ func RenderText(w io.Writer, r *ReportData) {
 	for _, s := range r.Services {
 		fmt.Fprintf(w, "  %-16s %d issues\n", s.Name, s.Count)
 	}
+
+	if r.AISummary != "" {
+		fmt.Fprintf(w, "\nAI SUMMARY:\n  %s\n", r.AISummary)
+	}
+	if len(r.AIRecommendations) > 0 {
+		fmt.Fprintf(w, "\nAI RECOMMENDED ACTIONS:\n")
+		for i, a := range r.AIRecommendations {
+			fmt.Fprintf(w, "  %d. %s\n", i+1, a)
+		}
+	}
 }

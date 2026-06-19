@@ -137,5 +137,15 @@
         <tr><td>{{.Name}}</td><td>{{.Count}}</td></tr>
         {{end}}
     </table>
+    {{if or .AISummary .AIRecommendations}}
+    <h2>AI Insights</h2>
+    {{if .AISummary}}<p>{{.AISummary}}</p>{{end}}
+    {{if .AIRecommendations}}
+    <h3>Recommended Actions</h3>
+    <ol>
+        {{range .AIRecommendations}}<li>{{.}}</li>{{end}}
+    </ol>
+    {{end}}
+    {{end}}
 </body>
 </html>
