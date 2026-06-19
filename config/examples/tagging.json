@@ -1,0 +1,12 @@
+{
+    "baseline_tags": ["ProductCode", "Environment"],
+    "iac_tags": ["stack", "stack_env", "security_data_sensitivity", "stack_lifecycle", "project", "stack_version"],
+    "cost_tags": ["Project", "UseCase"],
+    "ownership_tags": ["TechnicalOwner", "BusinessOwner"],
+    "conditional_tags": {
+        "Backup_Plan": {
+            "when_tag": "Environment",
+            "when_values": ["production", "prod", "prd"]
+        }
+    }
+}

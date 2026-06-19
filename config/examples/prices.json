@@ -1,0 +1,32 @@
+{
+  "_comment": "Override specific prices in ~/.sift/prices.json. See audit/pricing/prices.json for all supported fields.",
+  "region": "eu-west-1",
+  "hours_per_month": 730,
+  "ec2_hourly": {
+    "t3.micro": 0.0114,
+    "t3.small": 0.0228,
+    "t3.medium": 0.0456,
+    "t3.large": 0.0912
+  },
+  "rds_hourly": {
+    "db.t3.micro": 0.018,
+    "db.t3.small": 0.036,
+    "db.t3.medium": 0.072
+  },
+  "ebs_gb_monthly": {
+    "gp2": 0.11,
+    "gp3": 0.088,
+    "io1": 0.131,
+    "st1": 0.048,
+    "sc1": 0.018
+  },
+  "snapshot_gb_monthly": 0.05,
+  "nat_gateway_monthly": 35.04,
+  "eks_cluster_monthly": 73.0,
+  "secret_monthly": 0.40,
+  "elastic_ip_monthly": 3.65,
+  "elb_monthly": {
+    "application": 18.40,
+    "network": 18.40
+  }
+}

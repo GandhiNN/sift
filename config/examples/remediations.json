@@ -1,0 +1,23 @@
+{
+  "_comment": "Override specific remediation templates in ~/.sift/remediations.json. See audit/remediation/remediations.json for all entries.",
+  "security": {
+    "s3": {
+      "public_access": {
+        "action": "Block all public access to the bucket",
+        "command": "aws s3api put-public-access-block --bucket {{.ResourceID}} --public-access-block-configuration BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true",
+        "confidence": "HIGH",
+        "action_risk": "MEDIUM"
+      }
+    }
+  },
+  "cost": {
+    "ebs": {
+      "unattached_volume": {
+        "action": "Delete unattached EBS volume (snapshot first)",
+        "command": "aws ec2 create-snapshot --volume-id {{.ResourceID}} && aws ec2 delete-volume --volume-id {{.ResourceID}}",
+        "confidence": "HIGH",
+        "action_risk": "MEDIUM"
+      }
+    }
+  }
+}
