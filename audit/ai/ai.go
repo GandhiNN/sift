@@ -88,8 +88,44 @@ type streamChunk struct {
 
 func BuildContext(grouped map[string][]audit.Finding) string {
 	var sb strings.Builder
-	total := 0
 
+	// Summary header
+	risks := map[string]int{}
+	var totalWaste float64
+	var totalIssues int
+	var totalResources int
+	for _, findings := range grouped {
+		for _, f := range findings {
+			totalResources++
+			if f.Status != "PASS" {
+				totalIssues++
+				risks[f.RiskLevel]++
+				totalWaste += f.EstimatedMonthlyCost
+			}
+		}
+	}
+
+	sb.WriteString("### Account Summary:\n")
+	sb.WriteString(fmt.Sprintf("Total resources scanned: %d\n", totalResources))
+	sb.WriteString(fmt.Sprintf("Total issues: %d (CRITICAL: %d, HIGH: %d, MEDIUM: %d, LOW: %d)\n",
+		totalIssues, risks["CRITICAL"], risks["HIGH"], risks["MEDIUM"], risks["LOW"]))
+	if totalWaste > 0 {
+		sb.WriteString(fmt.Sprintf("Estimated monthly waste: $%.0f\n", totalWaste))
+	}
+	compliant := totalResources - totalIssues
+	if totalResources > 0 {
+		sb.WriteString(
+			fmt.Sprintf(
+				"Compliance: %.0f%% (%d of %d resources clean)\n",
+				float64(compliant)/float64(totalResources)*100,
+				compliant,
+				totalResources,
+			),
+		)
+	}
+	sb.WriteString("\n")
+
+	// Per-module top findings
 	for module, findings := range grouped {
 		var relevant []audit.Finding
 		for _, f := range findings {
@@ -100,37 +136,39 @@ func BuildContext(grouped map[string][]audit.Finding) string {
 		if len(relevant) == 0 {
 			continue
 		}
-		// Sort by risk (CRITICAL first) and cap at 20
 		sort.Slice(relevant, func(i, j int) bool {
 			return riskOrder[relevant[i].RiskLevel] > riskOrder[relevant[j].RiskLevel]
 		})
 		if len(relevant) > 10 {
 			relevant = relevant[:10]
 		}
-		total += len(relevant)
 		sb.WriteString(
 			fmt.Sprintf(
-				"## %s findings (top %d issues):\n",
+				"## %s findings (top %d of %d issues):\n",
 				strings.ToUpper(module),
 				len(relevant),
+				risks[module],
 			),
 		)
 		for _, f := range relevant {
-			sb.WriteString(
-				fmt.Sprintf(
-					"- [%s] %s/%s: %s (%s)\n",
-					f.RiskLevel,
-					f.Service,
-					f.Check,
-					f.Detail,
-					f.ResourceID,
-				),
+			line := fmt.Sprintf(
+				"- [%s] %s/%s: %s (%s)",
+				f.RiskLevel,
+				f.Service,
+				f.Check,
+				f.Detail,
+				f.ResourceID,
 			)
+			if f.EstimatedMonthlyCost > 0 {
+				line += fmt.Sprintf(" [$%.0f/mo]", f.EstimatedMonthlyCost)
+			}
+			sb.WriteString(line)
+			sb.WriteByte('\n')
 		}
 		sb.WriteString("\n")
 	}
 
-	if total == 0 {
+	if totalIssues == 0 {
 		return "No issues found. All checks passed."
 	}
 	return sb.String()
