@@ -42,7 +42,7 @@
 
     {{if gt .TotalWaste 0.0}}
     <div class="metric">
-        <div class="metric-value">${{printf "%.0f" .TotalWaste}}/mo</div>
+        <div class="metric-value">${{money .TotalWaste}}/mo</div>
         <div class="metric-label">Estimated Waste</div>
     </div>
     {{end}}
@@ -80,7 +80,7 @@
             <td>{{$f.Service}}</td>
             <td>{{$f.Check}}</td>
             <td>{{$f.Detail}}</td>
-            <td>{{if gt $f.EstimatedMonthlyCost 0.0}}${{printf "%.0f" $f.EstimatedMonthlyCost}}{{end}}</td>
+            <td>{{if gt $f.EstimatedMonthlyCost 0.0}}${{money $f.EstimatedMonthlyCost}}{{end}}</td>
         </tr>
         {{end}}
     </table>
@@ -116,12 +116,13 @@
     {{end}}
 
     {{if .CostAttribution}}
-    <h2>Cost Attribution (by {{join .CostAttribution.Tags ", "}})</h2>
+    <h2>Cost Attribution by Tags</h2>
+    <p><em>Tags: {{join .CostAttribution.Tags ", "}}</em></p>
     <table>
         <tr><th>Metric</th><th>%</th><th>Value</th></tr>
         {{if gt .CostAttribution.TotalCost 0.0}}
-        <tr><td>Fully attributable</td><td>{{printf "%.0f" (pct .CostAttribution.AttributedCost .CostAttribution.TotalCost)}}%</td><td>${{printf "%.0f" .CostAttribution.AttributedCost}}/mo</td></tr>
-        <tr><td>Unattributed cost</td><td>{{printf "%.0f" (pct (sub .CostAttribution.TotalCost .CostAttribution.AttributedCost) .CostAttribution.TotalCost)}}%</td><td>${{printf "%.0f" (sub .CostAttribution.TotalCost .CostAttribution.AttributedCost)}}/mo</td></tr>
+        <tr><td>Fully attributable</td><td>{{printf "%.0f" (pct .CostAttribution.AttributedCost .CostAttribution.TotalCost)}}%</td><td>${{money .CostAttribution.AttributedCost}}/mo</td></tr>
+        <tr><td>Unattributed cost</td><td>{{printf "%.0f" (pct (sub .CostAttribution.TotalCost .CostAttribution.AttributedCost) .CostAttribution.TotalCost)}}%</td><td>${{money (sub .CostAttribution.TotalCost .CostAttribution.AttributedCost)}}/mo</td></tr>
         {{end}}
         <tr><td>Fully tagged</td><td>{{printf "%.0f" (pct (toFloat .CostAttribution.FullyTagged) (toFloat .CostAttribution.TotalResources))}}%</td><td>{{.CostAttribution.FullyTagged}} of {{.CostAttribution.TotalResources}}</td></tr>
         {{if gt .CostAttribution.PartiallyTagged 0}}
@@ -130,11 +131,12 @@
         <tr><td>Untagged</td><td>{{printf "%.0f" (pct (toFloat .CostAttribution.Untagged) (toFloat .CostAttribution.TotalResources))}}%</td><td>{{.CostAttribution.Untagged}} of {{.CostAttribution.TotalResources}}</td></tr>
     </table>
     {{if .CostAttribution.ByValue}}
-    <h3>Cost by {{index .CostAttribution.Tags 0}}</h3>
+    <h3>Breakdown</h3>
+    <p><em>Tags: {{join .CostAttribution.Tags ", "}}</em></p>
     <table>
         <tr><th>{{index .CostAttribution.Tags 0}}</th><th>Cost</th><th>%</th><th>Findings</th></tr>
         {{range .CostAttribution.ByValue}}
-        <tr><td>{{.Value}}</td><td>${{printf "%.0f" .Cost}}/mo</td><td>{{printf "%.0f" .Percent}}%</td><td>{{.Count}}</td></tr>
+        <tr><td>{{.Value}}</td><td>${{money .Cost}}/mo</td><td>{{printf "%.0f" .Percent}}%</td><td>{{.Count}}</td></tr>
         {{end}}
     </table>
     {{end}}

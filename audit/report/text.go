@@ -6,6 +6,21 @@ import (
 	"strings"
 )
 
+func fmtCost(v float64) string {
+	s := fmt.Sprintf("%.0f", v)
+	if len(s) <= 3 {
+		return s
+	}
+	var result []byte
+	for i, c := range s {
+		if i > 0 && (len(s)-i)%3 == 0 {
+			result = append(result, ',')
+		}
+		result = append(result, byte(c))
+	}
+	return string(result)
+}
+
 func RenderText(w io.Writer, r *ReportData) {
 	fmt.Fprintf(w, "=== SIFT EXECUTIVE SUMMARY ===\n")
 	fmt.Fprintf(w, "Profiles: %s | %s\n", strings.Join(r.Profiles, ", "), r.Timestamp)
@@ -20,7 +35,7 @@ func RenderText(w io.Writer, r *ReportData) {
 	}
 
 	if r.TotalWaste > 0 {
-		fmt.Fprintf(w, "\nESTIMATED WASTE: $%.0f/mo\n", r.TotalWaste)
+		fmt.Fprintf(w, "\nESTIMATED WASTE: $%s/mo\n", fmtCost(r.TotalWaste))
 	}
 
 	if r.Trend != nil {
@@ -60,7 +75,7 @@ func RenderText(w io.Writer, r *ReportData) {
 				f.Detail,
 			)
 			if f.EstimatedMonthlyCost > 0 {
-				line += fmt.Sprintf(" ($%.0f/mo)", f.EstimatedMonthlyCost)
+				line += fmt.Sprintf(" ($%s/mo)", fmtCost(f.EstimatedMonthlyCost))
 			}
 			if len(line) > 120 {
 				line = line[:117] + "..."
@@ -103,23 +118,24 @@ func RenderText(w io.Writer, r *ReportData) {
 
 	if r.CostAttribution != nil {
 		ca := r.CostAttribution
-		fmt.Fprintf(w, "\nCOST ATTRIBUTION (by %s):\n", strings.Join(ca.Tags, ", "))
+		fmt.Fprintf(w, "\nCOST ATTRIBUTION BY TAGS:\n")
+		fmt.Fprintf(w, "  (tags: %s)\n", strings.Join(ca.Tags, ", "))
 		if ca.TotalCost > 0 {
 			fmt.Fprintf(
 				w,
-				"  %-22s %4.0f%%  $%.0f/mo of $%.0f/mo\n",
+				"  %-22s %4.0f%%  $%s/mo of $%s/mo\n",
 				"Fully attributable:",
 				ca.AttributedCost/ca.TotalCost*100,
-				ca.AttributedCost,
-				ca.TotalCost,
+				fmtCost(ca.AttributedCost),
+				fmtCost(ca.TotalCost),
 			)
 			fmt.Fprintf(
 				w,
-				"  %-22s %4.0f%%  $%.0f/mo of $%.0f/mo\n",
+				"  %-22s %4.0f%%  $%s/mo of $%s/mo\n",
 				"Unattributed cost:",
 				(ca.TotalCost-ca.AttributedCost)/ca.TotalCost*100,
-				ca.TotalCost-ca.AttributedCost,
-				ca.TotalCost,
+				fmtCost(ca.TotalCost-ca.AttributedCost),
+				fmtCost(ca.TotalCost),
 			)
 		}
 		fmt.Fprintf(
@@ -131,9 +147,10 @@ func RenderText(w io.Writer, r *ReportData) {
 			ca.TotalResources,
 		)
 		if len(ca.ByValue) > 0 {
-			fmt.Fprintf(w, "\n  COST BY %s:\n", ca.Tags[0])
+			fmt.Fprintf(w, "\n  BREAKDOWN:\n")
+			fmt.Fprintf(w, "  (tags: %s)\n", strings.Join(ca.Tags, ", "))
 			for _, v := range ca.ByValue {
-				fmt.Fprintf(w, "  %-24s $%7.0f/mo  %5.0f%%\n", v.Value, v.Cost, v.Percent)
+				fmt.Fprintf(w, "  %-24s $%9s/mo  %5.0f%%\n", v.Value, fmtCost(v.Cost), v.Percent)
 			}
 		}
 		if ca.PartiallyTagged > 0 {

@@ -14,6 +14,7 @@ var funcMap = template.FuncMap{
 	"inc":   func(i int) int { return i + 1 },
 	"lower": strings.ToLower,
 	"join":  strings.Join,
+	"money": fmtCost,
 	"pct": func(a, b float64) float64 {
 		if b == 0 {
 			return 0
