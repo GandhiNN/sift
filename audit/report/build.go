@@ -316,6 +316,36 @@ func Build(db *history.DB, profiles []string) *ReportData {
 	}
 	sort.Slice(r.Services, func(i, j int) bool { return r.Services[i].Count > r.Services[j].Count })
 
+	// Spend overview from Cost Explorer data
+	if len(costTags) > 0 {
+		spendRows, _ := db.GetSpend(profiles, costTags[0])
+		if len(spendRows) > 0 {
+			// Build waste lookup from ByValue
+			wasteLookup := map[string]float64{}
+			if r.CostAttribution != nil {
+				for _, v := range r.CostAttribution.ByValue {
+					wasteLookup[v.Value] = v.Cost
+				}
+			}
+			for _, sr := range spendRows {
+				waste := wasteLookup[sr.TagValue]
+				rate := 0.0
+				if sr.Spend > 0 {
+					rate = waste / sr.Spend * 100
+				}
+				r.SpendOverview = append(r.SpendOverview, SpendByTag{
+					Value:     sr.TagValue,
+					Spend:     sr.Spend,
+					Waste:     waste,
+					WasteRate: rate,
+				})
+			}
+			sort.Slice(r.SpendOverview, func(i, j int) bool {
+				return r.SpendOverview[i].Spend > r.SpendOverview[j].Spend
+			})
+		}
+	}
+
 	return r
 }
 

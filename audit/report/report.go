@@ -24,6 +24,7 @@ type ReportData struct {
 
 	CostAttribution     *CostAttribution
 	SecurityAttribution *SecurityAttribution
+	SpendOverview       []SpendByTag
 
 	Services []ServiceCount
 
@@ -77,6 +78,13 @@ type TagValueSecurity struct {
 	Critical int
 	High     int
 	Percent  float64
+}
+
+type SpendByTag struct {
+	Value     string
+	Spend     float64
+	Waste     float64
+	WasteRate float64
 }
 
 type ServiceCount struct {

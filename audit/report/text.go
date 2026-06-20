@@ -64,7 +64,7 @@ func RenderText(w io.Writer, r *ReportData) {
 	}
 
 	if len(r.TopCost) > 0 {
-		fmt.Fprintf(w, "\nTOP COST ISSUES:\n")
+		fmt.Fprintf(w, "\nTOP COST WASTE ISSUES:\n")
 		for i, f := range r.TopCost {
 			line := fmt.Sprintf(
 				"  %d. [%s] %s/%s: %s",
@@ -118,7 +118,7 @@ func RenderText(w io.Writer, r *ReportData) {
 
 	if r.CostAttribution != nil {
 		ca := r.CostAttribution
-		fmt.Fprintf(w, "\nCOST ATTRIBUTION BY TAGS:\n")
+		fmt.Fprintf(w, "\nCOST WASTE ATTRIBUTION BY TAGS:\n")
 		fmt.Fprintf(w, "  (tags: %s)\n", strings.Join(ca.Tags, ", "))
 		if ca.TotalCost > 0 {
 			fmt.Fprintf(
@@ -211,6 +211,20 @@ func RenderText(w io.Writer, r *ReportData) {
 				fmt.Fprintf(w, "  (CRITICAL:%d HIGH:%d)", v.Critical, v.High)
 			}
 			fmt.Fprintln(w)
+		}
+	}
+
+	if len(r.SpendOverview) > 0 {
+		fmt.Fprintf(w, "\nSPEND OVERVIEW (Cost Explorer, last 30 days):\n")
+		for _, s := range r.SpendOverview {
+			fmt.Fprintf(
+				w,
+				"  %-24s $%9s/mo waste: $%s (%.0f%%)\n",
+				s.Value,
+				fmtCost(s.Spend),
+				fmtCost(s.Waste),
+				s.WasteRate,
+			)
 		}
 	}
 
