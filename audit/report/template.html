@@ -70,7 +70,7 @@
         {{end}}
     </table>
 
-    <h2>Top Cost Issues</h2>
+    <h2>Top Cost Waste Issues</h2>
     <table>
         <tr><th>#</th><th>Risk</th><th>Service</th><th>Check</th><th>Detail</th><th>Cost</th></tr>
         {{range $i, $f := .TopCost}}
@@ -116,7 +116,7 @@
     {{end}}
 
     {{if .CostAttribution}}
-    <h2>Cost Attribution by Tags</h2>
+    <h2>Cost Waste Attribution by Tags</h2>
     <p><em>Tags: {{join .CostAttribution.Tags ", "}}</em></p>
     <table>
         <tr><th>Metric</th><th>%</th><th>Value</th></tr>
@@ -159,6 +159,16 @@
         <tr><th>Value</th><th>Issues</th><th>%</th><th>Critical</th><th>High</th></tr>
         {{range .SecurityAttribution.ByValue}}
         <tr><td>{{.Value}}</td><td>{{.Count}}</td><td>{{printf "%.0f" .Percent}}%</td><td>{{.Critical}}</td><td>{{.High}}</td></tr>
+        {{end}}
+    </table>
+    {{end}}
+
+    {{if .SpendOverview}}
+    <h2>Spend Overview (Cost Explorer, last 30 days)</h2>
+    <table>
+        <tr><th>Tag Value</th><th>Spend</th><th>Waste</th><th>Waste %</th></tr>
+        {{range .SpendOverview}}
+        <tr><td>{{.Value}}</td><td>${{money .Spend}}/mo</td><td>${{money .Waste}}/mo</td><td>{{printf "%.0f" .WasteRate}}%</td></tr>
         {{end}}
     </table>
     {{end}}
