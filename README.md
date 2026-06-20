@@ -316,18 +316,38 @@ sift report --profile dev
 
 # Aggregated across environments
 sift report --profile icloud-dev,icloud-qa,icloud-prd
+
+# HTML output
+sift report --profile dev --format html -o report.html
+
+# JSON output
+sift report --profile dev --format json
+
+# With AI-generated summary and recommendations
+sift report --profile dev --ai
 ```
 
 Output includes:
 - **Platform health score** (risk-weighted, 0-100)
 - **Risk overview** (CRITICAL/HIGH/MEDIUM/LOW counts)
 - **Estimated waste** (total $/month)
-- **Top issues** by risk and cost impact
-- **Compliance scores** (security, cost, tagging — % of resources fully compliant)
+- **Top security issues** by risk level
+- **Top cost issues** by risk and cost impact
+- **Compliance scores** (security, cost, tagging — % of resources with no issues per module)
 - **Aging findings** (issues open >7 days, sorted by age)
+- **Cost attribution by tags** (fully tagged/untagged metrics + breakdown by tag value with $/mo and %)
+- **Security attribution by tags** (fully tagged/untagged metrics + breakdown by tag value with CRITICAL/HIGH counts)
 - **Service breakdown** (issues per service)
 
 The health score penalizes CRITICAL findings 4x more than LOW, giving a single trackable number for platform posture.
+
+| Flag | Description |
+|------|-------------|
+| `--format` | Output format: `text` (default), `html`, `json` |
+| `--ai` | Enrich report with AI-generated summary and recommended actions |
+| `-o` | Write output to file |
+
+Tags used for attribution are read from `cost_tags` in `~/.sift/tagging.json`.
 
 ## Remediation recommendations
 
@@ -826,6 +846,14 @@ sift/
     │   └── remediations.json   # Remediation templates
     ├── ai/
     │   └── ai.go               # LLM integration (Ollama/OpenAI-compatible)
+    ├── report/
+    │   ├── report.go           # ReportData struct definitions
+    │   ├── build.go            # Data computation from history DB
+    │   ├── text.go             # Text renderer
+    │   ├── html.go             # HTML renderer (embedded template)
+    │   ├── json.go             # JSON renderer
+    │   ├── ai.go               # AI enrichment (summary + recommendations)
+    │   └── template.html       # HTML report template with CSS
     ├── security/
     │   ├── security.go         # Module registration + Audit entry point
     │   ├── sg.go               # Shared SG open-to-world helpers
