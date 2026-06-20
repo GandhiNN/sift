@@ -30,6 +30,8 @@ github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs v1.69.1 h1:2ANEV0YkO/NlWxVmH
 github.com/aws/aws-sdk-go-v2/service/cloudwatchlogs v1.69.1/go.mod h1:O7cQtpXZSk+P59gPFZIpcMpKwLk5d9zabFpV8fw68RM=
 github.com/aws/aws-sdk-go-v2/service/configservice v1.62.4 h1:Vzzl4mk9hu0sE0lKhYiH3uD15nL9nyQ8PUlVKHXsqnA=
 github.com/aws/aws-sdk-go-v2/service/configservice v1.62.4/go.mod h1:HGcpycwfNZW3ADZFgUl/GxbIAQ9qkcY9YERr7QPvlaE=
+github.com/aws/aws-sdk-go-v2/service/costexplorer v1.65.1 h1:zvBGy8CjCYBJ/hVV1jKyG0HWpaBQ278QWQMqJmF253E=
+github.com/aws/aws-sdk-go-v2/service/costexplorer v1.65.1/go.mod h1:y3B04et7wgCGibEsJJ3BQwI2TzgqbVjre7cjWnGbpj8=
 github.com/aws/aws-sdk-go-v2/service/databasemigrationservice v1.62.2 h1:+vWChWbLMrEzHuKtm2koCaGoZo6Cnu8OpYH0fsdSLEI=
 github.com/aws/aws-sdk-go-v2/service/databasemigrationservice v1.62.2/go.mod h1:Qa7SOwwtaE9VticcY52FgDIXJZLS1jz+Y6fiCdLUdRU=
 github.com/aws/aws-sdk-go-v2/service/directoryservice v1.38.20 h1:C7EHMX6Q8rUfRCFbTiO4D777nooyQpprGEktVNue2ao=
