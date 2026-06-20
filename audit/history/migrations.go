@@ -38,6 +38,17 @@ var migrations = []string{
 		finding_id TEXT PRIMARY KEY,
 		first_seen DATETIME NOT NULL
 	);`,
+
+	// v3: cost explorer spend data
+	`CREATE TABLE IF NOT EXISTS spend_data (
+		profile TEXT NOT NULL,
+		tag_key TEXT NOT NULL,
+		tag_value TEXT NOT NULL,
+		spend REAL NOT NULL,
+		period TEXT NOT NULL,
+		updated_at DATETIME NOT NULL,
+		PRIMARY KEY (profile, tag_key, tag_value)
+	);`,
 }
 
 func migrate(db *sql.DB) error {

@@ -349,3 +349,63 @@ func (d *DB) PreviousScan(profile, command string) (*ScanMeta, []audit.Finding, 
 	}
 	return &meta, findings, nil
 }
+
+func (d *DB) SaveSpend(
+	profile, tagKey string,
+	spendByValue map[string]float64,
+	period string,
+) error {
+	tx, err := d.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	_, err = tx.Exec(`DELETE FROM spend_data WHERE profile = ? AND tag_key = ?`, profile, tagKey)
+	if err != nil {
+		return err
+	}
+
+	stmt, err := tx.Prepare(
+		`INSERT INTO spend_data (profile, tag_key, tag_value, spend, period, updated_at) VALUES (?, ?, ?, ?, ?, datetime('now'))`,
+	)
+	if err != nil {
+		return err
+	}
+	defer stmt.Close()
+
+	for val, spend := range spendByValue {
+		if _, err := stmt.Exec(profile, tagKey, val, spend, period); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
+type SpendRow struct {
+	TagValue string
+	Spend    float64
+}
+
+func (d *DB) GetSpend(profiles []string, tagKey string) ([]SpendRow, error) {
+	var rows []SpendRow
+	for _, p := range profiles {
+		sqlRows, err := d.db.Query(
+			`SELECT tag_value, spend FROM spend_data WHERE profile = ? AND tag_key = ?`,
+			p, tagKey,
+		)
+		if err != nil {
+			return nil, err
+		}
+		for sqlRows.Next() {
+			var r SpendRow
+			if err := sqlRows.Scan(&r.TagValue, &r.Spend); err != nil {
+				sqlRows.Close()
+				return nil, err
+			}
+			rows = append(rows, r)
+		}
+		sqlRows.Close()
+	}
+	return rows, nil
+}
