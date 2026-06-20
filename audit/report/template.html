@@ -164,14 +164,26 @@
     </table>
     {{end}}
 
-    {{if .SpendOverview}}
+    {{if or .SpendByService .SpendOverview}}
     <h2>Spend Overview (Cost Explorer, last 30 days)</h2>
+    {{if .SpendByService}}
+    <h3>By Service</h3>
+    <table>
+        <tr><th>Service</th><th>Spend</th></tr>
+        {{range .SpendByService}}
+        <tr><td>{{.Value}}</td><td>${{money .Spend}}/mo</td></tr>
+        {{end}}
+    </table>
+    {{end}}
+    {{if .SpendOverview}}
+    <h3>By Tag</h3>
     <table>
         <tr><th>Tag Value</th><th>Spend</th></tr>
         {{range .SpendOverview}}
         <tr><td>{{.Value}}</td><td>${{money .Spend}}/mo</td></tr>
         {{end}}
     </table>
+    {{end}}
     {{end}}
 
     <h2># of Issues By Service</h2>

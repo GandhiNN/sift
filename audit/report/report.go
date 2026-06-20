@@ -25,6 +25,7 @@ type ReportData struct {
 	CostAttribution     *CostAttribution
 	SecurityAttribution *SecurityAttribution
 	SpendOverview       []SpendByTag
+	SpendByService      []SpendByTag
 
 	Services []ServiceCount
 

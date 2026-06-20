@@ -332,6 +332,20 @@ func Build(db *history.DB, profiles []string) *ReportData {
 		}
 	}
 
+	// Spend by service
+	svcRows, _ := db.GetSpend(profiles, "__SERVICE__")
+	if len(svcRows) > 0 {
+		for _, sr := range svcRows {
+			r.SpendByService = append(r.SpendByService, SpendByTag{
+				Value: sr.TagValue,
+				Spend: sr.Spend,
+			})
+		}
+		sort.Slice(r.SpendByService, func(i, j int) bool {
+			return r.SpendByService[i].Spend > r.SpendByService[j].Spend
+		})
+	}
+
 	return r
 }
 

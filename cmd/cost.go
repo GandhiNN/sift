@@ -102,11 +102,6 @@ func fetchAndSaveSpend() {
 	defer cancel()
 
 	cfg := configs[0] // Cost Explorer is region-agnostic, use first config
-	spend, period, err := cost.FetchSpendByTag(ctx, cfg, tagKey)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "Note: Cost Explorer unavailable: %v\n", err)
-		return
-	}
 
 	db, err := history.OpenDB()
 	if err != nil {
@@ -114,7 +109,19 @@ func fetchAndSaveSpend() {
 	}
 	defer db.Close()
 
+	// Fetch spend by tag
+	spend, period, err := cost.FetchSpendByTag(ctx, cfg, tagKey)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Note: Cost Explorer unavailable: %v\n", err)
+		return
+	}
 	db.SaveSpend(profile, tagKey, spend, period)
+
+	// Fetch spend by service
+	svcSpend, svcPeriod, err := cost.FetchSpendByService(ctx, cfg)
+	if err == nil {
+		db.SaveSpend(profile, "__SERVICE__", svcSpend, svcPeriod)
+	}
 }
 
 func loadCostTags() []string {

@@ -215,15 +215,19 @@ func RenderText(w io.Writer, r *ReportData) {
 		}
 	}
 
-	if len(r.SpendOverview) > 0 {
+	if len(r.SpendByService) > 0 || len(r.SpendOverview) > 0 {
 		fmt.Fprintf(w, "\nSPEND OVERVIEW (Cost Explorer, last 30 days):\n")
-		for _, s := range r.SpendOverview {
-			fmt.Fprintf(
-				w,
-				"  %-24s $%9s/mo\n",
-				s.Value,
-				fmtCost(s.Spend),
-			)
+		if len(r.SpendByService) > 0 {
+			fmt.Fprintf(w, "\n  By Service:\n")
+			for _, s := range r.SpendByService {
+				fmt.Fprintf(w, "    %-36s $%9s/mo\n", s.Value, fmtCost(s.Spend))
+			}
+		}
+		if len(r.SpendOverview) > 0 {
+			fmt.Fprintf(w, "\n  By Tag:\n")
+			for _, s := range r.SpendOverview {
+				fmt.Fprintf(w, "    %-24s $%9s/mo\n", s.Value, fmtCost(s.Spend))
+			}
 		}
 	}
 
