@@ -1,8 +1,10 @@
 package cmd
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 	"sort"
 
 	"sift/audit"
@@ -26,6 +28,7 @@ var costCmd = &cobra.Command{
 		if groupBy != "" {
 			printCostGroupBy(groupBy)
 		}
+		fetchAndSaveSpend()
 		if exitCode != 0 {
 			os.Exit(exitCode)
 		}
@@ -83,6 +86,53 @@ func printCostGroupBy(tagKey string) {
 		total += g.cost
 	}
 	fmt.Fprintf(os.Stderr, "\n  TOTAL: $%.0f/mo\n", total)
+}
+
+func fetchAndSaveSpend() {
+	costTags := loadCostTags()
+	if len(costTags) == 0 {
+		return
+	}
+	tagKey := costTags[0]
+
+	ctx, configs, cancel, err := buildAWSConfigs()
+	if err != nil {
+		return
+	}
+	defer cancel()
+
+	cfg := configs[0] // Cost Explorer is region-agnostic, use first config
+	spend, period, err := cost.FetchSpendByTag(ctx, cfg, tagKey)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Note: Cost Explorer unavailable: %v\n", err)
+		return
+	}
+
+	db, err := history.OpenDB()
+	if err != nil {
+		return
+	}
+	defer db.Close()
+
+	db.SaveSpend(profile, tagKey, spend, period)
+}
+
+func loadCostTags() []string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return nil
+	}
+	data, err := os.ReadFile(filepath.Join(home, ".sift", "tagging.json"))
+	if err != nil {
+		return nil
+	}
+	var tc struct {
+		CostTags []string `json:"cost_tags"`
+	}
+	if json.Unmarshal(data, &tc) != nil {
+		return nil
+	}
+	return tc.CostTags
 }
 
 func init() {
