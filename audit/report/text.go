@@ -70,6 +70,7 @@ func RenderText(w io.Writer, r *ReportData) {
 	}
 
 	fmt.Fprintf(w, "\nCOMPLIANCE:\n")
+	fmt.Fprintf(w, "  (%% of resources with no issues per module)\n")
 	for _, c := range r.Compliance {
 		fmt.Fprintf(
 			w,
@@ -129,6 +130,12 @@ func RenderText(w io.Writer, r *ReportData) {
 			ca.FullyTagged,
 			ca.TotalResources,
 		)
+		if len(ca.ByValue) > 0 {
+			fmt.Fprintf(w, "\n  COST BY %s:\n", ca.Tags[0])
+			for _, v := range ca.ByValue {
+				fmt.Fprintf(w, "  %-24s $%7.0f/mo  %5.0f%%\n", v.Value, v.Cost, v.Percent)
+			}
+		}
 		if ca.PartiallyTagged > 0 {
 			fmt.Fprintf(
 				w,
@@ -149,7 +156,7 @@ func RenderText(w io.Writer, r *ReportData) {
 		)
 	}
 
-	fmt.Fprintf(w, "\nBY SERVICE:\n")
+	fmt.Fprintf(w, "\n# OF ISSUES BY SERVICE:\n")
 	for _, s := range r.Services {
 		fmt.Fprintf(w, "  %-16s %d issues\n", s.Name, s.Count)
 	}

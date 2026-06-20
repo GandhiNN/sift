@@ -39,6 +39,9 @@ func Build(db *history.DB, profiles []string) *ReportData {
 	var issues []audit.Finding
 	for _, f := range allFindings {
 		if f.Status != "PASS" {
+			if strings.HasPrefix(f.Detail, "audit failed:") {
+				continue
+			}
 			issues = append(issues, f)
 			r.Risks[f.RiskLevel]++
 			r.TotalWaste += f.EstimatedMonthlyCost
@@ -204,6 +207,37 @@ func Build(db *history.DB, profiles []string) *ReportData {
 			Untagged:        untagged,
 			TotalResources:  total,
 		}
+
+		// Breakdown by first cost tag value
+		tagKey := costTags[0]
+		valCosts := map[string]float64{}
+		valCounts := map[string]int{}
+		for _, f := range allFindings {
+			if f.Module != "cost" || f.Status == "PASS" || f.EstimatedMonthlyCost == 0 {
+				continue
+			}
+			val := f.Tags[tagKey]
+			if val == "" {
+				val = "(untagged)"
+			}
+			valCosts[val] += f.EstimatedMonthlyCost
+			valCounts[val]++
+		}
+		for val, cost := range valCosts {
+			pct := 0.0
+			if totalCostAttr > 0 {
+				pct = cost / totalCostAttr * 100
+			}
+			r.CostAttribution.ByValue = append(r.CostAttribution.ByValue, TagValueCost{
+				Value:   val,
+				Cost:    cost,
+				Percent: pct,
+				Count:   valCounts[val],
+			})
+		}
+		sort.Slice(r.CostAttribution.ByValue, func(i, j int) bool {
+			return r.CostAttribution.ByValue[i].Cost > r.CostAttribution.ByValue[j].Cost
+		})
 	}
 
 	// Services

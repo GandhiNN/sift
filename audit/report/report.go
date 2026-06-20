@@ -51,6 +51,14 @@ type CostAttribution struct {
 	PartiallyTagged int
 	Untagged        int
 	TotalResources  int
+	ByValue         []TagValueCost
+}
+
+type TagValueCost struct {
+	Value   string
+	Cost    float64
+	Percent float64
+	Count   int
 }
 
 type ServiceCount struct {

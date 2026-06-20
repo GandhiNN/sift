@@ -50,7 +50,7 @@ func Enrich(r *ReportData) error {
 		Stream: false,
 	})
 
-	client := &http.Client{Timeout: 120 * time.Second}
+	client := &http.Client{Timeout: 180 * time.Second}
 	resp, err := client.Post(cfg.Endpoint, "application/json", bytes.NewReader(body))
 	if err != nil {
 		return fmt.Errorf("LLM request failed: %w", err)
