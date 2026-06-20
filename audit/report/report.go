@@ -22,7 +22,8 @@ type ReportData struct {
 
 	Aging []history.AgingFinding
 
-	CostAttribution *CostAttribution
+	CostAttribution     *CostAttribution
+	SecurityAttribution *SecurityAttribution
 
 	Services []ServiceCount
 
@@ -59,6 +60,23 @@ type TagValueCost struct {
 	Cost    float64
 	Percent float64
 	Count   int
+}
+
+type SecurityAttribution struct {
+	Tags            []string
+	FullyTagged     int
+	PartiallyTagged int
+	Untagged        int
+	TotalResources  int
+	ByValue         []TagValueSecurity
+}
+
+type TagValueSecurity struct {
+	Value    string
+	Count    int
+	Critical int
+	High     int
+	Percent  float64
 }
 
 type ServiceCount struct {

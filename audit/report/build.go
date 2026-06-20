@@ -240,6 +240,72 @@ func Build(db *history.DB, profiles []string) *ReportData {
 		})
 	}
 
+	// Security attribution by tags
+	secByVal := map[string]*TagValueSecurity{}
+	var totalSecIssues int
+	var secFullyTagged, secPartiallyTagged, secUntagged int
+	for _, f := range issues {
+		if f.Module != "security" {
+			continue
+		}
+		totalSecIssues++
+		if len(f.Tags) == 0 {
+			secUntagged++
+		} else {
+			hasAll := true
+			hasAny := false
+			for _, tag := range costTags {
+				if _, ok := f.Tags[tag]; ok {
+					hasAny = true
+				} else {
+					hasAll = false
+				}
+			}
+			if hasAll {
+				secFullyTagged++
+			} else if hasAny {
+				secPartiallyTagged++
+			} else {
+				secUntagged++
+			}
+		}
+		val := "(untagged)"
+		for _, tag := range costTags {
+			if v, ok := f.Tags[tag]; ok && v != "" {
+				val = v
+				break
+			}
+		}
+		sv, ok := secByVal[val]
+		if !ok {
+			sv = &TagValueSecurity{Value: val}
+			secByVal[val] = sv
+		}
+		sv.Count++
+		switch f.RiskLevel {
+		case "CRITICAL":
+			sv.Critical++
+		case "HIGH":
+			sv.High++
+		}
+	}
+	if totalSecIssues > 0 {
+		var secVals []TagValueSecurity
+		for _, sv := range secByVal {
+			sv.Percent = float64(sv.Count) / float64(totalSecIssues) * 100
+			secVals = append(secVals, *sv)
+		}
+		sort.Slice(secVals, func(i, j int) bool { return secVals[i].Count > secVals[j].Count })
+		r.SecurityAttribution = &SecurityAttribution{
+			Tags:            costTags,
+			FullyTagged:     secFullyTagged,
+			PartiallyTagged: secPartiallyTagged,
+			Untagged:        secUntagged,
+			TotalResources:  totalSecIssues,
+			ByValue:         secVals,
+		}
+	}
+
 	// Services
 	svcCounts := map[string]int{}
 	for _, f := range issues {

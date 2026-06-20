@@ -173,6 +173,47 @@ func RenderText(w io.Writer, r *ReportData) {
 		)
 	}
 
+	if r.SecurityAttribution != nil && len(r.SecurityAttribution.ByValue) > 0 {
+		sa := r.SecurityAttribution
+		fmt.Fprintf(w, "\nSECURITY ATTRIBUTION BY TAGS:\n")
+		fmt.Fprintf(w, "  (tags: %s)\n", strings.Join(sa.Tags, ", "))
+		fmt.Fprintf(
+			w,
+			"  %-22s %4.0f%% %d of %d findings\n",
+			"Fully tagged:",
+			float64(sa.FullyTagged)/float64(sa.TotalResources)*100,
+			sa.FullyTagged,
+			sa.TotalResources,
+		)
+		if sa.PartiallyTagged > 0 {
+			fmt.Fprintf(
+				w,
+				"  %-22s %4.0f%% %d of %d findings\n",
+				"Partially tagged:",
+				float64(sa.PartiallyTagged)/float64(sa.TotalResources)*100,
+				sa.PartiallyTagged,
+				sa.TotalResources,
+			)
+		}
+		fmt.Fprintf(
+			w,
+			"  %-22s %4.0f%% %d of %d findings\n",
+			"Untagged:",
+			float64(sa.Untagged)/float64(sa.TotalResources)*100,
+			sa.Untagged,
+			sa.TotalResources,
+		)
+		fmt.Fprintf(w, "\n BREAKDOWN:\n")
+		fmt.Fprintf(w, "  (tags: %s)\n", strings.Join(sa.Tags, ", "))
+		for _, v := range sa.ByValue {
+			fmt.Fprintf(w, "  %-24s %4d issues  %4.0f%%", v.Value, v.Count, v.Percent)
+			if v.Critical > 0 || v.High > 0 {
+				fmt.Fprintf(w, "  (CRITICAL:%d HIGH:%d)", v.Critical, v.High)
+			}
+			fmt.Fprintln(w)
+		}
+	}
+
 	fmt.Fprintf(w, "\n# OF ISSUES BY SERVICE:\n")
 	for _, s := range r.Services {
 		fmt.Fprintf(w, "  %-16s %d issues\n", s.Name, s.Count)
