@@ -1,5 +1,5 @@
 {
-    "endpoint": "http://localhost:11434/api/chat",
+    "endpoint": "http://localhost:11434/v1/chat/completions",
     "model": "phi3:3.8b",
     "prompts": {
         "default": "You are an AWS infrastructure expert. Analyze ONLY the provided audit findings. Do not suggest actions outside the scope of the findings shown. Be concise and prioritize by risk level.",

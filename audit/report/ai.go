@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
@@ -50,6 +51,7 @@ func Enrich(r *ReportData) error {
 		Stream: false,
 	})
 
+	start := time.Now()
 	client := &http.Client{Timeout: 180 * time.Second}
 	resp, err := client.Post(cfg.Endpoint, "application/json", bytes.NewReader(body))
 	if err != nil {
@@ -63,15 +65,38 @@ func Enrich(r *ReportData) error {
 	}
 
 	var result struct {
-		Message struct {
-			Content string `json:"content"`
-		} `json:"message"`
+		Choices []struct {
+			Message struct {
+				Content string `json:"content"`
+			} `json:"message"`
+		} `json:"choices"`
+		Usage *struct {
+			PromptTokens     int `json:"prompt_tokens"`
+			CompletionTokens int `json:"completion_tokens"`
+		} `json:"usage,omitempty"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		return fmt.Errorf("decode response: %w", err)
 	}
 
-	parseResponse(result.Message.Content, r)
+	if len(result.Choices) == 0 {
+		return fmt.Errorf("no response from LLM")
+	}
+
+	durationMs := time.Since(start).Milliseconds()
+	if result.Usage != nil {
+		fmt.Fprintf(
+			os.Stderr,
+			"[report AI: %s | prompt: %d tokens | completion: %d tokens | %.1fs]\n",
+			cfg.Model,
+			result.Usage.PromptTokens,
+			result.Usage.CompletionTokens,
+			float64(durationMs)/1000,
+		)
+	} else {
+		fmt.Fprintf(os.Stderr, "[report AI: %s | %.1fs]\n", cfg.Model, float64(durationMs)/1000)
+	}
+	parseResponse(result.Choices[0].Message.Content, r)
 	return nil
 }
 

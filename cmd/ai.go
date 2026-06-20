@@ -75,9 +75,20 @@ var aiCmd = &cobra.Command{
 		cfg := ai.LoadConfig()
 		fmt.Fprintf(os.Stderr, "Querying %s (%s)...\n", cfg.Model, cfg.Endpoint)
 
-		if err := ai.AnalyzeWithContext(cfg, context, question, aiPrompt, os.Stdout); err != nil {
+		stats, err := ai.AnalyzeWithContext(cfg, context, question, aiPrompt, os.Stdout)
+		if err != nil {
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 			os.Exit(2)
+		}
+		if stats != nil {
+			fmt.Fprintf(
+				os.Stderr,
+				"\n[%s | prompt: %d tokens | completion: %d tokens | %.1fs]\n",
+				stats.Model,
+				stats.PromptTokens,
+				stats.CompletionTokens,
+				float64(stats.DurationMs)/1000,
+			)
 		}
 	},
 }

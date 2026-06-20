@@ -47,8 +47,8 @@ var riskOrder = map[string]int{
 
 func LoadConfig() Config {
 	cfg := Config{
-		Endpoint: "http://localhost:11434/api/chat", // default
-		Model:    "phi3:3.8b",                       // default
+		Endpoint: "http://localhost:11434/v1/chat/completions", // default
+		Model:    "phi3:3.8b",                                  // default
 	}
 	home, err := os.UserHomeDir()
 	if err != nil {
@@ -74,16 +74,25 @@ type chatRequest struct {
 }
 
 type chatResponse struct {
-	Message struct {
-		Content string `json:"content"`
-	} `json:"message"`
+	Choices []struct {
+		Message message `json:"message"`
+		Delta   message `json:"delta"`
+	} `json:"choices"`
+	Usage *Usage `json:"usage,omitempty"`
 }
 
-type streamChunk struct {
-	Message struct {
-		Content string `json:"content"`
-	} `json:"message"`
-	Done bool `json:"done"`
+type Usage struct {
+	PromptTokens     int `json:"prompt_tokens"`
+	CompletionTokens int `json:"completion_tokens"`
+	TotalTokens      int `json:"total_tokens"`
+}
+
+// Stats holds telemtery from an AI call.
+type Stats struct {
+	Model            string
+	PromptTokens     int
+	CompletionTokens int
+	DurationMs       int64
 }
 
 func BuildContext(grouped map[string][]audit.Finding) string {
@@ -174,7 +183,12 @@ func BuildContext(grouped map[string][]audit.Finding) string {
 	return sb.String()
 }
 
-func AnalyzeWithContext(cfg Config, context, question, promptName string, stream io.Writer) error {
+func AnalyzeWithContext(
+	cfg Config,
+	context, question, promptName string,
+	stream io.Writer,
+) (*Stats, error) {
+	start := time.Now()
 	messages := []message{
 		{Role: "system", Content: cfg.GetPrompt(promptName)},
 		{Role: "user", Content: context + "\n\n" + question},
@@ -190,32 +204,47 @@ func AnalyzeWithContext(cfg Config, context, question, promptName string, stream
 	client := &http.Client{Timeout: 300 * time.Second}
 	resp, err := client.Post(cfg.Endpoint, "application/json", bytes.NewReader(body))
 	if err != nil {
-		return fmt.Errorf("LLM request failed: %w", err)
+		return nil, fmt.Errorf("LLM request failed: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
 		b, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("LLM returned %d: %s", resp.StatusCode, string(b))
+		return nil, fmt.Errorf("LLM returned %d: %s", resp.StatusCode, string(b))
 	}
+
+	stats := &Stats{Model: cfg.Model}
 
 	if streaming {
 		decoder := json.NewDecoder(resp.Body)
 		for decoder.More() {
-			var chunk streamChunk
+			var chunk chatResponse
 			if err := decoder.Decode(&chunk); err != nil {
 				break
 			}
-			fmt.Fprint(stream, chunk.Message.Content)
+			if len(chunk.Choices) > 0 {
+				fmt.Fprint(stream, chunk.Choices[0].Delta.Content)
+			}
+			if chunk.Usage != nil {
+				stats.PromptTokens = chunk.Usage.PromptTokens
+				stats.CompletionTokens = chunk.Usage.CompletionTokens
+			}
 		}
 		fmt.Fprintln(stream)
 	} else {
 		var result chatResponse
 		if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-			return fmt.Errorf("decode response: %w", err)
+			return nil, fmt.Errorf("decode response: %w", err)
 		}
-		fmt.Fprintln(stream, result.Message.Content)
+		if len(result.Choices) > 0 {
+			fmt.Fprintln(stream, result.Choices[0].Message.Content)
+		}
+		if result.Usage != nil {
+			stats.PromptTokens = result.Usage.PromptTokens
+			stats.CompletionTokens = result.Usage.CompletionTokens
+		}
 	}
 
-	return nil
+	stats.DurationMs = time.Since(start).Milliseconds()
+	return stats, nil
 }
