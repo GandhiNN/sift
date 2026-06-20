@@ -44,6 +44,7 @@
     <div class="metric">
         <div class="metric-value">${{money .TotalWaste}}/mo</div>
         <div class="metric-label">Estimated Waste</div>
+        <div><small><em>Based on on-demand pricing; actual savings may vary</em></small></div>
     </div>
     {{end}}
 
@@ -166,9 +167,9 @@
     {{if .SpendOverview}}
     <h2>Spend Overview (Cost Explorer, last 30 days)</h2>
     <table>
-        <tr><th>Tag Value</th><th>Spend</th><th>Waste</th><th>Waste %</th></tr>
+        <tr><th>Tag Value</th><th>Spend</th></tr>
         {{range .SpendOverview}}
-        <tr><td>{{.Value}}</td><td>${{money .Spend}}/mo</td><td>${{money .Waste}}/mo</td><td>{{printf "%.0f" .WasteRate}}%</td></tr>
+        <tr><td>{{.Value}}</td><td>${{money .Spend}}/mo</td></tr>
         {{end}}
     </table>
     {{end}}

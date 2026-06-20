@@ -81,10 +81,8 @@ type TagValueSecurity struct {
 }
 
 type SpendByTag struct {
-	Value     string
-	Spend     float64
-	Waste     float64
-	WasteRate float64
+	Value string
+	Spend float64
 }
 
 type ServiceCount struct {

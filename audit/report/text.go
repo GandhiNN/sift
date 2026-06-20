@@ -36,6 +36,7 @@ func RenderText(w io.Writer, r *ReportData) {
 
 	if r.TotalWaste > 0 {
 		fmt.Fprintf(w, "\nESTIMATED WASTE: $%s/mo\n", fmtCost(r.TotalWaste))
+		fmt.Fprintf(w, "  (based on on-demand pricing; actual savings may vary)\n")
 	}
 
 	if r.Trend != nil {
@@ -219,11 +220,9 @@ func RenderText(w io.Writer, r *ReportData) {
 		for _, s := range r.SpendOverview {
 			fmt.Fprintf(
 				w,
-				"  %-24s $%9s/mo waste: $%s (%.0f%%)\n",
+				"  %-24s $%9s/mo\n",
 				s.Value,
 				fmtCost(s.Spend),
-				fmtCost(s.Waste),
-				s.WasteRate,
 			)
 		}
 	}
