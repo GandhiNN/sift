@@ -3,6 +3,7 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"sort"
@@ -110,16 +111,26 @@ func fetchAndSaveSpend() {
 	defer db.Close()
 
 	// Fetch spend by tag
+	slog.Info("fetching Cost Explorer spend by tag", "tag", tagKey)
 	spend, period, err := cost.FetchSpendByTag(ctx, cfg, tagKey)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Note: Cost Explorer unavailable: %v\n", err)
+		slog.Warn("Cost Explorer unavailable", "error", err)
 		return
 	}
+	slog.Info("Cost Explorer data received", "period", period, "groups", len(spend))
 	db.SaveSpend(profile, tagKey, spend, period)
 
 	// Fetch spend by service
+	slog.Info("fetching Cost Explorer spend by service")
 	svcSpend, svcPeriod, err := cost.FetchSpendByService(ctx, cfg)
 	if err == nil {
+		slog.Info(
+			"Cost Explorer service data received",
+			"period",
+			svcPeriod,
+			"services",
+			len(svcSpend),
+		)
 		db.SaveSpend(profile, "__SERVICE__", svcSpend, svcPeriod)
 	}
 }

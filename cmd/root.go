@@ -35,6 +35,15 @@ var (
 var rootCmd = &cobra.Command{
 	Use:   "sift",
 	Short: "AWS security and cost audit tool",
+	PersistentPreRun: func(cmd *cobra.Command, args []string) {
+		level := slog.LevelWarn
+		if verbose {
+			level = slog.LevelInfo
+		}
+		slog.SetDefault(
+			slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: level})),
+		)
+	},
 }
 
 func SetVersion(version, commit, date string) {
@@ -70,12 +79,6 @@ func init() {
 }
 
 func buildAWSConfig() (context.Context, aws.Config, context.CancelFunc, error) {
-	if !verbose {
-		slog.SetDefault(
-			slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelWarn})),
-		)
-	}
-
 	if format == "" {
 		if term.IsTerminal(int(os.Stdout.Fd())) {
 			format = "table"

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"os"
 	"strings"
@@ -29,6 +30,7 @@ ACTIONS:
 
 func Enrich(r *ReportData) error {
 	cfg := ai.LoadConfig()
+	slog.Info("enriching report with AI", "model", cfg.Model, "endpoint", cfg.Endpoint)
 
 	context := buildAIContext(r)
 

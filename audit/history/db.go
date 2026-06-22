@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -57,6 +58,15 @@ func (d *DB) Close() error {
 }
 
 func (d *DB) SaveScan(meta ScanMeta, findings []audit.Finding) error {
+	slog.Info(
+		"saving scan",
+		"profile",
+		meta.Profile,
+		"command",
+		meta.Command,
+		"findings",
+		len(findings),
+	)
 	tx, err := d.db.Begin()
 	if err != nil {
 		return fmt.Errorf("begin tx: %w", err)
