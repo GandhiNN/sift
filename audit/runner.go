@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"strings"
 	"sync"
+	"time"
 
 	"sift/audit/progress"
 
@@ -74,6 +75,8 @@ func RunChecks(
 			wg.Add(1)
 			go func(i int, name string, fn CheckFn) {
 				defer wg.Done()
+				slog.Info("checking service", "service", name)
+				start := time.Now()
 				findings, err := fn(subCtx, cfg)
 				if err != nil {
 					if isServiceNotAvailable(err) {
@@ -96,6 +99,7 @@ func RunChecks(
 						}}
 					}
 				} else {
+					slog.Info("service complete", "service", name, "findings", len(findings), "duration_ms", time.Since(start).Milliseconds())
 					results[i] = findings
 				}
 				bar.Done(name)

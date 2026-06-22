@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"sort"
 	"strings"
 
@@ -36,14 +37,84 @@ var rootCmd = &cobra.Command{
 	Use:   "sift",
 	Short: "AWS security and cost audit tool",
 	PersistentPreRun: func(cmd *cobra.Command, args []string) {
-		level := slog.LevelWarn
-		if verbose {
-			level = slog.LevelInfo
-		}
-		slog.SetDefault(
-			slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: level})),
-		)
+		setupLogging()
 	},
+}
+
+func setupLogging() {
+	// Always log to file (JSON, info level)
+	home, _ := os.UserHomeDir()
+	logDir := filepath.Join(home, ".sift")
+	os.MkdirAll(logDir, 0o755)
+	logFile, err := os.OpenFile(
+		filepath.Join(logDir, "sift.log"),
+		os.O_CREATE|os.O_WRONLY|os.O_APPEND,
+		0o644,
+	)
+
+	var handlers []slog.Handler
+
+	if err == nil {
+		handlers = append(
+			handlers,
+			slog.NewJSONHandler(logFile, &slog.HandlerOptions{Level: slog.LevelInfo}),
+		)
+	}
+
+	// Stderr: errors only by default, info with --verbose
+	stderrLevel := slog.LevelWarn
+	if verbose {
+		stderrLevel = slog.LevelInfo
+	}
+	handlers = append(
+		handlers,
+		slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: stderrLevel}),
+	)
+
+	slog.SetDefault(slog.New(multiHandler(handlers...)))
+}
+
+// multiHandler fans out log records to multiple handlers.
+type fanoutHandler struct {
+	handlers []slog.Handler
+}
+
+func multiHandler(handlers ...slog.Handler) slog.Handler {
+	return &fanoutHandler{handlers: handlers}
+}
+
+func (h *fanoutHandler) Enabled(_ context.Context, level slog.Level) bool {
+	for _, handler := range h.handlers {
+		if handler.Enabled(context.Background(), level) {
+			return true
+		}
+	}
+	return false
+}
+
+func (h *fanoutHandler) Handle(ctx context.Context, r slog.Record) error {
+	for _, handler := range h.handlers {
+		if handler.Enabled(ctx, r.Level) {
+			handler.Handle(ctx, r)
+		}
+	}
+	return nil
+}
+
+func (h *fanoutHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
+	var handlers []slog.Handler
+	for _, handler := range h.handlers {
+		handlers = append(handlers, handler.WithAttrs(attrs))
+	}
+	return &fanoutHandler{handlers: handlers}
+}
+
+func (h *fanoutHandler) WithGroup(name string) slog.Handler {
+	var handlers []slog.Handler
+	for _, handler := range h.handlers {
+		handlers = append(handlers, handler.WithGroup(name))
+	}
+	return &fanoutHandler{handlers: handlers}
 }
 
 func SetVersion(version, commit, date string) {
