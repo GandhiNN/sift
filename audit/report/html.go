@@ -16,18 +16,23 @@ var templateFS embed.FS
 
 func findingsToCSVBase64(findings []audit.Finding) string {
 	var sb strings.Builder
-	sb.WriteString("Profile,Service,Check,ResourceID,RiskLevel,Detail\n")
+	sb.WriteString("Profile,Service,Check,ResourceID,RiskLevel,Detail,Remediation\n")
 	for _, f := range findings {
 		detail := strings.ReplaceAll(f.Detail, "\"", "\"\"")
+		remediation := ""
+		if f.Remediation != nil {
+			remediation = strings.ReplaceAll(f.Remediation.Action, "\"", "\"\"")
+		}
 		sb.WriteString(
 			fmt.Sprintf(
-				"%s,%s,%s,%s,%s,\"%s\"\n",
+				"%s,%s,%s,%s,%s,\"%s\",\"%s\"\n",
 				f.Profile,
 				f.Service,
 				f.Check,
 				f.ResourceID,
 				f.RiskLevel,
 				detail,
+				remediation,
 			),
 		)
 	}
