@@ -50,6 +50,7 @@
 
     {{if .Trend}}
     <h2>Trend</h2>
+    <p><em>Compared to previous scan of the same scope. "Resolved" = not found in latest scan (resource deleted or configuration fixed).</em></p>
     <div>
         {{if .Trend.NewItems}}<span class="trend"><a href="#" onclick="downloadCSV(atob('{{csvBase64 .Trend.NewItems}}'), 'new_findings.csv'); return false;">New: {{.Trend.New}}</a></span>
         {{else}}<span class="trend">New: {{.Trend.New}}</span>{{end}}

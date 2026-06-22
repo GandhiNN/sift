@@ -11,9 +11,17 @@ type Diff struct {
 }
 
 func ComputeDiff(previous, current []audit.Finding) Diff {
+	// Find services that errored in current scan
+	erroredServices := map[string]bool{}
+	for _, f := range current {
+		if f.Status == "ERROR" {
+			erroredServices[f.Service] = true
+		}
+	}
+
 	prevMap := make(map[string]audit.Finding)
 	for _, f := range previous {
-		if f.Status == "PASS" {
+		if f.Status == "PASS" || erroredServices[f.Service] {
 			continue
 		}
 		prevMap[diffKey(f)] = f
@@ -21,7 +29,7 @@ func ComputeDiff(previous, current []audit.Finding) Diff {
 
 	currMap := make(map[string]audit.Finding)
 	for _, f := range current {
-		if f.Status == "PASS" {
+		if f.Status == "PASS" || erroredServices[f.Service] {
 			continue
 		}
 		currMap[diffKey(f)] = f

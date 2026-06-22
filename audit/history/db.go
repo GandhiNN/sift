@@ -339,10 +339,20 @@ func (d *DB) AgingFindings(minDays int) ([]AgingFinding, error) {
 }
 
 func (d *DB) PreviousScan(profile, command string) (*ScanMeta, []audit.Finding, error) {
-	row := d.db.QueryRow(
-		`SELECT id, profile, command, region, services, timestamp, duration_ms FROM scans WHERE profile = ? AND command = ? ORDER BY timestamp DESC LIMIT 1 OFFSET 1`,
+	var latestRegion, latestServices string
+	d.db.QueryRow(
+		`SELECT COALESCE(region, ''), COALESCE(services, '') FROM scans WHERE profile = ? AND command = ? ORDER BY timestamp DESC LIMIT 1`,
 		profile,
 		command,
+	).Scan(&latestRegion, &latestServices)
+
+	// Find previous scan with matching scope
+	row := d.db.QueryRow(
+		`SELECT id, profile, command, region, services, timestamp, duration_ms FROM scans WHERE profile = ? AND command = ? AND COALESCE(region, '') = ? AND COALESCE(services,'') = ? ORDER BY timestamp DESC LIMIT 1 OFFSET 1`,
+		profile,
+		command,
+		latestRegion,
+		latestServices,
 	)
 
 	var meta ScanMeta
