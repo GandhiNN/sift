@@ -49,6 +49,8 @@ func RunChecks(
 
 	if len(checks) == 1 {
 		subCtx := progress.WithSubProgress(ctx, true)
+		slog.Info("checking service", "service", checks[0].Name)
+		start := time.Now()
 		findings, err := checks[0].Fn(subCtx, cfg)
 		if err != nil {
 			if isServiceNotAvailable(err) {
@@ -65,6 +67,7 @@ func RunChecks(
 				results[0] = []Finding{ErrorFinding(checks[0].Name, "", "service_error", err)}
 			}
 		} else {
+			slog.Info("service complete", "service", checks[0].Name, "findings", len(findings), "duration_ms", time.Since(start).Milliseconds())
 			results[0] = findings
 		}
 	} else {
