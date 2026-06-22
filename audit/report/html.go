@@ -2,19 +2,44 @@ package report
 
 import (
 	"embed"
+	"encoding/base64"
+	"fmt"
 	"html/template"
 	"io"
 	"strings"
+
+	"sift/audit"
 )
 
 //go:embed template.html
 var templateFS embed.FS
 
+func findingsToCSVBase64(findings []audit.Finding) string {
+	var sb strings.Builder
+	sb.WriteString("Profile,Service,Check,ResourceID,RiskLevel,Detail\n")
+	for _, f := range findings {
+		detail := strings.ReplaceAll(f.Detail, "\"", "\"\"")
+		sb.WriteString(
+			fmt.Sprintf(
+				"%s,%s,%s,%s,%s,\"%s\"\n",
+				f.Profile,
+				f.Service,
+				f.Check,
+				f.ResourceID,
+				f.RiskLevel,
+				detail,
+			),
+		)
+	}
+	return base64.StdEncoding.EncodeToString([]byte(sb.String()))
+}
+
 var funcMap = template.FuncMap{
-	"inc":   func(i int) int { return i + 1 },
-	"lower": strings.ToLower,
-	"join":  strings.Join,
-	"money": fmtCost,
+	"inc":       func(i int) int { return i + 1 },
+	"lower":     strings.ToLower,
+	"join":      strings.Join,
+	"money":     fmtCost,
+	"csvBase64": findingsToCSVBase64,
 	"pct": func(a, b float64) float64 {
 		if b == 0 {
 			return 0

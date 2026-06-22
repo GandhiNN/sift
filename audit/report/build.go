@@ -30,6 +30,7 @@ func Build(db *history.DB, profiles []string) *ReportData {
 			}
 			for i := range findings {
 				findings[i].Module = mod
+				findings[i].Profile = strings.TrimSpace(p)
 			}
 			allFindings = append(allFindings, findings...)
 		}
@@ -112,13 +113,23 @@ func Build(db *history.DB, profiles []string) *ReportData {
 		for _, mod := range []string{"security", "cost", "governance"} {
 			_, prev, _ := db.PreviousScan(strings.TrimSpace(p), mod)
 			if prev != nil {
+				for i := range prev {
+					prev[i].Profile = strings.TrimSpace(p)
+				}
 				prevFindings = append(prevFindings, prev...)
 			}
 		}
 	}
 	if len(prevFindings) > 0 {
 		d := history.ComputeDiff(prevFindings, allFindings)
-		r.Trend = &Trend{New: len(d.New), Resolved: len(d.Resolved), Ongoing: len(d.Ongoing)}
+		r.Trend = &Trend{
+			New:           len(d.New),
+			Resolved:      len(d.Resolved),
+			Ongoing:       len(d.Ongoing),
+			NewItems:      d.New,
+			ResolvedItems: d.Resolved,
+			OngoingItems:  d.Ongoing,
+		}
 	}
 
 	// Compliance

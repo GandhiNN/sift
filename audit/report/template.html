@@ -51,10 +51,24 @@
     {{if .Trend}}
     <h2>Trend</h2>
     <div>
-        <span class="trend">New: {{.Trend.New}}</span>
-        <span class="trend">Resolved: {{.Trend.Resolved}}</span>
-        <span class="trend">Ongoing: {{.Trend.Ongoing}}</span>
+        {{if .Trend.NewItems}}<span class="trend"><a href="#" onclick="downloadCSV(atob('{{csvBase64 .Trend.NewItems}}'), 'new_findings.csv'); return false;">New: {{.Trend.New}}</a></span>
+        {{else}}<span class="trend">New: {{.Trend.New}}</span>{{end}}
+        {{if .Trend.ResolvedItems}}<span class="trend"><a href="#" onclick="downloadCSV(atob('{{csvBase64 .Trend.ResolvedItems}}'), 'resolved_findings.csv'); return false;">Resolved: {{.Trend.Resolved}}</a></span>
+        {{else}}<span class="trend">Resolved: {{.Trend.Resolved}}</span>{{end}}
+        {{if .Trend.OngoingItems}}<span class="trend"><a href="#" onclick="downloadCSV(atob('{{csvBase64 .Trend.OngoingItems}}'), 'ongoing_findings.csv'); return false;">Ongoing: {{.Trend.Ongoing}}</a></span>
+        {{else}}<span class="trend">Ongoing: {{.Trend.Ongoing}}</span>{{end}}
     </div>
+    <script>
+    function downloadCSV(content, filename) {
+        var blob = new Blob([content], {type: 'text/csv'});
+        var url = URL.createObjectURL(blob);
+        var a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        a.click();
+        URL.revokeObjectURL(url);
+    }
+    </script>
     {{end}}
 
     <h2>Top Security Issues</h2>

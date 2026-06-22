@@ -34,9 +34,12 @@ type ReportData struct {
 }
 
 type Trend struct {
-	New      int
-	Resolved int
-	Ongoing  int
+	New           int
+	Resolved      int
+	Ongoing       int
+	ResolvedItems []audit.Finding
+	NewItems      []audit.Finding
+	OngoingItems  []audit.Finding
 }
 
 type ComplianceScore struct {
