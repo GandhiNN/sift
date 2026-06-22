@@ -7,7 +7,6 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
-	"os"
 	"strings"
 	"time"
 
@@ -87,16 +86,14 @@ func Enrich(r *ReportData) error {
 
 	durationMs := time.Since(start).Milliseconds()
 	if result.Usage != nil {
-		fmt.Fprintf(
-			os.Stderr,
-			"[report AI: %s | prompt: %d tokens | completion: %d tokens | %.1fs]\n",
-			cfg.Model,
-			result.Usage.PromptTokens,
-			result.Usage.CompletionTokens,
-			float64(durationMs)/1000,
+		slog.Info("report AI complete",
+			"model", cfg.Model,
+			"prompt_tokens", result.Usage.PromptTokens,
+			"completion_tokens", result.Usage.CompletionTokens,
+			"duration_ms", durationMs,
 		)
 	} else {
-		fmt.Fprintf(os.Stderr, "[report AI: %s | %.1fs]\n", cfg.Model, float64(durationMs)/1000)
+		slog.Info("report AI complete", "model", cfg.Model, "duration_ms", durationMs)
 	}
 	parseResponse(result.Choices[0].Message.Content, r)
 	return nil

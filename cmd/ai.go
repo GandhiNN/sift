@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"log/slog"
 	"os"
 	"strings"
 
@@ -81,13 +82,11 @@ var aiCmd = &cobra.Command{
 			os.Exit(2)
 		}
 		if stats != nil {
-			fmt.Fprintf(
-				os.Stderr,
-				"\n[%s | prompt: %d tokens | completion: %d tokens | %.1fs]\n",
-				stats.Model,
-				stats.PromptTokens,
-				stats.CompletionTokens,
-				float64(stats.DurationMs)/1000,
+			slog.Info("AI analysis complete",
+				"model", stats.Model,
+				"prompt_tokens", stats.PromptTokens,
+				"completion_tokens", stats.CompletionTokens,
+				"duration_ms", stats.DurationMs,
 			)
 		}
 	},
