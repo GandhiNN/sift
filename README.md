@@ -56,7 +56,7 @@ sift security --profile dev --service eks
 sift security --profile dev --risk-level HIGH
 ```
 
-Available services: `ec2`, `sagemaker`, `s3`, `rds`, `eks`, `iam`, `secrets`, `glue`, `lambda`, `dynamodb`, `elb`, `dms`, `ecr`, `redshift`, `stepfunctions`, `backup`, `cloudtrail`, `guardduty`, `ebs`, `elasticache`, `opensearch`, `kms`, `kinesis`, `waf`, `cloudfront`, `acm`, `route53`, `sqs`, `sns`, `eventbridge`
+Available services: `ec2`, `sagemaker`, `s3`, `rds`, `eks`, `iam`, `secrets`, `glue`, `lambda`, `dynamodb`, `elb`, `dms`, `ecr`, `redshift`, `stepfunctions`, `backup`, `cloudtrail`, `guardduty`, `ebs`, `elasticache`, `opensearch`, `kms`, `kinesis`, `waf`, `cloudfront`, `acm`, `route53`, `sqs`, `sns`, `eventbridge`, `efs`, `docdb`, `msk`, `directory`, `cloudwatch`, `timestream`, `awsconfig`
 
 #### Cost
 
@@ -81,7 +81,7 @@ sift cost --profile dev --group-by Team
 sift cost --profile dev --diff
 ```
 
-Available services: `ec2`, `ebs`, `rds`, `s3`, `eks`, `network`, `cloudwatch`, `ecr`, `secrets`, `glue`, `lambda`, `dynamodb`, `dms`, `elb`, `sagemaker`, `redshift`, `stepfunctions`, `backup`, `kms`, `vpn`, `waf`, `kinesis`, `awsconfig`, `elasticache`, `opensearch`, `efs`, `docdb`, `directory`, `timestream`, `quicksight`, `msk`, `sqs`, `sns`, `eventbridge`
+Available services: `ec2`, `ebs`, `rds`, `s3`, `eks`, `network`, `cloudwatch`, `ecr`, `secrets`, `glue`, `lambda`, `dynamodb`, `dms`, `elb`, `sagemaker`, `redshift`, `stepfunctions`, `backup`, `kms`, `vpn`, `waf`, `kinesis`, `awsconfig`, `elasticache`, `opensearch`, `efs`, `docdb`, `directory`, `timestream`, `quicksight`, `msk`, `sqs`, `sns`, `eventbridge`, `route53`, `cloudfront`
 
 #### Ops
 
@@ -636,6 +636,56 @@ Sensitive ports flagged: MongoDB (27017-27018), MySQL (3306), PostgreSQL (5432),
 | Rule target without dead-letter queue | MEDIUM |
 | No issues | MINIMAL |
 
+### EFS
+
+| Condition | Risk |
+|-----------|------|
+| Not encrypted at rest | HIGH |
+| Encrypted | MINIMAL |
+
+### DocDB
+
+| Condition | Risk |
+|-----------|------|
+| Publicly accessible + unencrypted | CRITICAL |
+| Publicly accessible | HIGH |
+| Not encrypted | HIGH |
+| No deletion protection | LOW |
+| Encrypted, private, deletion protection | MINIMAL |
+
+### MSK
+
+| Condition | Risk |
+|-----------|------|
+| No encryption at rest + no in-transit + no auth | CRITICAL |
+| No in-transit encryption + no auth | HIGH |
+| No encryption at rest | MEDIUM |
+| No client authentication | LOW |
+| All encryption and auth enabled | MINIMAL |
+
+### Directory Service
+
+| Condition | Risk |
+|-----------|------|
+| No LDAPS + no VPC | HIGH |
+| No LDAPS enabled | MEDIUM |
+| No VPC isolation | MEDIUM |
+| LDAPS enabled + VPC | MINIMAL |
+
+### CloudWatch Logs
+
+| Condition | Risk |
+|-----------|------|
+| Log group not encrypted with KMS | MEDIUM |
+| Encrypted with customer-managed KMS key | MINIMAL |
+
+### Timestream
+
+| Condition | Risk |
+|-----------|------|
+| Using AWS-managed key (no CMK) | LOW |
+| Customer-managed KMS key | MINIMAL |
+
 ### Triage
 
 | Condition | Risk |
@@ -801,6 +851,18 @@ The crawler version limit (default 1,000,000) is fetched automatically from AWS 
 |-------|------|-----------|
 | Idle bus | LOW | Zero invocations in 30 days (excludes default bus) |
 
+#### Route53
+
+| Issue | Risk | Rationale |
+|-------|------|-----------|
+| Empty hosted zone | LOW | $0.50/mo, only SOA+NS records |
+
+#### CloudFront
+
+| Issue | Risk | Rationale |
+|-------|------|-----------|
+| Idle distribution | LOW | Zero requests in 30 days |
+
 ## Project structure
 
 ```
@@ -886,6 +948,12 @@ sift/
     │   ├── sqs.go              # SQS public policies + encryption
     │   ├── sns.go              # SNS public policies + encryption
     │   ├── eventbridge.go      # EventBridge bus policies + DLQ
+    │   ├── efs.go              # EFS encryption at rest
+    │   ├── docdb.go            # DocDB public access + encryption
+    │   ├── msk.go              # MSK encryption + authentication
+    │   ├── directory.go        # Directory Service LDAPS + VPC
+    │   ├── cloudwatch.go       # CloudWatch log group encryption
+    │   ├── timestream.go       # Timestream CMK encryption
     │   └── network.go          # VPC flow log queries
     ├── triage/
     │   └── triage.go           # Deep EC2 investigation (IAM + flow logs)
@@ -944,7 +1012,9 @@ sift/
         ├── msk.go              # Idle MSK clusters
         ├── sqs.go              # Idle SQS queues
         ├── sns.go              # Idle SNS topics
-        └── eventbridge.go      # Idle EventBridge buses
+        ├── eventbridge.go      # Idle EventBridge buses
+        ├── route53.go          # Empty hosted zones
+        └── cloudfront.go       # Idle CloudFront distributions
 ```
 
 ## Authentication
@@ -962,6 +1032,17 @@ Sift uses the standard AWS SDK credential chain. Any method supported by the AWS
 |------|-------------|
 | `~/.sift/prices.json` | Custom pricing overrides (optional) |
 | `~/.sift/sift.db` | Scan history database (auto-created) |
+| `~/.sift/sift.log` | Structured JSON log (always written) |
+
+## Logging
+
+Sift writes structured JSON logs to `~/.sift/sift.log` on every run, regardless of flags. These logs include:
+- Service check start/completion with duration and findings count
+- Cost Explorer fetch results
+- AI call telemetry (model, tokens, duration)
+- DB save operations
+
+Use `--verbose` to also print info-level logs to stderr. The log file is designed for consumption by log collectors (Filebeat, Fluentd) for shipping to ELK or similar.
 
 ## Environment variables
 
