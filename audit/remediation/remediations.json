@@ -1051,6 +1051,60 @@
         "confidence": "HIGH",
         "action_risk": "LOW"
       }
+    },
+    "efs": {
+      "no_encryption": {
+        "action": "Create encrypted EFS file system and migrate data (EFS encryption cannot be enabled on existing file systems)",
+        "command": "aws efs create-file-system --encrypted --kms-key-id <kms-key-arn>",
+        "confidence": "HIGH",
+        "action_risk": "HIGH"
+      }
+    },
+    "docdb": {
+      "public": {
+        "action": "Disable public access on DocDB cluster instances",
+        "command": "aws rds modify-db-instance --db-instance-identifier {{.ResourceID}} --no-publicly-accessible",
+        "confidence": "HIGH",
+        "action_risk": "MEDIUM"
+      },
+      "unencrypted": {
+        "action": "Enable encryption (requires recreating cluster with encryption enabled)",
+        "command": "aws docdb create-db-cluster --db-cluster-identifier {{.ResourceID}}-encrypted --storage-encrypted --kms-key-id <kms-key-arn>",
+        "confidence": "HIGH",
+        "action_risk": "HIGH"
+      },
+      "no_deletion_protection": {
+        "action": "Enable deletion protection",
+        "command": "aws docdb modify-db-cluster --db-cluster-identifier {{.ResourceID}} --deletion-protection",
+        "confidence": "HIGH",
+        "action_risk": "LOW"
+      }
+    },
+    "msk": {
+      "no_encryption_no_auth": {
+        "action": "Enable encryption and authentication on MSK cluster",
+        "command": "aws kafka update-security --cluster-arn {{.ResourceID}} --encryption-info encryptionInTransit={clientBroker=TLS}",
+        "confidence": "HIGH",
+        "action_risk": "HIGH"
+      },
+      "no_transit_encryption": {
+        "action": "Enable TLS encryption in transit",
+        "command": "aws kafka update-security --cluster-arn {{.ResourceID}} --encryption-info encryptionInTransit={clientBroker=TLS}",
+        "confidence": "HIGH",
+        "action_risk": "HIGH"
+      },
+      "no_rest_encryption": {
+        "action": "Enable encryption at rest (requires recreating cluster)",
+        "command": "aws kafka create-cluster --encryption-info encryptionAtRest={dataVolumeKMSKeyId=<kms-key-arn>}",
+        "confidence": "HIGH",
+        "action_risk": "HIGH"
+      },
+      "no_auth": {
+        "action": "Enable client authentication (SASL/TLS)",
+        "command": "aws kafka update-security --cluster-arn {{.ResourceID}} --client-authentication sasl={iam={enabled=true}}",
+        "confidence": "HIGH",
+        "action_risk": "MEDIUM"
+      }
     }
   },
   "governance": {
