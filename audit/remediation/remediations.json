@@ -537,6 +537,14 @@
         "confidence": "MEDIUM",
         "action_risk": "MEDIUM"
       }
+    },
+    "cloudfront": {
+      "idle_distribution": {
+        "action": "Disable or delete idle CloudFront distribution",
+        "command": "aws cloudfront get-distribution-config --id {{.ResourceID}}",
+        "confidence": "MEDIUM",
+        "action_risk": "HIGH"
+      }
     }
   },
   "security": {
@@ -1104,6 +1112,28 @@
         "command": "aws kafka update-security --cluster-arn {{.ResourceID}} --client-authentication sasl={iam={enabled=true}}",
         "confidence": "HIGH",
         "action_risk": "MEDIUM"
+      }
+    },
+    "directory": {
+      "no_ldaps": {
+        "action": "Enable LDAPS on the directory",
+        "command": "aws ds enable-ldaps --directory-id {{.ResourceID}} --type Client",
+        "confidence": "HIGH",
+        "action_risk": "MEDIUM"
+      },
+      "no_vpc": {
+        "action": "Recreate directory within a VPC for network isolation",
+        "command": "aws ds create-microsoft-ad --name <name> --vpc-settings VpcId=<vpc-id>,SubnetIds=<subnet1>,<subnet2>",
+        "confidence": "HIGH",
+        "action_risk": "HIGH"
+      }
+    },
+    "cloudwatch": {
+      "no_encryption": {
+        "action": "Enable KMS encryption on the log group",
+        "command": "aws logs associate-kms-key --log-group-name {{.ResourceID}} --kms-key-id <kms-key-arn>",
+        "confidence": "HIGH",
+        "action_risk": "LOW"
       }
     }
   },
