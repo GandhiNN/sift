@@ -545,6 +545,14 @@
         "confidence": "MEDIUM",
         "action_risk": "HIGH"
       }
+    },
+    "route53": {
+      "empty_hosted_zone": {
+        "action": "Delete empty hosted zone",
+        "command": "aws route53 delete-hosted-zone --id {{.ResourceID}}",
+        "confidence": "HIGH",
+        "action_risk": "MEDIUM"
+      }
     }
   },
   "security": {
@@ -1132,6 +1140,14 @@
       "no_encryption": {
         "action": "Enable KMS encryption on the log group",
         "command": "aws logs associate-kms-key --log-group-name {{.ResourceID}} --kms-key-id <kms-key-arn>",
+        "confidence": "HIGH",
+        "action_risk": "LOW"
+      }
+    },
+    "timestream": {
+      "no_cmk_encryption": {
+        "action": "Update database to use a customer-managed KMS key",
+        "command": "aws timestream-write update-database --database-name {{.ResourceID}} --kms-key-id <kms-key-arn>",
         "confidence": "HIGH",
         "action_risk": "LOW"
       }
