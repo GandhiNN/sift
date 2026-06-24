@@ -4,10 +4,12 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
 	"sift/audit"
+	"sift/audit/history"
 	"sift/audit/progress"
 	"sift/audit/security"
 	"sift/audit/triage"
@@ -16,14 +18,72 @@ import (
 	"github.com/spf13/cobra"
 )
 
+var triageCmd = &cobra.Command{
+	Use:   "triage",
+	Short: "Issue triage: posture correlation or incident investigation",
+}
+
+// `posture` subcommand
+var triagePostureCmd = &cobra.Command{
+	Use:   "posture",
+	Short: "Correlate findings across modules and rank by impact",
+	Run: func(cmd *cobra.Command, args []string) {
+		db, err := history.OpenDB()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+			os.Exit(2)
+		}
+		defer db.Close()
+
+		var profiles []string
+		if cmd.Flags().Changed("profile") {
+			profiles = strings.Split(profile, ",")
+		} else {
+			scans, _ := db.RecentScans(100)
+			seen := map[string]bool{}
+			for _, s := range scans {
+				if !seen[s.Profile] {
+					seen[s.Profile] = true
+					profiles = append(profiles, s.Profile)
+				}
+			}
+		}
+
+		var allFindings []audit.Finding
+		for _, p := range profiles {
+			for _, mod := range []string{"security", "cost", "governance"} {
+				_, findings, err := db.LatestScan(strings.TrimSpace(p), mod)
+				if err != nil {
+					continue
+				}
+				for i := range findings {
+					findings[i].Module = mod
+					findings[i].Profile = strings.TrimSpace(p)
+				}
+				allFindings = append(allFindings, findings...)
+			}
+		}
+
+		issues := triage.Triage(allFindings)
+		triage.RenderTextOutput(os.Stdout, issues, profiles)
+	},
+}
+
+// `incident` subcommand
+var triageIncidentCmd = &cobra.Command{
+	Use:   "incident",
+	Short: "Investigate a specific service during an incident",
+}
+
+// `incident` EC2
 var (
 	triageLogGroup string
 	triageInstance string
 )
 
-var triageCmd = &cobra.Command{
-	Use:   "triage",
-	Short: "Deep investigation: EC2 posture + IAM + flow logs",
+var triageIncidentEC2Cmd = &cobra.Command{
+	Use:   "ec2",
+	Short: "Deep EC2 investigation: posture + IAM + flow logs",
 	Run: func(cmd *cobra.Command, args []string) {
 		start := time.Now()
 		ctx, configs, cancel, err := buildAWSConfigs()
@@ -43,7 +103,6 @@ var triageCmd = &cobra.Command{
 			wg.Add(1)
 			go func(cfg aws.Config) {
 				defer wg.Done()
-				slog.Info("scanning region", "region", cfg.Region)
 				var targets []security.TriageTarget
 				if triageInstance != "" {
 					t, err := security.ListEC2TargetByID(ctx, cfg, triageInstance)
@@ -65,8 +124,6 @@ var triageCmd = &cobra.Command{
 					fmt.Fprintf(os.Stderr, "Error in %s: %v\n", cfg.Region, err)
 					return
 				}
-
-				// Baseline checks (CloudTrail/GuardDuty)
 				baselineResults, err := security.AuditBaseline(ctx, cfg)
 				if err != nil {
 					fmt.Fprintf(os.Stderr, "Baseline check error in %s: %v\n", cfg.Region, err)
@@ -94,9 +151,13 @@ var triageCmd = &cobra.Command{
 }
 
 func init() {
-	triageCmd.Flags().
+	triageIncidentEC2Cmd.Flags().
 		StringVar(&triageLogGroup, "log-group", "", "VPC flow log group name (required)")
-	triageCmd.Flags().StringVar(&triageInstance, "instance", "", "Specific EC2 instance ID")
-	triageCmd.MarkFlagRequired("log-group")
+	triageIncidentEC2Cmd.Flags().
+		StringVar(&triageInstance, "instance", "", "Specific EC2 instance ID")
+	triageIncidentEC2Cmd.MarkFlagRequired("log-group")
+
+	triageIncidentCmd.AddCommand(triageIncidentEC2Cmd)
+	triageCmd.AddCommand(triagePostureCmd, triageIncidentCmd)
 	rootCmd.AddCommand(triageCmd)
 }
