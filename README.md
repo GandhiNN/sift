@@ -35,7 +35,8 @@ sift <command> --profile <aws-profile> [flags]
 | `--sort-by` | `risk` | Sort results by: `risk` or `cost` |
 | `--diff` | `false` | Compare results to previous scan |
 | `--no-save` | `false` | Don't save scan results to history |
-| `--verbose` | `false` | Show detailed log output |
+| `--verbose` | `false` | Show debug-level log output |
+| `--progress` | `false` | Show progress bars |
 | `--output`, `-o` | stdout | Write results to file instead of stdout |
 
 ### Commands
@@ -168,19 +169,40 @@ Requires AWS Config to be enabled in the account.
 
 #### Triage
 
-Deep investigation of EC2 instances — combines security posture, IAM role analysis, VPC flow log queries, and baseline checks (CloudTrail/GuardDuty) to detect outbound connections to public IPs.
+Issue triage with two modes: posture correlation and incident investigation.
+
+##### Posture
+
+Correlate findings across security, cost, and governance modules per resource. Ranks by risk × blast radius × cost impact. Flags quick wins.
 
 ```bash
-# All instances
-sift triage --profile dev --log-group /vpc/flowlogs
+# Single profile
+sift triage posture --profile dev
+
+# Aggregated across environments
+sift triage posture --profile dev,qa,prd
+
+# All profiles in history
+sift triage posture
+```
+
+Requires prior scan data (`sift security`, `sift cost`, `sift governance`).
+
+##### Incident
+
+Deep investigation of specific services during an incident.
+
+```bash
+# EC2: posture + IAM + flow logs
+sift triage incident ec2 --profile dev --log-group /vpc/flowlogs
 
 # Single instance
-sift triage --profile dev --log-group /vpc/flowlogs --instance i-0abc123
+sift triage incident ec2 --profile dev --log-group /vpc/flowlogs --instance i-0abc123
 ```
 
 | Flag | Required | Description |
 |------|----------|-------------|
-| `--log-group` | Yes | CloudWatch log group for VPC flow logs |
+| `--log-group` | Yes (ec2) | CloudWatch log group for VPC flow logs |
 | `--instance` | No | Target a specific EC2 instance ID |
 
 #### Governance
@@ -879,7 +901,7 @@ sift/
 │   ├── ops.go                  # Ops audit command
 │   ├── list.go                 # List command (registry-driven)
 │   ├── discover.go             # Service discovery command
-│   ├── triage.go               # Triage investigation command
+│   ├── triage.go               # Triage command (posture + incident subcommands)
 │   ├── governance.go           # Governance audit command
 │   ├── history.go              # Query scan history
 │   ├── report.go               # Executive summary report
@@ -956,7 +978,9 @@ sift/
     │   ├── timestream.go       # Timestream CMK encryption
     │   └── network.go          # VPC flow log queries
     ├── triage/
-    │   └── triage.go           # Deep EC2 investigation (IAM + flow logs)
+    │   ├── ec2.go              # Incident: EC2 deep investigation (IAM + flow logs)
+    │   ├── engine.go           # Posture: cross-module correlation + ranking
+    │   └── triage_test.go
     ├── list/
     │   ├── registry.go         # Lister registration + column definitions
     │   ├── glue.go             # Glue jobs (run frequency, avg DPU) + crawlers
@@ -1042,7 +1066,9 @@ Sift writes structured JSON logs to `~/.sift/sift.log` on every run, regardless 
 - AI call telemetry (model, tokens, duration)
 - DB save operations
 
-Use `--verbose` to also print info-level logs to stderr. The log file is designed for consumption by log collectors (Filebeat, Fluentd) for shipping to ELK or similar.
+By default, info-level logs are printed to stderr (service progress, durations). Use `--verbose` for debug-level output. Use `--progress` to show progress bars instead of log lines for interactive use.
+
+The log file is designed for consumption by log collectors (Filebeat, Fluentd) for shipping to ELK or similar.
 
 ## Environment variables
 
