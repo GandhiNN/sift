@@ -92,7 +92,7 @@ var triageIncidentEC2Cmd = &cobra.Command{
 			os.Exit(2)
 		}
 		defer cancel()
-		if quiet {
+		if !showProgress {
 			ctx = progress.WithQuiet(ctx, true)
 		}
 		var mu sync.Mutex

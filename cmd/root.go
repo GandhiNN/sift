@@ -20,17 +20,17 @@ import (
 )
 
 var (
-	profile     string
-	format      string
-	riskLevel   string
-	region      string
-	verbose     bool
-	quiet       bool
-	outputFile  string
-	concurrency int
-	sortBy      string
-	noSave      bool
-	diff        bool
+	profile      string
+	format       string
+	riskLevel    string
+	region       string
+	verbose      bool
+	showProgress bool
+	outputFile   string
+	concurrency  int
+	sortBy       string
+	noSave       bool
+	diff         bool
 )
 
 var rootCmd = &cobra.Command{
@@ -61,10 +61,10 @@ func setupLogging() {
 		)
 	}
 
-	// Stderr: errors only by default, info with --verbose
-	stderrLevel := slog.LevelWarn
+	// Stderr: info only by default, debug with --verbose
+	stderrLevel := slog.LevelInfo
 	if verbose {
-		stderrLevel = slog.LevelInfo
+		stderrLevel = slog.LevelDebug
 	}
 	handlers = append(
 		handlers,
@@ -136,8 +136,8 @@ func init() {
 		StringVar(&riskLevel, "risk-level", "", "Minimum risk level to show (MINIMAL|LOW|MEDIUM|HIGH|CRITICAL)")
 	rootCmd.PersistentFlags().
 		StringVar(&region, "region", "", "AWS region(s), comma-separated or 'all' (default: profile region)")
-	rootCmd.PersistentFlags().BoolVar(&verbose, "verbose", false, "Show detailed log output")
-	rootCmd.PersistentFlags().BoolVar(&quiet, "quiet", false, "Suppress progress bars")
+	rootCmd.PersistentFlags().BoolVar(&verbose, "verbose", false, "Show debug-level log output")
+	rootCmd.PersistentFlags().BoolVar(&showProgress, "progress", false, "Show progress bars")
 	rootCmd.PersistentFlags().
 		StringVarP(&outputFile, "output", "o", "", "Write results to file instead of stdout")
 	rootCmd.PersistentFlags().

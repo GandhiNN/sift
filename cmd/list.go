@@ -64,7 +64,7 @@ var listCmd = &cobra.Command{
 		}
 		defer cancel()
 
-		if quiet {
+		if !showProgress {
 			ctx = progress.WithQuiet(ctx, true)
 		}
 

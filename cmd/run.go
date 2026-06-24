@@ -32,7 +32,7 @@ func runAudit(command, serviceFlag string, validServices map[string]bool, fn aud
 	}
 	defer cancel()
 
-	if quiet {
+	if !showProgress {
 		ctx = progress.WithQuiet(ctx, true)
 	}
 
