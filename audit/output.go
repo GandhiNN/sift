@@ -117,6 +117,7 @@ func writeTable(data any, out io.Writer) {
 
 	hasRegion := false
 	hasCost := false
+	hasApp := false
 	for _, f := range findings {
 		if f.Region != "" {
 			hasRegion = true
@@ -124,61 +125,46 @@ func writeTable(data any, out io.Writer) {
 		if f.EstimatedMonthlyCost > 0 {
 			hasCost = true
 		}
+		if f.Application != "" {
+			hasApp = true
+		}
 	}
 
 	w := tabwriter.NewWriter(out, 0, 4, 2, ' ', 0)
 
+	// Build header dynamically
+	header := "ID\tRISK"
 	if hasRegion {
-		if hasCost {
-			fmt.Fprintln(w, "ID\tRISK\tREGION\tSERVICE\tRESOURCE\tCHECK\t$/MO\tDETAIL")
-			for _, f := range findings {
-				cost := ""
-				if f.EstimatedMonthlyCost > 0 {
-					cost = fmt.Sprintf("$%.2f", f.EstimatedMonthlyCost)
-				}
-				fmt.Fprintf(
-					w,
-					"%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
-					f.ID,
-					colorRisk(
-						f.RiskLevel,
-					),
-					f.Region,
-					f.Service,
-					f.ResourceID,
-					f.Check,
-					cost,
-					truncate(f.Detail, 80),
-				)
-			}
-		} else {
-			fmt.Fprintln(w, "ID\tRISK\tREGION\tSERVICE\tRESOURCE\tCHECK\tDETAIL")
-			for _, f := range findings {
-				fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
-					f.ID, colorRisk(f.RiskLevel), f.Region, f.Service, f.ResourceID, f.Check, truncate(f.Detail, 80),
-				)
-			}
+		header += "\tREGION"
+	}
+	if hasApp {
+		header += "\tAPPLICATION"
+	}
+	header += "\tSERVICE\tRESOURCE\tCHECK"
+	if hasCost {
+		header += "\t$/MO"
+	}
+	header += "\tDETAIL"
+	fmt.Fprintln(w, header)
+
+	for _, f := range findings {
+		row := f.ID + "\t" + colorRisk(f.RiskLevel)
+		if hasRegion {
+			row += "\t" + f.Region
 		}
-	} else {
-		if hasCost {
-			fmt.Fprintln(w, "ID\tRISK\tSERVICE\tRESOURCE\tCHECK\t$/MO\tDETAIL")
-			for _, f := range findings {
-				cost := ""
-				if f.EstimatedMonthlyCost > 0 {
-					cost = fmt.Sprintf("$%.2f", f.EstimatedMonthlyCost)
-				}
-				fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
-					f.ID, colorRisk(f.RiskLevel), f.Service, f.ResourceID, f.Check, cost, truncate(f.Detail, 80),
-				)
-			}
-		} else {
-			fmt.Fprintln(w, "ID\tRISK\tSERVICE\tRESOURCE\tCHECK\tDETAIL")
-			for _, f := range findings {
-				fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\n",
-					f.ID, colorRisk(f.RiskLevel), f.Service, f.ResourceID, f.Check, truncate(f.Detail, 80),
-				)
-			}
+		if hasApp {
+			row += "\t" + f.Application
 		}
+		row += "\t" + f.Service + "\t" + f.ResourceID + "\t" + f.Check
+		if hasCost {
+			cost := ""
+			if f.EstimatedMonthlyCost > 0 {
+				cost = fmt.Sprintf("$%.2f", f.EstimatedMonthlyCost)
+			}
+			row += "\t" + cost
+		}
+		row += "\t" + truncate(f.Detail, 80)
+		fmt.Fprintln(w, row)
 	}
 	w.Flush()
 }

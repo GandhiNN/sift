@@ -81,6 +81,9 @@ func runAudit(command, serviceFlag string, validServices map[string]bool, fn aud
 		"duration_ms", time.Since(start).Milliseconds(),
 	)
 
+	// Enrich findings with application names
+	audit.ApplyApplications(allFindings, audit.LoadAppMatcher())
+
 	if err := audit.OutputWithFilter(format, allFindings, riskLevel, sortBy, start, outputFile); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(2)
