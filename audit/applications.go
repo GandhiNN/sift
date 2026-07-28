@@ -9,6 +9,7 @@ import (
 
 // AppConfig defines the application matching configuration.
 type AppConfig struct {
+	MatchTags    []string   `json:"match_tags"`
 	Applications []AppEntry `json:"applications"`
 	Default      string     `json:"default"`
 }
@@ -19,10 +20,11 @@ type AppEntry struct {
 	Patterns []string `json:"patterns"`
 }
 
-// AppMatcher performs fuzzy matching of resource IDs and Name tags to applications.
+// AppMatcher performs fuzzy matching of resource IDs and tags to applications.
 type AppMatcher struct {
-	apps     []AppEntry
-	fallback string
+	matchTags []string
+	apps      []AppEntry
+	fallback  string
 }
 
 // LoadAppMatcher loads application config from ~/.sift/applications.json
@@ -45,23 +47,30 @@ func LoadAppMatcher() *AppMatcher {
 	if fallback == "" {
 		fallback = "Unknown"
 	}
-	return &AppMatcher{apps: cfg.Applications, fallback: fallback}
+	matchTags := cfg.MatchTags
+	if len(matchTags) == 0 {
+		matchTags = []string{"Name"}
+	}
+	return &AppMatcher{matchTags: matchTags, apps: cfg.Applications, fallback: fallback}
 }
 
-// Match returns the application name for a given resource ID and Name tag.
-// It checks the Name tag first (more descriptive), then the resource ID.
+// Match returns the application name for a given resource ID and tags.
+// It checks configured match_tags first, then the resource ID.
 func (m *AppMatcher) Match(resourceID string, tags map[string]string) string {
 	if m == nil {
 		return ""
 	}
 
-	nameTag := ""
+	var candidates []string
 	if tags != nil {
-		nameTag = tags["Name"]
+		for _, key := range m.matchTags {
+			if v := tags[key]; v != "" {
+				candidates = append(candidates, v)
+			}
+		}
 	}
 
-	// Check Name tag first, then resource ID
-	candidates := []string{nameTag, resourceID}
+	candidates = append(candidates, resourceID)
 
 	for _, candidate := range candidates {
 		if candidate == "" {
