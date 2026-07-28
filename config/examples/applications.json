@@ -1,4 +1,5 @@
 {
+  "match_tags": ["Name", "Project", "UseCase"],
   "applications": [
     {
       "name": "App1",
