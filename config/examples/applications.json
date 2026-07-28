@@ -1,21 +1,17 @@
 {
   "applications": [
     {
-      "name": "DAAS",
-      "patterns": ["daas", "data-as-a-service", "daas-"]
+      "name": "App1",
+      "patterns": ["app1", "app-one"]
     },
     {
-      "name": "SmartScheduling",
-      "patterns": ["smart-scheduling", "smarts"]
+      "name": "App2",
+      "patterns": ["app2", "app-two"]
     },
     {
-      "name": "TMEC",
-      "patterns": ["tmec"]
-    },
-    {
-      "name": "IQC",
-      "patterns": ["iqc"]
+      "name": "App3",
+      "patterns": ["app3", "app-three"]
     }
   ],
-  "default": "IndustrialCloud"
+  "default": "Unknown"
 }
