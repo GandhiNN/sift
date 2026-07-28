@@ -23,6 +23,7 @@ type Finding struct {
 	Service              string            `json:"service"`
 	ResourceID           string            `json:"resource_id"`
 	Tags                 map[string]string `json:"tags,omitempty"`
+	Application          string            `json:"application,omitempty"`
 	Check                string            `json:"check"`
 	Status               string            `json:"status"`
 	Detail               string            `json:"detail"`
