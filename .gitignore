@@ -42,4 +42,4 @@ bin/
 # .vscode/
 
 # Log file
-.log
+*.log
