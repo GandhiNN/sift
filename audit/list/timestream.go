@@ -30,7 +30,8 @@ func init() {
 				{Key: "status", Header: "STATUS"},
 				{Key: "mem_retention_hrs", Header: "MEM_RET(h)"},
 				{Key: "mag_retention_days", Header: "MAG_RET(d)"},
-				{Key: "records_30d", Header: "RECORDS(30d)"},
+				{Key: "writes_30d", Header: "WRITES(30d)"},
+				{Key: "queries_30d", Header: "QUERIES(30d)"},
 			},
 		},
 		Fn: func(ctx context.Context, cfg aws.Config, subType string) ([]audit.Resource, error) {
@@ -143,7 +144,8 @@ func buildTableResource(
 		magDays = aws.ToInt64(t.RetentionProperties.MagneticStoreRetentionPeriodInDays)
 	}
 
-	records := getRecordCount(ctx, cwClient, dbName, tableName)
+	writes := getOperationCount(ctx, cwClient, dbName, tableName, "WriteRecords")
+	queries := getOperationCount(ctx, cwClient, dbName, tableName, "Query")
 	tags := fetchTimestreamTags(ctx, client, aws.ToString(t.Arn))
 
 	status := "ACTIVE"
@@ -160,7 +162,8 @@ func buildTableResource(
 			"status":             status,
 			"mem_retention_hrs":  strconv.FormatInt(memHrs, 10),
 			"mag_retention_days": strconv.FormatInt(magDays, 10),
-			"records_30d":        records,
+			"writes_30d":         writes,
+			"queries_30d":        queries,
 		},
 		Tags: tags,
 	}
@@ -183,21 +186,22 @@ func countTables(ctx context.Context, client *timestreamwrite.Client, database s
 	return count
 }
 
-func getRecordCount(
+func getOperationCount(
 	ctx context.Context,
 	cwClient *cloudwatch.Client,
 	database, table string,
+	operation string,
 ) string {
 	end := time.Now()
 	start := end.AddDate(0, 0, -30)
 
 	resp, err := cwClient.GetMetricStatistics(ctx, &cloudwatch.GetMetricStatisticsInput{
-		Namespace:  aws.String("AWS/Tiemstream"),
+		Namespace:  aws.String("AWS/Timestream"),
 		MetricName: aws.String("SuccessfulRequestLatency"),
 		Dimensions: []cwtypes.Dimension{
 			{Name: aws.String("DatabaseName"), Value: &database},
 			{Name: aws.String("TableName"), Value: &table},
-			{Name: aws.String("Operation"), Value: aws.String("WriteRecords")},
+			{Name: aws.String("Operation"), Value: aws.String(operation)},
 		},
 		StartTime:  &start,
 		EndTime:    &end,
