@@ -36,6 +36,7 @@ var EventSources = map[string]string{
 	"msk":           "kafka.amazonaws.com",
 	"kinesis":       "kinesis.amazonaws.com",
 	"stepfunctions": "states.amazonaws.com",
+	"bedrock":       "bedrock.amazonaws.com",
 }
 
 // Principal represents an aggregated view of access by one IAM principal.
