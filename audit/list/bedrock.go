@@ -45,25 +45,20 @@ func init() {
 	})
 }
 
-// listBedrockModels lists foundation models that have invocation activity in the
-// last 30 days, source from CloudWatch metrics (data plane InvokeModel calls are
-// not logged by CloudTrail by default). Models with zero activity are omitted.
+// listBedrockModels discovers actively used models via CloudWatch ListMetrics,
+// then fetches invocation counts and token usage. This catches all model ID
+// formats (cross-region, inference profiles, custom models).
 func listBedrockModels(ctx context.Context, cfg aws.Config) ([]audit.Resource, error) {
-	client := bedrock.NewFromConfig(cfg)
 	cwClient := cloudwatch.NewFromConfig(cfg)
 
-	resp, err := client.ListFoundationModels(ctx, &bedrock.ListFoundationModelsInput{})
+	// Discover which ModelId dimensions have data
+	modelIDs, err := discoverActiveModels(ctx, cwClient)
 	if err != nil {
-		return nil, fmt.Errorf("list foundation models: %w", err)
+		return nil, err
 	}
 
 	var resources []audit.Resource
-	for _, m := range resp.ModelSummaries {
-		modelID := aws.ToString(m.ModelId)
-		if modelID == "" {
-			continue
-		}
-
+	for _, modelID := range modelIDs {
 		invocations := getBedrockMetric(ctx, cwClient, modelID, "Invocations", cwtypes.StatisticSum)
 		// Skip models with no usage in the window.
 		if invocations == 0 {
@@ -168,4 +163,36 @@ func modelIDFromARN(arn string) string {
 		return arn[idx+1:]
 	}
 	return arn
+}
+
+func discoverActiveModels(ctx context.Context, cwClient *cloudwatch.Client) ([]string, error) {
+	var modelIDs []string
+	seen := map[string]bool{}
+
+	input := &cloudwatch.ListMetricsInput{
+		Namespace:  aws.String("AWS/Bedrock"),
+		MetricName: aws.String("Invocations"),
+	}
+	for {
+		resp, err := cwClient.ListMetrics(ctx, input)
+		if err != nil {
+			return nil, fmt.Errorf("list bedrock metrics: %w", err)
+		}
+		for _, m := range resp.Metrics {
+			for _, d := range m.Dimensions {
+				if aws.ToString(d.Name) == "ModelId" {
+					id := aws.ToString(d.Value)
+					if id != "" && !seen[id] {
+						seen[id] = true
+						modelIDs = append(modelIDs, id)
+					}
+				}
+			}
+		}
+		if resp.NextToken == nil {
+			break
+		}
+		input.NextToken = resp.NextToken
+	}
+	return modelIDs, nil
 }
